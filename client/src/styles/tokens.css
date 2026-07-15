@@ -1,0 +1,63 @@
+/* ─── Light Mode ─────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand Colors (HSL values matching #2563EB, #7C3AED etc.) */
+  --primary:            221 83% 53%;   /* #2563EB */
+  --primary-hover:      221 80% 43%;   /* #1D4ED8 */
+  --primary-foreground: 0   0%  100%;
+
+  --secondary:          263 80% 58%;   /* #7C3AED */
+  --secondary-foreground: 0 0% 100%;
+
+  /* Backgrounds */
+  --background:         220 16% 97%;   /* #F7F8FA */
+  --foreground:         220 29% 14%;   /* #1A2130 */
+
+  /* Card */
+  --card:               0   0%  100%;  /* #FFFFFF */
+  --card-foreground:    220 29% 14%;
+
+  /* Border */
+  --border:             220 20% 90%;   /* #E3E6EC */
+
+  /* Muted / Body / Subtle text */
+  --muted:              220 18% 95%;
+  --muted-foreground:   220 13% 44%;   /* #8993A4 */
+
+  /* Semantic colours */
+  --success:            142 76% 37%;   /* #16A34A */
+  --warning:            34  88% 45%;   /* #D97706 */
+  --danger:             0   70% 51%;   /* #DC2626 */
+  --info:               217 91% 60%;   /* #3B82F6 */
+
+  /* Border radius */
+  --radius-card:  16px;
+  --radius-btn:   12px;
+  --radius-input: 12px;
+  --radius-tag:   999px;
+}
+
+/* ─── Dark Mode ──────────────────────────────────────────────────────────────── */
+.dark {
+  --primary:            221 83% 58%;
+  --primary-hover:      221 80% 48%;
+  --primary-foreground: 0   0%  100%;
+
+  --secondary:          263 80% 64%;
+  --secondary-foreground: 0 0% 100%;
+
+  --background:         222 34%  9%;
+  --foreground:         220 20% 95%;
+
+  --card:               222 24% 12%;
+  --card-foreground:    220 20% 95%;
+
+  --border:             220 16% 22%;
+
+  --muted:              222 18% 14%;
+  --muted-foreground:   216 15% 68%;
+
+  --success:            142 76% 42%;
+  --warning:            34  88% 50%;
+  --danger:             0   70% 55%;
+  --info:               217 91% 64%;
+}

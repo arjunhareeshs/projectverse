@@ -1,0 +1,470 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleType {
+  ADMIN
+  STUDENT
+}
+
+model User {
+  id              String          @id @default(cuid())
+  email           String          @unique
+  regNo           String?         @unique
+  fullName        String
+  passwordHash    String
+  mustChangePassword Boolean      @default(false)
+  role            RoleType
+  organizationId  String?
+  teamId          String?
+  // Student profile fields (from Excel data)
+  year            String?         // "I", "II", "III", "IV"
+  department      String?         // "Agricultural Engineering", etc.
+  deptCode        String?         // "AG", "CSE", "ECE", etc.
+  cluster         String?         // "CS", "Non CS"
+  gender          String?         // "M", "F"
+  resident        String?         // "H" (Hosteller), "D" (Day-scholar)
+  learningMode    String?         // "Project-Based Learning Mode", etc.
+  ssgEnrolled     Boolean         @default(false)
+  ssgDomain       String?         // "Hardware", "Software"
+  groupRegistered Boolean         @default(false)
+  skillsRegistered Boolean        @default(false)
+  rewardPoints    Int             @default(0)
+  activityPoints  Int             @default(0)
+  teamRole        String?         // "team-captain", "team-member-5", etc.
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  organization    Organization?   @relation(fields: [organizationId], references: [id])
+  team            Team?           @relation(fields: [teamId], references: [id])
+  leadingTeams    Team[]          @relation("TeamLead")
+  projectMembers  ProjectMember[]
+  teamMemberships TeamMember[]
+  tasks           Task[]          @relation("TaskAssignee")
+  comments        Comment[]
+  files           FileAsset[]
+  notifications   Notification[]
+  activityLogs    ActivityLog[]
+  aiChats         AiChat[]
+  documents       Document[]
+  auditLogs       AuditLog[]
+  scheduleEvents  ScheduleEvent[]
+  teamMessages    TeamMessage[]
+  teamInvites     TeamInvite[]
+  userSkills      UserSkill[]
+  streaks         UserStreak[]
+  adminAchievements AdminAchievement[] @relation("AchievementRecipient")
+  adminChats      AdminChatHistory[] @relation("AdminChatUser")
+}
+
+model Organization {
+  id            String         @id @default(cuid())
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  users         User[]
+  projects      Project[]
+  roles         Role[]
+  permissions   Permission[]
+  teams         Team[]
+  hackathons    Hackathon[]
+  leetCodeContests LeetCodeContest[]
+}
+
+model Team {
+  id                  String        @id @default(cuid())
+  organizationId      String
+  name                String
+  description         String?
+  domain              String?
+  color               String?       @default("#7C3AED")
+  leadId              String?
+  maxMembers          Int           @default(6)
+  isPublic            Boolean       @default(true)
+  currentProjectLabel String?
+  // Group metadata from Excel
+  groupCode           String?       @unique // "A#100161"
+  groupLevel          String?       // "Level 1", "Level 2", "Level 3"
+  groupCategory       String?       // "C", etc.
+  iYearCount          Int           @default(0)
+  iiYearCount         Int           @default(0)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  organization        Organization  @relation(fields: [organizationId], references: [id])
+  lead                User?         @relation("TeamLead", fields: [leadId], references: [id])
+  members             User[]
+  teamMembers         TeamMember[]
+  projects            Project[]
+  invites             TeamInvite[]
+  messages            TeamMessage[]
+  collaboratingProjects   Project[]           @relation("CollaboratingTeam")
+  collabRequestsSent      TeamCollaboration[] @relation("FromTeam")
+  collabRequestsReceived  TeamCollaboration[] @relation("ToTeam")
+  ranking             GroupRanking?
+  achievements        AdminAchievement[] @relation("AchievementTeam")
+}
+
+model TeamCollaboration {
+  id          String   @id @default(cuid())
+  fromTeamId  String
+  toTeamId    String
+  projectName String?
+  message     String?
+  status      String   @default("pending") // pending | accepted | declined
+  requestedBy String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  fromTeam    Team     @relation("FromTeam", fields: [fromTeamId], references: [id])
+  toTeam      Team     @relation("ToTeam", fields: [toTeamId], references: [id])
+}
+
+model TeamInvite {
+  id         String   @id @default(cuid())
+  teamId     String
+  email      String
+  userId     String?
+  roleLabel  String   @default("Member")
+  message    String?
+  skills     String[] @default([])
+  type       String   @default("INVITE") // INVITE | JOIN_REQUEST
+  status     String   @default("pending") // pending | accepted | declined
+  invitedBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  team       Team     @relation(fields: [teamId], references: [id])
+  user       User?    @relation(fields: [userId], references: [id])
+}
+
+model TeamMessage {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  message   String
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Project {
+  id                  String          @id @default(cuid())
+  organizationId      String
+  teamId              String?
+  collaboratingTeamId String?
+  name                String
+  description         String?
+  status              String          @default("planned")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  organization        Organization    @relation(fields: [organizationId], references: [id])
+  team                Team?           @relation(fields: [teamId], references: [id])
+  collaboratingTeam   Team?           @relation("CollaboratingTeam", fields: [collaboratingTeamId], references: [id])
+  members         ProjectMember[]
+  tasks           Task[]
+  boards          Board[]
+  meetings        Meeting[]
+  reports         Report[]
+  sprints         Sprint[]
+  milestones      Milestone[]
+  documents       Document[]
+}
+
+model ProjectMember {
+  id         String   @id @default(cuid())
+  projectId  String
+  userId     String
+  role       RoleType
+  createdAt  DateTime @default(now())
+  project    Project  @relation(fields: [projectId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+}
+
+model Task {
+  id           String      @id @default(cuid())
+  projectId    String
+  assigneeId   String?
+  title        String
+  description  String?
+  status       String      @default("todo")
+  priority     String      @default("medium")
+  category     String?     @default("Development")
+  progress     Int         @default(0)
+  startDate    DateTime?
+  dueDate      DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  project      Project     @relation(fields: [projectId], references: [id])
+  assignee     User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  subtasks     Subtask[]
+  comments     Comment[]
+  labels       Label[]
+}
+
+model Subtask {
+  id        String   @id @default(cuid())
+  taskId    String
+  title     String
+  done      Boolean  @default(false)
+  task      Task     @relation(fields: [taskId], references: [id])
+}
+
+model Board {
+  id         String      @id @default(cuid())
+  projectId  String
+  name       String
+  project    Project     @relation(fields: [projectId], references: [id])
+  columns    BoardColumn[]
+}
+
+model BoardColumn {
+  id        String   @id @default(cuid())
+  boardId   String
+  name      String
+  position  Int
+  board     Board    @relation(fields: [boardId], references: [id])
+}
+
+model Label {
+  id      String   @id @default(cuid())
+  taskId  String
+  name    String
+  color   String
+  task    Task     @relation(fields: [taskId], references: [id])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model FileAsset {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  url         String
+  mimeType    String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Meeting {
+  id         String   @id @default(cuid())
+  projectId  String
+  title      String
+  notes      String?
+  startsAt   DateTime?
+  project    Project  @relation(fields: [projectId], references: [id])
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  generatedAt DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model AiChat {
+  id         String   @id @default(cuid())
+  userId     String
+  prompt     String
+  response   String
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  projectId   String?
+  userId      String
+  title       String
+  content     String?
+  fileName    String?
+  fileSize    Int?
+  mimeType    String?
+  fileUrl     String?
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project? @relation(fields: [projectId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Sprint {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  startsAt    DateTime?
+  endsAt      DateTime?
+  project     Project  @relation(fields: [projectId], references: [id])
+}
+
+model Milestone {
+  id         String   @id @default(cuid())
+  projectId  String
+  title      String
+  dueDate    DateTime?
+  project    Project  @relation(fields: [projectId], references: [id])
+}
+
+model Role {
+  id              String         @id @default(cuid())
+  organizationId  String
+  name            String
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+}
+
+model Permission {
+  id              String         @id @default(cuid())
+  organizationId  String
+  key             String
+  description     String?
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  details    String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  roleLabel String
+  joinedAt  DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+}
+
+model ScheduleEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  date        String   // YYYY-MM-DD
+  timeString  String
+  hour        Float
+  duration    Float
+  room        String
+  color       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model UserSkill {
+  id            String   @id @default(cuid())
+  userId        String
+  skillName     String
+  skillType     String   // "primary", "secondary", "specialization"
+  totalPoints   Int      @default(0)
+  skillRank     Int?     // e.g., 88 out of 285
+  totalRanks    Int?     // e.g., 285 total students ranked
+  user          User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, skillName])
+}
+
+model GroupRanking {
+  id          String @id @default(cuid())
+  teamId      String @unique
+  rank        Int
+  totalPoints Int
+  team        Team   @relation(fields: [teamId], references: [id])
+}
+
+model AdminAchievement {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  type        String    // 'individual' | 'team'
+  recipientId String?
+  teamId      String?
+  points      Int       @default(0)
+  date        DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  recipient   User?     @relation("AchievementRecipient", fields: [recipientId], references: [id])
+  team        Team?     @relation("AchievementTeam", fields: [teamId], references: [id])
+}
+
+model AdminChatHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  sessionId String
+  prompt    String
+  response  String
+  createdAt DateTime @default(now())
+  user      User     @relation("AdminChatUser", fields: [userId], references: [id])
+}
+
+model UserStreak {
+  id                 String   @id @default(cuid())
+  userId             String
+  currentStreak      Int      @default(0)
+  longestStreak      Int      @default(0)
+  totalContributions Int      @default(0)
+  gridData           String   // JSON string of contributions by date
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id])
+}
+
+model Hackathon {
+  id              String       @id @default(cuid())
+  organizationId  String?
+  name            String
+  dateRange       String       // e.g. "Aug 1 - Aug 3, 2025"
+  status          String       @default("Upcoming")
+  createdAt       DateTime     @default(now())
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+}
+
+model LeetCodeContest {
+  id              String       @id @default(cuid())
+  organizationId  String?
+  name            String
+  startTime       DateTime
+  status          String       @default("Register")
+  createdAt       DateTime     @default(now())
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+}
