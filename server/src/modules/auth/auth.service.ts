@@ -13,7 +13,7 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  identifier: z.string().min(1, 'Email or register number is required'),
+  identifier: z.string().trim().toLowerCase().min(1, 'Email or register number is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -67,10 +67,7 @@ export class AuthService {
     // Accept email OR regNo as the identifier
     const user = await prisma.user.findFirst({
       where: {
-        OR: [
-          { email: parsed.identifier },
-          { regNo: parsed.identifier },
-        ],
+        OR: [{ email: parsed.identifier }, { regNo: parsed.identifier }],
       },
     });
 
@@ -132,8 +129,8 @@ export class AuthService {
         createdAt: true,
         userSkills: {
           orderBy: {
-            totalPoints: 'desc'
-          }
+            totalPoints: 'desc',
+          },
         },
         team: {
           select: {
@@ -142,8 +139,8 @@ export class AuthService {
             groupCode: true,
             groupLevel: true,
             ranking: true,
-          }
-        }
+          },
+        },
       },
     });
 

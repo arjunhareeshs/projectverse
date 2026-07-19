@@ -8,8 +8,8 @@
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
-    "prisma:generate": "node run-prisma.cjs generate --schema ./database/prisma/schema.prisma",
-    "prisma:migrate:dev": "node run-prisma.cjs migrate dev --schema ./database/prisma/schema.prisma",
+    "prisma:generate": "npx prisma generate --schema ./database/prisma/schema.prisma",
+    "prisma:migrate:dev": "npx prisma migrate dev --schema ./database/prisma/schema.prisma",
     "prisma:seed": "tsx src/scripts/seed.ts"
   },
   "dependencies": {

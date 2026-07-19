@@ -1,19 +1,16 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
-  Bell, CheckCheck, AlertTriangle, MessageSquare,
-  GitPullRequest, UserPlus, FileText
+  Bell,
+  CheckCheck,
+  AlertTriangle,
+  MessageSquare,
+  GitPullRequest,
+  UserPlus,
+  FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../utils/cn';
-import { notificationService } from '../services/notification.service';
-
-interface NotificationItem {
-  id: string;
-  title: string;
-  body: string;
-  createdAt: string;
-  readAt: string | null;
-}
+import { useNotifications, NotificationItem } from '../contexts/NotificationContext';
 
 function getNotificationIcon(title: string) {
   const t = title.toLowerCase();
@@ -29,7 +26,12 @@ function getNotificationIcon(title: string) {
   if (t.includes('error') || t.includes('blocked') || t.includes('danger') || t.includes('risk')) {
     return { Icon: AlertTriangle, color: 'text-rose-500 bg-rose-500/10' };
   }
-  if (t.includes('success') || t.includes('approve') || t.includes('done') || t.includes('complete')) {
+  if (
+    t.includes('success') ||
+    t.includes('approve') ||
+    t.includes('done') ||
+    t.includes('complete')
+  ) {
     return { Icon: CheckCheck, color: 'text-emerald-500 bg-emerald-500/10' };
   }
   if (t.includes('join') || t.includes('member') || t.includes('add')) {
@@ -55,38 +57,11 @@ function formatTimeAgo(dateStr: string) {
 export const NotificationsDropdown: React.FC = () => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<NotificationItem[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
-  const unreadCount = items.filter((n) => !n.readAt).length;
-
-  const fetchNotifications = useCallback(async () => {
-    try {
-      const data = await notificationService.getNotifications();
-      setItems(data.slice(0, 5)); // only display top 5 in dropdown
-    } catch (err) {
-      console.error('Failed to load notifications in dropdown:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchNotifications();
-    // Poll every 8 seconds for a live feel
-    const interval = setInterval(fetchNotifications, 8000);
-
-    const handleRefresh = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (customEvent.detail?.type === 'notification') {
-        fetchNotifications();
-      }
-    };
-    window.addEventListener('pv:refresh', handleRefresh);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('pv:refresh', handleRefresh);
-    };
-  }, [fetchNotifications]);
+  // Show top 5 in dropdown
+  const items = notifications.slice(0, 5);
 
   useEffect(() => {
     if (!open) return;
@@ -105,24 +80,12 @@ export const NotificationsDropdown: React.FC = () => {
   }, [open]);
 
   const markAllRead = async () => {
-    try {
-      await notificationService.markAllRead();
-      setItems((prev) => prev.map((n) => ({ ...n, readAt: new Date().toISOString() })));
-    } catch (err) {
-      console.error('Failed to mark all notifications read:', err);
-    }
+    await markAllAsRead();
   };
 
   const handleItemClick = async (n: NotificationItem) => {
     if (n.readAt) return;
-    try {
-      await notificationService.markRead(n.id);
-      setItems((prev) =>
-        prev.map((it) => (it.id === n.id ? { ...it, readAt: new Date().toISOString() } : it))
-      );
-    } catch (err) {
-      console.error('Failed to mark notification read:', err);
-    }
+    await markAsRead(n.id);
   };
 
   return (
@@ -176,18 +139,31 @@ export const NotificationsDropdown: React.FC = () => {
                     onClick={() => handleItemClick(n)}
                     className={cn(
                       'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors border-b border-border/60 hover:bg-muted/60',
-                      !n.readAt && 'bg-primary/5 font-medium'
+                      !n.readAt && 'bg-primary/5 font-medium',
                     )}
                   >
-                    <span className={cn('mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', color)}>
+                    <span
+                      className={cn(
+                        'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                        color,
+                      )}
+                    >
                       <Icon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-foreground leading-snug">{n.title}</p>
-                      <p className="text-[11px] text-muted-foreground leading-normal mt-0.5">{n.body}</p>
-                      <p className="text-[9px] text-muted-foreground/60 mt-1">{formatTimeAgo(n.createdAt)}</p>
+                      <p className="text-xs font-semibold text-foreground leading-snug">
+                        {n.title}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground leading-normal mt-0.5">
+                        {n.body}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground/60 mt-1">
+                        {formatTimeAgo(n.createdAt)}
+                      </p>
                     </div>
-                    {!n.readAt && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                    {!n.readAt && (
+                      <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                    )}
                   </button>
                 );
               })

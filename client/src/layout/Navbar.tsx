@@ -34,7 +34,12 @@ export const Navbar: React.FC = () => {
 
   const firstName = user?.fullName?.split(' ')[0] || 'there';
   const initials = user?.fullName
-    ? user.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    ? user.fullName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
     : 'U';
 
   // Cmd+K shortcut
@@ -74,7 +79,7 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center gap-2 ml-auto shrink-0">
           {/* New Project */}
           <button
-            onClick={() => navigate('/projects')}
+            onClick={() => navigate('/projects/recommend')}
             className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
           >
             <Plus className="h-3.5 w-3.5" />

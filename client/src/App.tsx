@@ -11,6 +11,8 @@ const TeamRedirect = () => {
   return <Navigate to={`/teams/${user?.teamId || '1'}`} replace />;
 };
 
+import { NotificationProvider } from './contexts/NotificationContext';
+
 // Public
 import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
@@ -20,6 +22,10 @@ import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { AIAssistant } from './pages/AIAssistant';
 import { AllProjects } from './pages/AllProjects';
+import { ProjectRecommendationWizard } from './pages/ProjectRecommendationWizard';
+import { ProjectProposal } from './pages/ProjectProposal';
+import { ProjectCatalog } from './pages/ProjectCatalog';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { KanbanBoard } from './pages/KanbanBoard';
 import { TimelineGantt } from './pages/TimelineGantt';
 import { TeamPage } from './pages/TeamPage';
@@ -53,55 +59,61 @@ function App() {
         v7_relativeSplatPath: true,
       }}
     >
-      <Routes>
-        {/* Public Landing Page */}
-        <Route path="/" element={<Landing />} />
+      <NotificationProvider>
+        <Routes>
+          {/* Public Landing Page */}
+          <Route path="/" element={<Landing />} />
 
-        {/* Auth Routes */}
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-        </Route>
-
-        {/* Protected Main App Routes */}
-        <Route element={<ProtectedRoute />}>
-          <Route element={<MainLayout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/ai-assistant" element={<AIAssistant />} />
-            <Route path="/projects" element={<AllProjects />} />
-            <Route path="/kanban" element={<KanbanBoard />} />
-            <Route path="/timeline" element={<TimelineGantt />} />
-            <Route path="/team" element={<TeamRedirect />} />
-            <Route path="/teams/:id" element={<TeamDetailPage />} />
-            <Route path="/teams/:teamId/members" element={<TeamMembers />} />
-            <Route path="/teams/:id/collaborate" element={<TeamCollaborate />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/files" element={<FileManager />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/schedule" element={<Schedule />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/profile" element={<Profile />} />
+          {/* Auth Routes */}
+          <Route element={<AuthLayout />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
           </Route>
 
-          {/* Admin Portal Routes — separate layout */}
-          <Route element={<AdminLayout />}>
-            <Route path="/admin" element={<Navigate to="/admin/upload" replace />} />
-            <Route path="/admin/upload" element={<AdminUpload />} />
-            <Route path="/admin/team-trends" element={<AdminTeamTrends />} />
-            <Route path="/admin/student-trends" element={<AdminStudentTrends />} />
-            <Route path="/admin/chat" element={<AdminChat />} />
-            <Route path="/admin/users" element={<UserManagement />} />
-            <Route path="/admin/teams" element={<TeamManagement />} />
-            <Route path="/admin/projects" element={<ProjectManagement />} />
-            <Route path="/admin/documents" element={<DocumentManagement />} />
-            <Route path="/admin/analytics" element={<AdminAnalytics />} />
-          </Route>
-        </Route>
+          {/* Protected Main App Routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/ai-assistant" element={<AIAssistant />} />
+              <Route path="/projects" element={<AllProjects />} />
+              <Route path="/projects/recommend" element={<ProjectRecommendationWizard />} />
+              <Route path="/projects/propose" element={<ProjectProposal />} />
+              <Route path="/projects/catalog" element={<ProjectCatalog />} />
+              <Route path="/projects/:id" element={<ProjectDetailPage />} />
+              <Route path="/kanban" element={<KanbanBoard />} />
+              <Route path="/timeline" element={<TimelineGantt />} />
+              <Route path="/team" element={<TeamRedirect />} />
+              <Route path="/teams/:id" element={<TeamDetailPage />} />
+              <Route path="/teams/:teamId/members" element={<TeamMembers />} />
+              <Route path="/teams/:id/collaborate" element={<TeamCollaborate />} />
+              <Route path="/documents" element={<Documents />} />
+              <Route path="/files" element={<FileManager />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/schedule" element={<Schedule />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/profile" element={<Profile />} />
+            </Route>
 
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+            {/* Admin Portal Routes — separate layout */}
+            <Route element={<AdminLayout />}>
+              <Route path="/admin" element={<Navigate to="/admin/upload" replace />} />
+              <Route path="/admin/upload" element={<AdminUpload />} />
+              <Route path="/admin/team-trends" element={<AdminTeamTrends />} />
+              <Route path="/admin/student-trends" element={<AdminStudentTrends />} />
+              <Route path="/admin/chat" element={<AdminChat />} />
+              <Route path="/admin/users" element={<UserManagement />} />
+              <Route path="/admin/teams" element={<TeamManagement />} />
+              <Route path="/admin/projects" element={<ProjectManagement />} />
+              <Route path="/admin/documents" element={<DocumentManagement />} />
+              <Route path="/admin/analytics" element={<AdminAnalytics />} />
+            </Route>
+          </Route>
+
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </NotificationProvider>
     </BrowserRouter>
   );
 }

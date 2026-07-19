@@ -1,4 +1,5 @@
 import { prisma } from '../../shared/database';
+import { getIoInstance } from '../../infrastructure/socket';
 
 export const notificationService = {
   async getNotifications(userId: string) {
@@ -28,19 +29,37 @@ export const notificationService = {
   },
 
   async createMockNotification(userId: string, title: string, body: string) {
-    return prisma.notification.create({
+    const notification = await prisma.notification.create({
       data: {
         userId,
         title,
         body,
       },
     });
+
+    try {
+      const io = getIoInstance();
+      io.to(`user:${userId}`).emit('notification', notification);
+    } catch (e) {
+      console.error('Socket emission failed:', e);
+    }
+
+    return notification;
   },
 
   async createForUser(userId: string, title: string, body: string) {
-    return prisma.notification.create({
+    const notification = await prisma.notification.create({
       data: { userId, title, body },
     });
+
+    try {
+      const io = getIoInstance();
+      io.to(`user:${userId}`).emit('notification', notification);
+    } catch (e) {
+      console.error('Socket emission failed:', e);
+    }
+
+    return notification;
   },
 
   async broadcastToTeam(teamId: string, title: string, body: string) {
@@ -63,7 +82,15 @@ export const notificationService = {
       skipDuplicates: true,
     });
 
+    try {
+      const io = getIoInstance();
+      memberships.forEach((m) => {
+        io.to(`user:${m.userId}`).emit('notification', { title, body, userId: m.userId });
+      });
+    } catch (e) {
+      console.error('Socket emission failed:', e);
+    }
+
     return { created: result.count, teamId };
   },
 };
-

@@ -12,7 +12,9 @@ export class AuthController {
       res.status(StatusCodes.CREATED).json(result);
     } catch (error: any) {
       if (error instanceof ZodError) {
-        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid request', issues: error.issues });
+        res
+          .status(StatusCodes.BAD_REQUEST)
+          .json({ message: 'Invalid request', issues: error.issues });
       } else if (error.message?.includes('already exists')) {
         res.status(StatusCodes.CONFLICT).json({ message: error.message });
       } else {
@@ -26,8 +28,11 @@ export class AuthController {
       const result = await AuthService.login(req.body);
       res.status(StatusCodes.OK).json(result);
     } catch (error: any) {
+      console.error('Login error:', error);
       if (error instanceof ZodError) {
-        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid request', issues: error.issues });
+        res
+          .status(StatusCodes.BAD_REQUEST)
+          .json({ message: 'Invalid request', issues: error.issues });
       } else {
         // Keep error message generic to avoid user-enumeration
         res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Invalid credentials' });

@@ -36,7 +36,7 @@ export const teamService = {
           select: {
             ...userSelect,
             userSkills: true,
-          }
+          },
         },
         teamMembers: {
           include: {
@@ -44,9 +44,9 @@ export const teamService = {
               select: {
                 ...userSelect,
                 userSkills: true,
-              }
-            }
-          }
+              },
+            },
+          },
         },
         ranking: true,
       },
@@ -62,7 +62,7 @@ export const teamService = {
           select: {
             ...userSelect,
             userSkills: true,
-          }
+          },
         },
         teamMembers: {
           include: {
@@ -70,24 +70,26 @@ export const teamService = {
               select: {
                 ...userSelect,
                 userSkills: true,
-              }
-            }
-          }
+              },
+            },
+          },
         },
         projects: {
-          include: { tasks: true }
+          include: { tasks: true },
         },
         ranking: true,
-      }
+      },
     });
   },
 
   async createTeam(organizationId: string, creatorId: string, creatorRole: string, data: any) {
-    const leadId = creatorRole === 'ADMIN' ? (data.leadId || creatorId) : creatorId;
+    const leadId = creatorRole === 'ADMIN' ? data.leadId || creatorId : creatorId;
     if (leadId) {
       const leadUser = await prisma.user.findUnique({ where: { id: leadId } });
       if (leadUser?.teamId) {
-        throw new Error('You are already part of a team. Leave your current team before creating a new one.');
+        throw new Error(
+          'You are already part of a team. Leave your current team before creating a new one.',
+        );
       }
     }
 
@@ -103,13 +105,18 @@ export const teamService = {
           members: { connect: { id: leadId } },
           teamMembers: { create: { userId: leadId, roleLabel: 'Team Leader' } },
         }),
-      }
+      },
     });
 
     if (leadId) {
       await prisma.user.update({ where: { id: leadId }, data: { teamId: team.id } });
       await prisma.activityLog.create({
-        data: { userId: leadId, action: `created the team "${team.name}"`, entityType: 'TEAM', entityId: team.id }
+        data: {
+          userId: leadId,
+          action: `created the team "${team.name}"`,
+          entityType: 'TEAM',
+          entityId: team.id,
+        },
       });
     }
 
@@ -121,13 +128,19 @@ export const teamService = {
         name: `${team.name} Workspace`,
         description: data.description,
         status: 'active',
-      }
+      },
     });
 
     return team;
   },
 
-  async updateTeam(organizationId: string, id: string, requesterId: string, requesterRole: string, data: any) {
+  async updateTeam(
+    organizationId: string,
+    id: string,
+    requesterId: string,
+    requesterRole: string,
+    data: any,
+  ) {
     const team = await prisma.team.findFirst({ where: { id, organizationId } });
     if (!team) throw new Error('Team not found');
     if (requesterRole !== 'ADMIN' && team.leadId !== requesterId) {
@@ -144,7 +157,7 @@ export const teamService = {
         maxMembers: data.maxMembers,
         isPublic: data.isPublic,
         currentProjectLabel: data.currentProjectLabel,
-      }
+      },
     });
   },
 
@@ -152,29 +165,42 @@ export const teamService = {
     const team = await prisma.team.findFirst({ where: { id: teamId, organizationId } });
     if (!team) throw new Error('Team not found');
 
-    const existingMembership = await prisma.teamMember.findUnique({ where: { teamId_userId: { teamId, userId } } });
+    const existingMembership = await prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId } },
+    });
     if (!existingMembership) {
       const targetUser = await prisma.user.findUnique({ where: { id: userId } });
       if (targetUser?.teamId && targetUser.teamId !== teamId) {
-        throw new Error('This person is already part of another team. They must leave it before joining this one.');
+        throw new Error(
+          'This person is already part of another team. They must leave it before joining this one.',
+        );
       }
     }
 
     await prisma.team.update({
       where: { id: teamId },
-      data: { members: { connect: { id: userId } } }
+      data: { members: { connect: { id: userId } } },
     });
     await prisma.user.update({ where: { id: userId }, data: { teamId } });
 
     return prisma.teamMember.upsert({
       where: { teamId_userId: { teamId, userId } },
       update: { roleLabel },
-      create: { teamId, userId, roleLabel }
+      create: { teamId, userId, roleLabel },
     });
   },
 
-  async removeMember(organizationId: string, teamId: string, userId: string, requesterId: string, requesterRole: string) {
-    const team = await prisma.team.findFirst({ where: { id: teamId, organizationId }, include: { teamMembers: true } });
+  async removeMember(
+    organizationId: string,
+    teamId: string,
+    userId: string,
+    requesterId: string,
+    requesterRole: string,
+  ) {
+    const team = await prisma.team.findFirst({
+      where: { id: teamId, organizationId },
+      include: { teamMembers: true },
+    });
     if (!team) throw new Error('Team not found');
 
     const isSelf = requesterId === userId;
@@ -183,30 +209,44 @@ export const teamService = {
       throw new Error('Not authorized to remove this member');
     }
     if (isSelf && team.leadId === userId && team.teamMembers.length > 1) {
-      throw new Error('Team leads cannot leave while other members remain. Transfer leadership or ask an admin to reassign it first.');
+      throw new Error(
+        'Team leads cannot leave while other members remain. Transfer leadership or ask an admin to reassign it first.',
+      );
     }
 
     await prisma.team.update({
       where: { id: teamId },
-      data: { members: { disconnect: { id: userId } } }
+      data: { members: { disconnect: { id: userId } } },
     });
     await prisma.user.update({ where: { id: userId }, data: { teamId: null } });
-    await prisma.teamMember.delete({
-      where: { teamId_userId: { teamId, userId } }
-    }).catch(() => null);
+    await prisma.teamMember
+      .delete({
+        where: { teamId_userId: { teamId, userId } },
+      })
+      .catch(() => null);
 
     // Re-evaluate count to prevent parallel exit race conditions
     const remainingMembers = await prisma.teamMember.count({ where: { teamId } });
 
     // Last member leaving — clean up the now-empty team.
     if (remainingMembers === 0) {
-      const ownedProjects = await prisma.project.findMany({ where: { teamId }, select: { id: true } });
-      await prisma.task.deleteMany({ where: { projectId: { in: ownedProjects.map(p => p.id) } } });
-      await prisma.project.updateMany({ where: { collaboratingTeamId: teamId }, data: { collaboratingTeamId: null } });
+      const ownedProjects = await prisma.project.findMany({
+        where: { teamId },
+        select: { id: true },
+      });
+      await prisma.task.deleteMany({
+        where: { projectId: { in: ownedProjects.map((p) => p.id) } },
+      });
+      await prisma.project.updateMany({
+        where: { collaboratingTeamId: teamId },
+        data: { collaboratingTeamId: null },
+      });
       await prisma.project.deleteMany({ where: { teamId } });
       await prisma.teamMessage.deleteMany({ where: { teamId } });
       await prisma.teamInvite.deleteMany({ where: { teamId } });
-      await prisma.teamCollaboration.deleteMany({ where: { OR: [{ fromTeamId: teamId }, { toTeamId: teamId }] } });
+      await prisma.teamCollaboration.deleteMany({
+        where: { OR: [{ fromTeamId: teamId }, { toTeamId: teamId }] },
+      });
       await prisma.team.delete({ where: { id: teamId } });
       return { success: true, teamDeleted: true };
     }
@@ -218,8 +258,8 @@ export const teamService = {
     const team = await prisma.team.findFirst({
       where: { id: teamId, organizationId },
       include: {
-        projects: { include: { tasks: true } }
-      }
+        projects: { include: { tasks: true } },
+      },
     });
 
     if (!team) throw new Error('Team not found');
@@ -229,11 +269,12 @@ export const teamService = {
     let overdueTasks = 0;
     const now = new Date();
 
-    team.projects.forEach(p => {
-      p.tasks.forEach(t => {
+    team.projects.forEach((p) => {
+      p.tasks.forEach((t) => {
         totalTasks++;
         if (t.status === 'done' || t.status === 'completed') completedTasks++;
-        if (t.dueDate && t.dueDate < now && t.status !== 'done' && t.status !== 'completed') overdueTasks++;
+        if (t.dueDate && t.dueDate < now && t.status !== 'done' && t.status !== 'completed')
+          overdueTasks++;
       });
     });
 
@@ -241,7 +282,7 @@ export const teamService = {
       activeProjects: team.projects.length,
       taskCompletionRate: totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0,
       overdueCount: overdueTasks,
-      totalTasks
+      totalTasks,
     };
   },
 
@@ -268,34 +309,36 @@ export const teamService = {
               include: {
                 assignee: { select: userSelect },
                 comments: true,
-              }
+              },
             },
             meetings: true,
             milestones: true,
             sprints: {
-              include: { project: { select: { id: true } } }
-            }
-          }
-        }
-      }
+              include: { project: { select: { id: true } } },
+            },
+          },
+        },
+      },
     });
 
     if (!team) throw new Error('Team not found');
 
-    const memberIds = team.members.map(m => m.id);
+    const memberIds = team.members.map((m) => m.id);
     const captainId = team.leadId;
 
     // Flatten all tasks across all team projects
-    const allTasks = team.projects.flatMap(p => p.tasks);
-    const openTasks = allTasks.filter(t => t.status !== 'done' && t.status !== 'completed');
-    const doneTasks = allTasks.filter(t => t.status === 'done' || t.status === 'completed');
+    const allTasks = team.projects.flatMap((p) => p.tasks);
+    const openTasks = allTasks.filter((t) => t.status !== 'done' && t.status !== 'completed');
+    const doneTasks = allTasks.filter((t) => t.status === 'done' || t.status === 'completed');
 
     // ── 1. WORKLOAD BALANCE ──────────────────────────────────────
-    const workloadPerMember = team.members.map(member => {
-      const memberTasks = allTasks.filter(t => t.assigneeId === member.id);
-      const completed = memberTasks.filter(t => t.status === 'done' || t.status === 'completed').length;
+    const workloadPerMember = team.members.map((member) => {
+      const memberTasks = allTasks.filter((t) => t.assigneeId === member.id);
+      const completed = memberTasks.filter(
+        (t) => t.status === 'done' || t.status === 'completed',
+      ).length;
       const overdue = memberTasks.filter(
-        t => t.dueDate && t.dueDate < now && t.status !== 'done' && t.status !== 'completed'
+        (t) => t.dueDate && t.dueDate < now && t.status !== 'done' && t.status !== 'completed',
       ).length;
       return {
         memberId: member.id,
@@ -307,19 +350,18 @@ export const teamService = {
       };
     });
 
-    const avgLoad = memberIds.length > 0
-      ? workloadPerMember.reduce((s, m) => s + m.taskCount, 0) / memberIds.length
-      : 0;
+    const avgLoad =
+      memberIds.length > 0
+        ? workloadPerMember.reduce((s, m) => s + m.taskCount, 0) / memberIds.length
+        : 0;
 
-    workloadPerMember.forEach(m => {
+    workloadPerMember.forEach((m) => {
       m.isHighLoad = avgLoad > 0 && m.taskCount > avgLoad * 2;
     });
 
     // ── 2. DELEGATION RATIO ──────────────────────────────────────
-    const captainTasks = allTasks.filter(t => t.assigneeId === captainId).length;
-    const captainTaskShare = allTasks.length > 0
-      ? (captainTasks / allTasks.length) * 100
-      : 0;
+    const captainTasks = allTasks.filter((t) => t.assigneeId === captainId).length;
+    const captainTaskShare = allTasks.length > 0 ? (captainTasks / allTasks.length) * 100 : 0;
 
     const delegationRatio = [
       { name: 'Captain', value: captainTasks },
@@ -328,27 +370,26 @@ export const teamService = {
 
     // ── 3. OVERDUE / AGING ───────────────────────────────────────
     const overdueTasks = openTasks
-      .filter(t => t.dueDate && t.dueDate < now)
-      .map(t => ({
+      .filter((t) => t.dueDate && t.dueDate < now)
+      .map((t) => ({
         taskId: t.id,
         title: t.title,
         assignee: t.assignee?.fullName || 'Unassigned',
-        daysOverdue: t.dueDate
-          ? Math.floor((now.getTime() - t.dueDate.getTime()) / 86_400_000)
-          : 0,
+        daysOverdue: t.dueDate ? Math.floor((now.getTime() - t.dueDate.getTime()) / 86_400_000) : 0,
         priority: t.priority,
         dueDate: t.dueDate,
       }))
       .sort((a, b) => b.daysOverdue - a.daysOverdue);
 
     // ── 4. TURNAROUND TIME ───────────────────────────────────────
-    const completedWithDates = doneTasks.filter(t => t.completedAt);
-    const avgTurnaroundDays = completedWithDates.length > 0
-      ? completedWithDates.reduce((sum, t) => {
-          const days = (t.completedAt!.getTime() - t.createdAt.getTime()) / 86_400_000;
-          return sum + days;
-        }, 0) / completedWithDates.length
-      : null;
+    const completedWithDates = doneTasks.filter((t) => t.completedAt);
+    const avgTurnaroundDays =
+      completedWithDates.length > 0
+        ? completedWithDates.reduce((sum, t) => {
+            const days = (t.completedAt!.getTime() - t.createdAt.getTime()) / 86_400_000;
+            return sum + days;
+          }, 0) / completedWithDates.length
+        : null;
 
     // Turnaround Trend (weekly average for the last 6 weeks)
     const turnaroundTrend = [];
@@ -356,11 +397,15 @@ export const teamService = {
       const start = new Date(now.getTime() - (w + 1) * 7 * 86_400_000);
       const end = new Date(now.getTime() - w * 7 * 86_400_000);
       const completedInWeek = doneTasks.filter(
-        t => t.completedAt && t.completedAt >= start && t.completedAt < end
+        (t) => t.completedAt && t.completedAt >= start && t.completedAt < end,
       );
-      const avg = completedInWeek.length > 0
-        ? completedInWeek.reduce((sum, t) => sum + (t.completedAt!.getTime() - t.createdAt.getTime()) / 86_400_000, 0) / completedInWeek.length
-        : 0;
+      const avg =
+        completedInWeek.length > 0
+          ? completedInWeek.reduce(
+              (sum, t) => sum + (t.completedAt!.getTime() - t.createdAt.getTime()) / 86_400_000,
+              0,
+            ) / completedInWeek.length
+          : 0;
       turnaroundTrend.push({
         week: `Wk -${w}`,
         avgDays: Number(avg.toFixed(1)),
@@ -368,26 +413,31 @@ export const teamService = {
     }
 
     // ── 5. COMMUNICATION FREQUENCY ───────────────────────────────
-    const silentTasks = openTasks.filter(t => t.comments.length === 0);
+    const silentTasks = openTasks.filter((t) => t.comments.length === 0);
 
     // Comments per day for last 30 days
-    const allComments = allTasks.flatMap(t => t.comments).filter(c => c.createdAt >= thirtyDaysAgo);
+    const allComments = allTasks
+      .flatMap((t) => t.comments)
+      .filter((c) => c.createdAt >= thirtyDaysAgo);
     const commentsPerDay: Record<string, number> = {};
     for (let d = 0; d < 30; d++) {
       const date = new Date(thirtyDaysAgo.getTime() + d * 86_400_000);
       const key = date.toISOString().split('T')[0];
       commentsPerDay[key] = 0;
     }
-    allComments.forEach(c => {
+    allComments.forEach((c) => {
       const key = c.createdAt.toISOString().split('T')[0];
       if (key in commentsPerDay) commentsPerDay[key]++;
     });
-    const commentsLast30Days = Object.entries(commentsPerDay).map(([date, count]) => ({ date, count }));
+    const commentsLast30Days = Object.entries(commentsPerDay).map(([date, count]) => ({
+      date,
+      count,
+    }));
 
     // ── 6. MEETING CADENCE ───────────────────────────────────────
-    const allMeetings = team.projects.flatMap(p => p.meetings);
+    const allMeetings = team.projects.flatMap((p) => p.meetings);
     const meetingsLast14Days = allMeetings.filter(
-      m => m.startsAt && m.startsAt >= fourteenDaysAgo
+      (m) => m.startsAt && m.startsAt >= fourteenDaysAgo,
     ).length;
 
     // Meeting cadence timeline (weekly meetings vs active projects count over last 4 weeks)
@@ -395,8 +445,10 @@ export const teamService = {
     for (let w = 3; w >= 0; w--) {
       const start = new Date(now.getTime() - (w + 1) * 7 * 86_400_000);
       const end = new Date(now.getTime() - w * 7 * 86_400_000);
-      const meetingsCount = allMeetings.filter(m => m.startsAt && m.startsAt >= start && m.startsAt < end).length;
-      const activeProjs = team.projects.filter(p => p.createdAt < end).length;
+      const meetingsCount = allMeetings.filter(
+        (m) => m.startsAt && m.startsAt >= start && m.startsAt < end,
+      ).length;
+      const activeProjs = team.projects.filter((p) => p.createdAt < end).length;
       meetingCadence.push({
         week: `Wk -${w}`,
         meetings: meetingsCount,
@@ -405,16 +457,16 @@ export const teamService = {
     }
 
     // ── 7. MILESTONE HIT RATE ────────────────────────────────────
-    const allMilestones = team.projects.flatMap(p => p.milestones);
-    const dueMilestones = allMilestones.filter(m => m.dueDate && m.dueDate <= now);
+    const allMilestones = team.projects.flatMap((p) => p.milestones);
+    const dueMilestones = allMilestones.filter((m) => m.dueDate && m.dueDate <= now);
     let milestoneHitRate: number | null = null;
     if (dueMilestones.length > 0) {
       let hits = 0;
       for (const milestone of dueMilestones) {
-        const proj = team.projects.find(p => p.id === milestone.projectId);
+        const proj = team.projects.find((p) => p.id === milestone.projectId);
         if (proj) {
           const projCompleted = proj.tasks.filter(
-            t => t.completedAt && milestone.dueDate && t.completedAt <= milestone.dueDate
+            (t) => t.completedAt && milestone.dueDate && t.completedAt <= milestone.dueDate,
           ).length;
           if (projCompleted / Math.max(proj.tasks.length, 1) >= 0.5) hits++;
         }
@@ -427,15 +479,17 @@ export const teamService = {
     for (let m = 3; m >= 0; m--) {
       const start = new Date(now.getFullYear(), now.getMonth() - m, 1);
       const end = new Date(now.getFullYear(), now.getMonth() - m + 1, 0, 23, 59, 59);
-      const milestonesInMonth = allMilestones.filter(ms => ms.dueDate && ms.dueDate >= start && ms.dueDate <= end);
+      const milestonesInMonth = allMilestones.filter(
+        (ms) => ms.dueDate && ms.dueDate >= start && ms.dueDate <= end,
+      );
       let hitRate = 100;
       if (milestonesInMonth.length > 0) {
         let hits = 0;
         for (const ms of milestonesInMonth) {
-          const proj = team.projects.find(p => p.id === ms.projectId);
+          const proj = team.projects.find((p) => p.id === ms.projectId);
           if (proj) {
             const projCompleted = proj.tasks.filter(
-              t => t.completedAt && ms.dueDate && t.completedAt <= ms.dueDate
+              (t) => t.completedAt && ms.dueDate && t.completedAt <= ms.dueDate,
             ).length;
             if (projCompleted / Math.max(proj.tasks.length, 1) >= 0.5) hits++;
           }
@@ -456,10 +510,10 @@ export const teamService = {
       },
       select: { userId: true },
     });
-    const activeUserIds = new Set(recentActivity.map(a => a.userId));
+    const activeUserIds = new Set(recentActivity.map((a) => a.userId));
     const inactiveMembers = team.members
-      .filter(m => !activeUserIds.has(m.id))
-      .map(m => m.fullName);
+      .filter((m) => !activeUserIds.has(m.id))
+      .map((m) => m.fullName);
 
     // Engagement Trend per Member (weekly activity count over last 4 weeks)
     const activityLogsLast28Days = await prisma.activityLog.findMany({
@@ -470,13 +524,13 @@ export const teamService = {
       select: { userId: true, createdAt: true },
     });
 
-    const memberEngagement = team.members.map(member => {
+    const memberEngagement = team.members.map((member) => {
       const weeklyActivity = [];
       for (let w = 3; w >= 0; w--) {
         const start = new Date(now.getTime() - (w + 1) * 7 * 86_400_000);
         const end = new Date(now.getTime() - w * 7 * 86_400_000);
         const count = activityLogsLast28Days.filter(
-          log => log.userId === member.id && log.createdAt >= start && log.createdAt < end
+          (log) => log.userId === member.id && log.createdAt >= start && log.createdAt < end,
         ).length;
         weeklyActivity.push({ week: `Wk -${w}`, count });
       }
@@ -487,13 +541,23 @@ export const teamService = {
     });
 
     // ── 9. COMPOSITE HEALTH RADAR SCORE ──────────────────────────
-    const highLoadCount = workloadPerMember.filter(m => m.isHighLoad).length;
-    const workloadBalanceScore = Math.max(0, 100 - (highLoadCount / Math.max(team.members.length, 1)) * 100);
-    const turnaroundSpeedScore = avgTurnaroundDays ? Math.max(0, Math.min(100, Math.round(100 - (avgTurnaroundDays - 2) * 8))) : 100;
+    const highLoadCount = workloadPerMember.filter((m) => m.isHighLoad).length;
+    const workloadBalanceScore = Math.max(
+      0,
+      100 - (highLoadCount / Math.max(team.members.length, 1)) * 100,
+    );
+    const turnaroundSpeedScore = avgTurnaroundDays
+      ? Math.max(0, Math.min(100, Math.round(100 - (avgTurnaroundDays - 2) * 8)))
+      : 100;
     const milestoneHitRateScore = milestoneHitRate != null ? Math.round(milestoneHitRate) : 100;
-    const engagementScore = Math.round(100 - (inactiveMembers.length / Math.max(team.members.length, 1)) * 100);
-    const completedCount = allTasks.filter(t => t.status === 'done' || t.status === 'completed').length;
-    const taskCompletionScore = allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 100;
+    const engagementScore = Math.round(
+      100 - (inactiveMembers.length / Math.max(team.members.length, 1)) * 100,
+    );
+    const completedCount = allTasks.filter(
+      (t) => t.status === 'done' || t.status === 'completed',
+    ).length;
+    const taskCompletionScore =
+      allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 100;
 
     const radarScore = [
       { subject: 'Workload Balance', A: workloadBalanceScore, fullMark: 100 },
@@ -558,7 +622,7 @@ export const teamService = {
       captainName: metrics.captainName,
       totalMembers: metrics.totalMembers,
       activeProjects: metrics.activeProjects,
-      workloadPerMember: metrics.workloadPerMember.map(m => ({
+      workloadPerMember: metrics.workloadPerMember.map((m) => ({
         memberId: m.memberId,
         memberName: m.memberName,
         taskCount: m.taskCount,
@@ -568,7 +632,7 @@ export const teamService = {
       teamAverageTaskLoad: metrics.teamAverageTaskLoad,
       captainTaskShare: metrics.captainTaskShare,
       overdueTaskCount: metrics.overdueTaskCount,
-      overdueTaskList: metrics.overdueTaskList.slice(0, 5).map(t => ({
+      overdueTaskList: metrics.overdueTaskList.slice(0, 5).map((t) => ({
         taskId: t.taskId,
         title: t.title,
         assignee: t.assignee,
@@ -614,9 +678,13 @@ export const teamService = {
       data: {
         userId: requestingUserId,
         prompt: `Team coordination insights for team ${metrics.teamName} (${teamId})`,
-        response: aiResult.summary + '\n\nKey issues: ' + aiResult.keyIssues.join('; ') +
-                  '\n\nRecommendations: ' + aiResult.recommendations.join('; '),
-      }
+        response:
+          aiResult.summary +
+          '\n\nKey issues: ' +
+          aiResult.keyIssues.join('; ') +
+          '\n\nRecommendations: ' +
+          aiResult.recommendations.join('; '),
+      },
     });
 
     return {
@@ -627,9 +695,9 @@ export const teamService = {
 
   // ── Candidate Search (invite-by-name/regNo) ─────────────────────
 
-  async searchCandidates(organizationId: string, query: string) {
+  async searchCandidates(organizationId: string, query: string, requesterTeamId?: string | null) {
     if (!query || query.trim().length < 2) return [];
-    return prisma.user.findMany({
+    const candidates = await prisma.user.findMany({
       where: {
         organizationId,
         role: 'STUDENT',
@@ -640,8 +708,19 @@ export const teamService = {
         ],
       },
       select: { id: true, fullName: true, email: true, regNo: true, teamId: true },
-      take: 8,
+      take: 15,
     });
+
+    if (requesterTeamId) {
+      return candidates
+        .sort((a, b) => {
+          if (a.teamId === requesterTeamId && b.teamId !== requesterTeamId) return -1;
+          if (b.teamId === requesterTeamId && a.teamId !== requesterTeamId) return 1;
+          return 0;
+        })
+        .slice(0, 8);
+    }
+    return candidates.slice(0, 8);
   },
 
   // ── Invites & Join Requests ───────────────────────────────────
@@ -656,7 +735,13 @@ export const teamService = {
     });
   },
 
-  async inviteMember(organizationId: string, teamId: string, inviterId: string, inviterRole: string, data: { email: string; roleLabel?: string; message?: string }) {
+  async inviteMember(
+    organizationId: string,
+    teamId: string,
+    inviterId: string,
+    inviterRole: string,
+    data: { email: string; roleLabel?: string; message?: string },
+  ) {
     const team = await prisma.team.findFirst({ where: { id: teamId, organizationId } });
     if (!team) throw new Error('Team not found');
     if (inviterRole !== 'ADMIN' && team.leadId !== inviterId) {
@@ -689,11 +774,13 @@ export const teamService = {
 
     const requester = await prisma.user.findUnique({ where: { id: userId } });
     if (requester?.teamId) {
-      throw new Error('You are already part of a team. Leave your current team before requesting to join another.');
+      throw new Error(
+        'You are already part of a team. Leave your current team before requesting to join another.',
+      );
     }
 
     const existing = await prisma.teamInvite.findFirst({
-      where: { teamId, userId, status: 'pending', type: 'JOIN_REQUEST' }
+      where: { teamId, userId, status: 'pending', type: 'JOIN_REQUEST' },
     });
     if (existing) return existing;
 
@@ -708,11 +795,18 @@ export const teamService = {
         roleLabel: 'Member',
         type: 'JOIN_REQUEST',
         invitedBy: userId,
-      }
+      },
     });
   },
 
-  async respondToInvite(organizationId: string, teamId: string, inviteId: string, action: 'accept' | 'decline', responderId: string, responderRole: string) {
+  async respondToInvite(
+    organizationId: string,
+    teamId: string,
+    inviteId: string,
+    action: 'accept' | 'decline',
+    responderId: string,
+    responderRole: string,
+  ) {
     const team = await prisma.team.findFirst({ where: { id: teamId, organizationId } });
     if (!team) throw new Error('Team not found');
 
@@ -738,7 +832,12 @@ export const teamService = {
     await teamService.addMember(organizationId, teamId, invite.userId, invite.roleLabel);
     await prisma.teamInvite.update({ where: { id: inviteId }, data: { status: 'accepted' } });
     await prisma.activityLog.create({
-      data: { userId: invite.userId, action: `joined the team "${team.name}"`, entityType: 'TEAM', entityId: teamId }
+      data: {
+        userId: invite.userId,
+        action: `joined the team "${team.name}"`,
+        entityType: 'TEAM',
+        entityId: teamId,
+      },
     });
 
     return { success: true };
@@ -776,20 +875,23 @@ export const teamService = {
       where: { organizationId, OR: [{ teamId }, { collaboratingTeamId: teamId }] },
       include: { tasks: { include: { assignee: { select: userSelect } } } },
     });
-    return projects.flatMap(p => p.tasks.map(t => ({ ...t, projectName: p.name })));
+    return projects.flatMap((p) => p.tasks.map((t) => ({ ...t, projectName: p.name })));
   },
 
   async createTeamTask(organizationId: string, teamId: string, creatorUserId: string, data: any) {
-    const team = await prisma.team.findFirst({ where: { id: teamId, organizationId }, include: { projects: true } });
+    const team = await prisma.team.findFirst({
+      where: { id: teamId, organizationId },
+      include: { projects: true },
+    });
     if (!team) throw new Error('Team not found');
 
     let project = data.projectId
-      ? team.projects.find(p => p.id === data.projectId)
+      ? team.projects.find((p) => p.id === data.projectId)
       : team.projects[0];
 
     if (!project) {
       project = await prisma.project.create({
-        data: { organizationId, teamId, name: `${team.name} Workspace`, status: 'active' }
+        data: { organizationId, teamId, name: `${team.name} Workspace`, status: 'active' },
       });
     }
 
@@ -803,20 +905,31 @@ export const teamService = {
         priority: data.priority || 'medium',
         status: 'todo',
       },
-      include: { assignee: { select: userSelect } }
+      include: { assignee: { select: userSelect } },
     });
 
     await prisma.activityLog.create({
-      data: { userId: creatorUserId, action: `created task "${task.title}"`, entityType: 'TASK', entityId: task.id }
+      data: {
+        userId: creatorUserId,
+        action: `created task "${task.title}"`,
+        entityType: 'TASK',
+        entityId: task.id,
+      },
     });
 
     return task;
   },
 
-  async updateTeamTaskStatus(organizationId: string, teamId: string, taskId: string, status: string, actingUserId: string) {
+  async updateTeamTaskStatus(
+    organizationId: string,
+    teamId: string,
+    taskId: string,
+    status: string,
+    actingUserId: string,
+  ) {
     const task = await prisma.task.findFirst({
       where: { id: taskId, project: { teamId, organizationId } },
-      include: { project: true }
+      include: { project: true },
     });
     if (!task) throw new Error('Task not found');
 
@@ -824,12 +937,17 @@ export const teamService = {
     const updated = await prisma.task.update({
       where: { id: taskId },
       data: { status, completedAt: isDone ? new Date() : null },
-      include: { assignee: { select: userSelect } }
+      include: { assignee: { select: userSelect } },
     });
 
     if (isDone) {
       await prisma.activityLog.create({
-        data: { userId: actingUserId, action: `completed task "${task.title}"`, entityType: 'TASK', entityId: task.id }
+        data: {
+          userId: actingUserId,
+          action: `completed task "${task.title}"`,
+          entityType: 'TASK',
+          entityId: task.id,
+        },
       });
     }
 
@@ -844,13 +962,17 @@ export const teamService = {
 
     const projects = await prisma.project.findMany({
       where: { organizationId, OR: [{ teamId }, { collaboratingTeamId: teamId }] },
-      include: { tasks: true, team: { select: { id: true, name: true, color: true } }, collaboratingTeam: { select: { id: true, name: true, color: true } } },
+      include: {
+        tasks: true,
+        team: { select: { id: true, name: true, color: true } },
+        collaboratingTeam: { select: { id: true, name: true, color: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
-    return projects.map(p => {
+    return projects.map((p) => {
       const total = p.tasks.length;
-      const done = p.tasks.filter(t => t.status === 'done' || t.status === 'completed').length;
+      const done = p.tasks.filter((t) => t.status === 'done' || t.status === 'completed').length;
       return {
         ...p,
         progress: total > 0 ? Math.round((done / total) * 100) : 0,
@@ -860,7 +982,12 @@ export const teamService = {
     });
   },
 
-  async createTeamProject(organizationId: string, teamId: string, creatorUserId: string, data: any) {
+  async createTeamProject(
+    organizationId: string,
+    teamId: string,
+    creatorUserId: string,
+    data: any,
+  ) {
     const team = await prisma.team.findFirst({ where: { id: teamId, organizationId } });
     if (!team) throw new Error('Team not found');
 
@@ -871,11 +998,16 @@ export const teamService = {
         name: data.name,
         description: data.description,
         status: 'active',
-      }
+      },
     });
 
     await prisma.activityLog.create({
-      data: { userId: creatorUserId, action: `created project "${project.name}"`, entityType: 'PROJECT', entityId: project.id }
+      data: {
+        userId: creatorUserId,
+        action: `created project "${project.name}"`,
+        entityType: 'PROJECT',
+        entityId: project.id,
+      },
     });
 
     return project;
@@ -886,11 +1018,11 @@ export const teamService = {
   async getTeamActivity(organizationId: string, teamId: string) {
     const team = await prisma.team.findFirst({
       where: { id: teamId, organizationId },
-      include: { members: { select: { id: true } } }
+      include: { members: { select: { id: true } } },
     });
     if (!team) throw new Error('Team not found');
 
-    const memberIds = team.members.map(m => m.id);
+    const memberIds = team.members.map((m) => m.id);
     return prisma.activityLog.findMany({
       where: { userId: { in: memberIds } },
       orderBy: { createdAt: 'desc' },
@@ -904,18 +1036,18 @@ export const teamService = {
   async getTeamProgress(organizationId: string, teamId: string) {
     const team = await prisma.team.findFirst({
       where: { id: teamId, organizationId },
-      include: { projects: { include: { tasks: true } } }
+      include: { projects: { include: { tasks: true } } },
     });
     if (!team) throw new Error('Team not found');
 
-    const allTasks = team.projects.flatMap(p => p.tasks);
+    const allTasks = team.projects.flatMap((p) => p.tasks);
     const total = allTasks.length;
     const now = new Date();
 
     const weeks = [];
     for (let w = 9; w >= 0; w--) {
       const cutoff = new Date(now.getTime() - w * 7 * 86_400_000);
-      const completedBy = allTasks.filter(t => t.completedAt && t.completedAt <= cutoff).length;
+      const completedBy = allTasks.filter((t) => t.completedAt && t.completedAt <= cutoff).length;
       weeks.push({
         week: `Wk ${10 - w}`,
         percent: total > 0 ? Math.round((completedBy / total) * 100) : 0,
@@ -925,7 +1057,8 @@ export const teamService = {
     return {
       weeks,
       totalTasks: total,
-      completedTasks: allTasks.filter(t => t.status === 'done' || t.status === 'completed').length,
+      completedTasks: allTasks.filter((t) => t.status === 'done' || t.status === 'completed')
+        .length,
     };
   },
 
@@ -935,7 +1068,9 @@ export const teamService = {
     const team = await prisma.team.findFirst({ where: { id: teamId, organizationId } });
     if (!team) throw new Error('Team not found');
 
-    const teamSelect = { select: { id: true, name: true, domain: true, color: true, leadId: true } };
+    const teamSelect = {
+      select: { id: true, name: true, domain: true, color: true, leadId: true },
+    };
     const [incoming, outgoing] = await Promise.all([
       prisma.teamCollaboration.findMany({
         where: { toTeamId: teamId },
@@ -952,7 +1087,13 @@ export const teamService = {
     return { incoming, outgoing };
   },
 
-  async createCollaboration(organizationId: string, fromTeamId: string, requesterId: string, requesterRole: string, data: { toTeamId: string; projectName?: string; message?: string }) {
+  async createCollaboration(
+    organizationId: string,
+    fromTeamId: string,
+    requesterId: string,
+    requesterRole: string,
+    data: { toTeamId: string; projectName?: string; message?: string },
+  ) {
     const fromTeam = await prisma.team.findFirst({ where: { id: fromTeamId, organizationId } });
     if (!fromTeam) throw new Error('Team not found');
     if (requesterRole !== 'ADMIN' && fromTeam.leadId !== requesterId) {
@@ -963,7 +1104,7 @@ export const teamService = {
     if (toTeam.id === fromTeamId) throw new Error('A team cannot collaborate with itself');
 
     const existing = await prisma.teamCollaboration.findFirst({
-      where: { fromTeamId, toTeamId: data.toTeamId, status: 'pending' }
+      where: { fromTeamId, toTeamId: data.toTeamId, status: 'pending' },
     });
     if (existing) return existing;
 
@@ -974,22 +1115,32 @@ export const teamService = {
         projectName: data.projectName,
         message: data.message,
         requestedBy: requesterId,
-      }
+      },
     });
   },
 
-  async respondToCollaboration(organizationId: string, collabId: string, action: 'accept' | 'decline', responderId: string, responderRole: string) {
+  async respondToCollaboration(
+    organizationId: string,
+    collabId: string,
+    action: 'accept' | 'decline',
+    responderId: string,
+    responderRole: string,
+  ) {
     const collab = await prisma.teamCollaboration.findFirst({
       where: { id: collabId },
-      include: { fromTeam: true, toTeam: true }
+      include: { fromTeam: true, toTeam: true },
     });
-    if (!collab || collab.toTeam.organizationId !== organizationId) throw new Error('Collaboration request not found');
+    if (!collab || collab.toTeam.organizationId !== organizationId)
+      throw new Error('Collaboration request not found');
     if (responderRole !== 'ADMIN' && collab.toTeam.leadId !== responderId) {
-      throw new Error('Only the receiving team\'s lead or an admin can respond to this request');
+      throw new Error("Only the receiving team's lead or an admin can respond to this request");
     }
 
     if (action === 'decline') {
-      await prisma.teamCollaboration.update({ where: { id: collabId }, data: { status: 'declined' } });
+      await prisma.teamCollaboration.update({
+        where: { id: collabId },
+        data: { status: 'declined' },
+      });
       return { success: true };
     }
 
@@ -999,18 +1150,25 @@ export const teamService = {
         teamId: collab.fromTeamId,
         collaboratingTeamId: collab.toTeamId,
         name: collab.projectName || `${collab.fromTeam.name} × ${collab.toTeam.name}`,
-        description: collab.message || `Cross-domain collaboration between ${collab.fromTeam.name} and ${collab.toTeam.name}`,
+        description:
+          collab.message ||
+          `Cross-domain collaboration between ${collab.fromTeam.name} and ${collab.toTeam.name}`,
         status: 'active',
-      }
+      },
     });
-    await prisma.teamCollaboration.update({ where: { id: collabId }, data: { status: 'accepted' } });
+    await prisma.teamCollaboration.update({
+      where: { id: collabId },
+      data: { status: 'accepted' },
+    });
     await prisma.activityLog.create({
-      data: { userId: responderId, action: `accepted collaboration with "${collab.fromTeam.name}"`, entityType: 'TEAM', entityId: collab.toTeamId }
+      data: {
+        userId: responderId,
+        action: `accepted collaboration with "${collab.fromTeam.name}"`,
+        entityType: 'TEAM',
+        entityId: collab.toTeamId,
+      },
     });
 
     return { success: true, project };
   },
 };
-
-
-

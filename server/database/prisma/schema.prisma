@@ -61,6 +61,7 @@ model User {
   streaks         UserStreak[]
   adminAchievements AdminAchievement[] @relation("AchievementRecipient")
   adminChats      AdminChatHistory[] @relation("AdminChatUser")
+  projectReviews  ProjectReview[]
 }
 
 model Organization {
@@ -158,12 +159,27 @@ model Project {
   collaboratingTeamId String?
   name                String
   description         String?
+  domain              String?
+  difficultyLevel     String?
+  type                String?         // "Hardware", "Software"
+  approved            Boolean         @default(false)
+  repoLink            String?
+  problemStatement    String?
+  objective           String?
+  expectedOutcome     String?
+  technologies        String[]        @default([])
+  requirements        String?
+  innovation          String?
   status              String          @default("planned")
+  isTemplate          Boolean         @default(false)
+  parentProjectId     String?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   organization        Organization    @relation(fields: [organizationId], references: [id])
   team                Team?           @relation(fields: [teamId], references: [id])
   collaboratingTeam   Team?           @relation("CollaboratingTeam", fields: [collaboratingTeamId], references: [id])
+  parentProject       Project?        @relation("ProjectTemplate", fields: [parentProjectId], references: [id])
+  childProjects       Project[]       @relation("ProjectTemplate")
   members         ProjectMember[]
   tasks           Task[]
   boards          Board[]
@@ -172,6 +188,8 @@ model Project {
   sprints         Sprint[]
   milestones      Milestone[]
   documents       Document[]
+  reviews         ProjectReview[]
+  githubRepo      GithubRepository?
 }
 
 model ProjectMember {
@@ -316,6 +334,7 @@ model Document {
   fileSize    Int?
   mimeType    String?
   fileUrl     String?
+  documentType String?    // "ipr", "report", etc.
   version     Int      @default(1)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -467,4 +486,53 @@ model LeetCodeContest {
   status          String       @default("Register")
   createdAt       DateTime     @default(now())
   organization    Organization? @relation(fields: [organizationId], references: [id])
+}
+
+model ProjectReview {
+  id          String   @id @default(cuid())
+  projectId   String
+  reviewerId  String
+  reportUrl   String?
+  milestone   String?
+  comments    String?
+  status      String   @default("pending") // approved, request_modification
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer    User     @relation(fields: [reviewerId], references: [id])
+}
+
+model GithubRepository {
+  id              String   @id @default(cuid())
+  projectId       String?  @unique
+  owner           String
+  repository      String
+  stars           Int      @default(0)
+  forks           Int      @default(0)
+  watchers        Int      @default(0)
+  language        String?
+  pushedAt        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contributors    GithubContributor[]
+  commits         GithubCommit[]
+}
+
+model GithubContributor {
+  id              String   @id @default(cuid())
+  repositoryId    String
+  username        String
+  contributions   Int      @default(0)
+  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+}
+
+model GithubCommit {
+  id              String   @id @default(cuid())
+  repositoryId    String
+  sha             String
+  author          String
+  message         String
+  date            DateTime
+  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 }

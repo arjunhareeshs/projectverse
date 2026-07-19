@@ -14,6 +14,7 @@ import {
   LogOut,
   ShieldCheck,
   Calendar,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
@@ -106,7 +107,12 @@ export const Sidebar: React.FC = () => {
   };
 
   const initials = user?.fullName
-    ? user.fullName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    ? user.fullName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
     : 'U';
 
   const isAdmin = user?.role === 'ADMIN';
@@ -117,14 +123,21 @@ export const Sidebar: React.FC = () => {
       style={{ width: sidebarWidth }}
     >
       {/* Logo & Org Switcher */}
-      <div className={cn('flex items-center gap-2 h-16 border-b border-border shrink-0', mini ? 'justify-center px-2' : 'px-4')}>
+      <div
+        className={cn(
+          'flex items-center gap-2 h-16 border-b border-border shrink-0',
+          mini ? 'justify-center px-2' : 'px-4',
+        )}
+      >
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary shadow-sm shrink-0">
           <span className="text-white font-bold text-sm">PV</span>
         </div>
         {!mini && (
           <>
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold text-foreground leading-tight truncate">ProjectVerse</span>
+              <span className="text-sm font-bold text-foreground leading-tight truncate">
+                ProjectVerse
+              </span>
               <span className="text-[10px] text-muted-foreground truncate leading-tight">
                 {user?.organizationId ? 'Consulting Group' : 'Personal Workspace'}
               </span>
@@ -135,7 +148,12 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Navigation */}
-      <nav className={cn('flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-1', mini ? 'px-2' : 'px-2')}>
+      <nav
+        className={cn(
+          'flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-1',
+          mini ? 'px-2' : 'px-2',
+        )}
+      >
         {navSections.map((section) => (
           <div key={section.title} className="mb-1">
             {mini ? (
@@ -170,42 +188,54 @@ export const Sidebar: React.FC = () => {
                         to={item.to}
                         title={mini ? item.label : undefined}
                         className={({ isActive }) =>
-                        cn(
-                          'group relative flex items-center rounded-lg text-sm font-medium transition-all duration-150',
-                          mini ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2',
-                          isActive
-                            ? 'bg-primary/10 text-primary'
-                            : 'text-foreground hover:bg-muted hover:text-foreground'
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <span className="relative shrink-0">
-                            <item.icon
-                              className={cn(
-                                'h-4.5 w-4.5 transition-colors',
-                                isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'
+                          cn(
+                            'group relative flex items-center rounded-lg text-sm font-medium transition-all duration-150',
+                            mini ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2',
+                            isActive
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-foreground hover:bg-muted hover:text-foreground',
+                          )
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <span className="relative shrink-0">
+                              <item.icon
+                                className={cn(
+                                  'h-4.5 w-4.5 transition-colors',
+                                  isActive
+                                    ? 'text-primary'
+                                    : 'text-muted-foreground group-hover:text-foreground',
+                                )}
+                              />
+                              {mini && item.badge && (
+                                <span
+                                  className={cn(
+                                    'absolute -right-1.5 -top-1.5 h-2 w-2 rounded-full',
+                                    item.badgeColor,
+                                  )}
+                                />
                               )}
-                            />
-                            {mini && item.badge && (
-                              <span className={cn('absolute -right-1.5 -top-1.5 h-2 w-2 rounded-full', item.badgeColor)} />
+                            </span>
+                            {!mini && (
+                              <>
+                                <span className="flex-1 truncate">{item.label}</span>
+                                {item.badge && (
+                                  <span
+                                    className={cn(
+                                      'ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none',
+                                      item.badgeColor,
+                                    )}
+                                  >
+                                    {item.badge}
+                                  </span>
+                                )}
+                              </>
                             )}
-                          </span>
-                          {!mini && (
-                            <>
-                              <span className="flex-1 truncate">{item.label}</span>
-                              {item.badge && (
-                                <span className={cn('ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none', item.badgeColor)}>
-                                  {item.badge}
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </>
-                      )}
-                    </NavLink>
-                  </li>
+                          </>
+                        )}
+                      </NavLink>
+                    </li>
                   );
                 })}
               </ul>
@@ -225,7 +255,7 @@ export const Sidebar: React.FC = () => {
                   mini ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2',
                   isActive
                     ? 'bg-secondary/10 text-secondary border-secondary/30'
-                    : 'text-muted-foreground hover:bg-secondary/5 hover:text-secondary border-border'
+                    : 'text-muted-foreground hover:bg-secondary/5 hover:text-secondary border-border',
                 )
               }
             >
@@ -244,7 +274,9 @@ export const Sidebar: React.FC = () => {
           </div>
           {!mini && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground leading-tight">{user?.fullName || 'User'}</p>
+              <p className="truncate text-sm font-semibold text-foreground leading-tight">
+                {user?.fullName || 'User'}
+              </p>
               <p className="truncate text-[11px] text-muted-foreground capitalize leading-tight">
                 {user?.role?.replace('_', ' ').toLowerCase() || 'Member'}
               </p>
@@ -253,7 +285,10 @@ export const Sidebar: React.FC = () => {
           <button
             onClick={handleLogout}
             title="Sign out"
-            className={cn('text-muted-foreground hover:text-danger transition-colors p-1 rounded', !mini && 'ml-auto')}
+            className={cn(
+              'text-muted-foreground hover:text-danger transition-colors p-1 rounded',
+              !mini && 'ml-auto',
+            )}
           >
             <LogOut className="h-4 w-4" />
           </button>

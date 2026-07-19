@@ -6,7 +6,12 @@ import axios from 'axios';
 const AI_SERVICE_URL = process.env['AI_SERVICE_URL'] || 'http://localhost:8000';
 const INTERNAL_TOKEN_SECRET = process.env['INTERNAL_TOKEN_SECRET'] || '';
 
-function computeInternalSignature(secret: string, userId: string, role: string, timestamp: string): string {
+function computeInternalSignature(
+  secret: string,
+  userId: string,
+  role: string,
+  timestamp: string,
+): string {
   const message = `${userId}.${role}.${timestamp}`;
   return crypto.createHmac('sha256', secret).update(message).digest('hex');
 }
@@ -53,12 +58,14 @@ export const aiController = {
         conversation_id: conversationId,
       });
 
-      return res.json({ response: response.data?.response || response.data?.content || 'AI response received.' });
+      return res.json({
+        response: response.data?.response || response.data?.content || 'AI response received.',
+      });
     } catch (error: any) {
       console.error('Error proxying AI request:', error?.response?.data || error.message);
 
       return res.json({
-        response: `I'm your AI assistant! (Note: The Python inference service is currently offline or returning an error: ${error.message})`
+        response: `I'm your AI assistant! (Note: The Python inference service is currently offline or returning an error: ${error.message})`,
       });
     }
   },
@@ -116,7 +123,7 @@ export const aiController = {
           headers: internalHeaders,
           responseType: 'stream',
           timeout: 120_000,
-        }
+        },
       );
 
       const stream = aiRes.data as NodeJS.ReadableStream;
@@ -146,7 +153,6 @@ export const aiController = {
         res.end();
       });
 
-
       stream.on('error', (err: Error) => {
         console.error('[AI Chat Stream] Stream error:', err.message);
         sendFrame('error', JSON.stringify({ detail: err.message }));
@@ -155,15 +161,21 @@ export const aiController = {
 
       // Handle client disconnect
       req.on('close', () => {
-        stream.destroy();
+        if ((stream as any).destroy) {
+          (stream as any).destroy();
+        }
       });
-
     } catch (error: any) {
       const detail = error?.response?.data?.detail || error.message || 'Unknown error';
       console.error('[AI Chat] Error connecting to agent:', detail);
 
       // Graceful fallback: still respond as SSE
-      sendFrame('text.delta', JSON.stringify({ text: `I'm having trouble connecting to the AI service right now. Please try again in a moment.` }));
+      sendFrame(
+        'text.delta',
+        JSON.stringify({
+          text: `I'm having trouble connecting to the AI service right now. Please try again in a moment.`,
+        }),
+      );
       sendFrame('done', '{}');
       res.end();
     }
