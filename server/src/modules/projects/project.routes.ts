@@ -14,6 +14,7 @@ router.get('/catalog', catalogController.getCatalog);
 router.post('/catalog/validate-proposal', catalogController.validateProposal);
 router.post('/catalog/propose', catalogController.proposeProblemStatement);
 router.post('/catalog/mentor', catalogController.mentor);
+router.post('/catalog/allocate-team', catalogController.allocateTeam);
 router.post('/catalog/:id/select', catalogController.selectProject);
 router.get('/', projectController.getProjects);
 router.post('/similarity', projectController.analyzeSimilarity);

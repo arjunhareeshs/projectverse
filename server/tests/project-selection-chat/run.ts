@@ -198,15 +198,46 @@ async function main() {
   ok('follow-up reply is non-empty text', typeof mentorFollowRes.data?.reply === 'string' && mentorFollowRes.data.reply.length > 5);
   console.log('     mentor said:', mentorFollowRes.data?.reply);
 
+  section('9b. Mentor chat — closing turn covering remaining gaps');
+  const closingTurn = {
+    role: 'user' as const,
+    content:
+      'Farmers will schedule a flight via a simple mobile app, and receive the georeferenced ' +
+      'treatment-priority map as a push notification with an in-app map view within 10 minutes. ' +
+      'Unlike the existing Smart Crop Advisory System (general advisory, no imaging) and the ' +
+      'Drone ET-sensing project (irrigation-focused, not disease detection), we are uniquely ' +
+      'targeting early fungal blight detection specifically. We have an 8-week build window: ' +
+      'weeks 1-3 hardware/camera integration, weeks 4-6 on-device model + map generation, weeks ' +
+      '7-8 field validation across the three farms. Success metrics: >85% detection accuracy vs ' +
+      'agronomist ground truth, and map delivery under 10 minutes per flight. Main risks are ' +
+      'weather delaying flights and limited labelled training data, which we will mitigate with ' +
+      'data augmentation and a backup flight window.',
+  };
+  const closingHistory2 = [...history, userTurn, { role: 'assistant' as const, content: mentorFollowRes.data.reply }];
+  const closingRes = await client.post(
+    '/projects/catalog/mentor',
+    { templateId: created.id, history: closingHistory2, userMessage: closingTurn.content, mode: 'chat' },
+    auth,
+  );
+  ok(`mentor closing turn 200 (got ${closingRes.status})`, closingRes.status === 200, closingRes.data);
+
   section('10. Mentor report — readiness summary');
-  const fullHistory = [...history, userTurn, { role: 'assistant', content: mentorFollowRes.data.reply }];
+  const fullHistory = [...closingHistory2, closingTurn, { role: 'assistant', content: closingRes.data?.reply || '' }];
   const reportRes = await client.post(
     '/projects/catalog/mentor',
     { templateId: created.id, history: fullHistory, mode: 'report' },
     auth,
   );
   ok(`mentor report 200 (got ${reportRes.status})`, reportRes.status === 200, reportRes.data);
-  ok('report has ready=true and non-empty text', reportRes.data?.ready === true && typeof reportRes.data?.report === 'string' && reportRes.data.report.length > 10);
+  ok(
+    'report response has expected shape (ready boolean, non-empty report, extracted plan)',
+    typeof reportRes.data?.ready === 'boolean' &&
+      typeof reportRes.data?.report === 'string' &&
+      reportRes.data.report.length > 10 &&
+      typeof reportRes.data?.extracted === 'object',
+    reportRes.data,
+  );
+  console.log('     ready:', reportRes.data?.ready);
   console.log('     report:', reportRes.data?.report);
 
   section('11. Final selection — instantiate project for the team');

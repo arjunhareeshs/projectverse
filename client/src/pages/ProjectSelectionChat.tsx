@@ -50,6 +50,41 @@ type Phase =
 
 type LlmChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
+const CHECKLIST_DIMENSIONS: { id: string; label: string }[] = [
+  { id: 'problemClarity', label: 'Problem understanding' },
+  { id: 'targetUsers', label: 'Target users' },
+  { id: 'uniqueValue', label: 'Unique value' },
+  { id: 'techStack', label: 'Tech stack' },
+  { id: 'mvpScope', label: 'MVP scope' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'risks', label: 'Risks' },
+  { id: 'successMetrics', label: 'Success metrics' },
+];
+
+type Checklist = Record<string, boolean>;
+
+type MoscowList = { must: string[]; should: string[]; could: string[]; wont: string[] };
+
+interface ExtractedPlan {
+  problem: string;
+  targetUsers: string;
+  uniqueValue: string;
+  techStack: string[];
+  mvpFeatures: string[];
+  moscow: MoscowList;
+  risks: string[];
+  successMetrics: string[];
+  timelineWeeks: number;
+}
+
+interface Allocation {
+  userId: string;
+  name: string;
+  suggestedRole: string;
+  matchedSkills: string[];
+  suggestedTasks: string[];
+}
+
 let msgCounter = 0;
 const nextId = () => `m${++msgCounter}`;
 
@@ -73,6 +108,11 @@ export const ProjectSelectionChat: React.FC = () => {
 
   const [mentorHistory, setMentorHistory] = useState<LlmChatMessage[]>([]);
   const [readyToSelect, setReadyToSelect] = useState(false);
+  const [checklist, setChecklist] = useState<Checklist>({});
+  const [readinessScore, setReadinessScore] = useState(0);
+  const [extractedPlan, setExtractedPlan] = useState<ExtractedPlan | null>(null);
+  const [allocations, setAllocations] = useState<Allocation[] | null>(null);
+  const [allocating, setAllocating] = useState(false);
 
   const [inputValue, setInputValue] = useState('');
   const [inputEnabled, setInputEnabled] = useState(false);
@@ -97,8 +137,12 @@ export const ProjectSelectionChat: React.FC = () => {
     setMessages((prev) => [...prev, { id: nextId(), role: 'user', text }]);
   };
 
+  const didInit = useRef(false);
+
   // Kick things off with the hardcoded, static greeting — not an LLM call.
   useEffect(() => {
+    if (didInit.current) return;
+    didInit.current = true;
     (async () => {
       try {
         const res = await api.get('/projects/catalog/tree');
@@ -197,6 +241,8 @@ export const ProjectSelectionChat: React.FC = () => {
       });
       const reply = res.data.reply as string;
       setMentorHistory([{ role: 'assistant', content: reply }]);
+      setChecklist(res.data.checklist || {});
+      setReadinessScore(res.data.readinessScore || 0);
       addBotMessage(
         `Nice pick! Difficulty: ${ps.difficultyLevel ?? 'N/A'}. ${reply}`,
       );
@@ -371,9 +417,12 @@ export const ProjectSelectionChat: React.FC = () => {
         history: newHistory,
         userMessage: text,
         mode: 'chat',
+        checklist,
       });
       const reply = res.data.reply as string;
       setMentorHistory([...newHistory, { role: 'assistant', content: reply }]);
+      setChecklist(res.data.checklist || checklist);
+      setReadinessScore(res.data.readinessScore ?? readinessScore);
       addBotMessage(reply);
     } catch (err) {
       console.error('Mentor chat failed', err);
@@ -393,9 +442,17 @@ export const ProjectSelectionChat: React.FC = () => {
         history: mentorHistory,
         mode: 'report',
       });
-      setReadyToSelect(true);
-      setPhase('report');
+      const ready = res.data.ready !== false;
+      setReadyToSelect(ready);
+      setExtractedPlan(res.data.extracted || null);
       addBotMessage(res.data.report);
+      if (ready) {
+        setPhase('report');
+      } else {
+        // Mentor decided the discussion isn't thorough enough yet — stay in
+        // chat mode so the team can keep answering instead of a dead end.
+        setInputEnabled(true);
+      }
     } catch (err) {
       console.error('Report generation failed', err);
       addBotMessage('Could not generate the readiness report. Please try once more.');
@@ -420,12 +477,30 @@ export const ProjectSelectionChat: React.FC = () => {
       await api.post(`/projects/catalog/${selectedTemplate.id}/select`, {
         teamMembers,
         repoLink: repoLink.trim() || undefined,
+        plan: extractedPlan || undefined,
       });
       alert('Project selected successfully and is pending approval.');
       navigate('/dashboard');
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to select project');
       setSelecting(false);
+    }
+  };
+
+  const fetchAllocations = async () => {
+    if (!selectedTemplate || !extractedPlan) return;
+    setAllocating(true);
+    try {
+      const res = await api.post('/projects/catalog/allocate-team', {
+        templateId: selectedTemplate.id,
+        teamMemberIds: teamMembers,
+        extracted: extractedPlan,
+      });
+      setAllocations(res.data.allocations || []);
+    } catch (err) {
+      console.error('Failed to fetch role allocations', err);
+    } finally {
+      setAllocating(false);
     }
   };
 
@@ -547,7 +622,36 @@ export const ProjectSelectionChat: React.FC = () => {
           )}
 
           {phase === 'mentor' && (
-            <div className="pt-2">
+            <div className="pt-2 space-y-3">
+              <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">
+                    Discussion readiness
+                  </span>
+                  <span className="text-xs font-bold text-primary">{readinessScore}%</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden mb-3">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${Math.min(100, Math.max(0, readinessScore))}%` }}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {CHECKLIST_DIMENSIONS.map((d) => (
+                    <span
+                      key={d.id}
+                      className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${
+                        checklist[d.id]
+                          ? 'border-green-300 bg-green-50 text-green-700'
+                          : 'border-gray-200 bg-white text-gray-400'
+                      }`}
+                    >
+                      {checklist[d.id] ? '✓ ' : ''}
+                      {d.label}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <button
                 onClick={requestReport}
                 disabled={busy}
@@ -624,6 +728,7 @@ export const ProjectSelectionChat: React.FC = () => {
                   setShowTeamModal(false);
                   setTeamMembers([]);
                   setRepoLink('');
+                  setAllocations(null);
                 }}
                 className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
               >
@@ -636,7 +741,13 @@ export const ProjectSelectionChat: React.FC = () => {
                 You will automatically be assigned as the Team Leader. Build your team below before
                 finalizing your project selection.
               </p>
-              <TeamMemberSelect selectedIds={teamMembers} onChange={setTeamMembers} />
+              <TeamMemberSelect
+                selectedIds={teamMembers}
+                onChange={(ids) => {
+                  setTeamMembers(ids);
+                  setAllocations(null);
+                }}
+              />
 
               <div className="mt-6">
                 <label className="block text-sm font-bold text-gray-700 mb-1.5">
@@ -650,6 +761,53 @@ export const ProjectSelectionChat: React.FC = () => {
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition text-sm"
                 />
               </div>
+
+              {extractedPlan && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-bold text-gray-700">
+                      Suggested role allocation (based on skills)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={fetchAllocations}
+                      disabled={allocating || teamMembers.length === 0}
+                      className="text-xs font-semibold text-primary hover:underline disabled:opacity-50 disabled:no-underline"
+                    >
+                      {allocating ? 'Thinking…' : allocations ? 'Regenerate' : 'Suggest allocation'}
+                    </button>
+                  </div>
+                  {teamMembers.length === 0 && (
+                    <p className="text-xs text-gray-400">Add team members above to get suggestions.</p>
+                  )}
+                  {allocations && (
+                    <div className="space-y-2">
+                      {allocations.map((a) => (
+                        <div key={a.userId} className="p-3 rounded-xl border border-gray-200 bg-gray-50/60">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-sm font-bold text-gray-900">{a.name}</span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide">
+                              {a.suggestedRole}
+                            </span>
+                          </div>
+                          {a.matchedSkills.length > 0 && (
+                            <div className="text-xs text-gray-500 mb-1">
+                              Skills: {a.matchedSkills.join(', ')}
+                            </div>
+                          )}
+                          {a.suggestedTasks.length > 0 && (
+                            <ul className="text-xs text-gray-600 list-disc list-inside">
+                              {a.suggestedTasks.map((t, i) => (
+                                <li key={i}>{t}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="px-8 py-5 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
@@ -658,6 +816,7 @@ export const ProjectSelectionChat: React.FC = () => {
                   setShowTeamModal(false);
                   setTeamMembers([]);
                   setRepoLink('');
+                  setAllocations(null);
                 }}
                 className="px-6 py-2.5 rounded-xl font-semibold text-gray-600 hover:bg-gray-200 transition-colors"
               >
