@@ -14,7 +14,6 @@ export const DashboardActionRow: React.FC = () => {
 
   const actions: ActionBtn[] = [
     { icon: Plus, label: '+ New Project', onClick: () => navigate('/projects'), primary: true },
-    { icon: FileText, label: 'Generate Weekly Report', onClick: () => navigate('/ai-assistant') },
     { icon: UserPlus, label: 'Invite Team Member', onClick: () => navigate('/team') },
     { icon: CheckSquare, label: 'Add Task', onClick: () => {} },
     { icon: BarChart3, label: 'View Analytics', onClick: () => navigate('/analytics') },

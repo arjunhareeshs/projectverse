@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Search, Plus, Sparkles, Menu } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppSelector } from '../app/hooks';
-import { useChatDock } from '../chat/ChatDockContext';
 import { NotificationsDropdown } from '../components/NotificationsDropdown';
 
 const getGreeting = () => {
@@ -23,7 +22,6 @@ const getFormattedDate = () => {
 export const Navbar: React.FC = () => {
   const user = useAppSelector((s) => s.auth.user);
   const navigate = useNavigate();
-  const { toggle: toggleChat, contentLeft, contentRight } = useChatDock();
   const [searchFocused, setSearchFocused] = useState(false);
   const [dateStr, setDateStr] = useState(getFormattedDate());
 
@@ -57,7 +55,7 @@ export const Navbar: React.FC = () => {
   return (
     <header
       className="fixed top-0 z-30 flex h-16 items-center border-b border-border bg-card/90 backdrop-blur-sm transition-[left,right] duration-300 ease-out"
-      style={{ left: contentLeft, right: contentRight }}
+      style={{ left: 256, right: 0 }}
     >
       <div className="flex w-full items-center gap-4 px-6">
         {/* Mobile menu button */}

@@ -47,7 +47,6 @@ async function main() {
   // ── 1. Clean Database ──────────────────────────────────────
   console.log('\n🧹 Cleaning database...');
   await prisma.activityLog.deleteMany().catch(() => null);
-  await prisma.aiChat.deleteMany().catch(() => null);
   await prisma.notification.deleteMany().catch(() => null);
   await prisma.comment.deleteMany().catch(() => null);
   await prisma.subtask.deleteMany().catch(() => null);
@@ -59,7 +58,6 @@ async function main() {
   await prisma.teamInvite.deleteMany().catch(() => null);
   await prisma.teamMessage.deleteMany().catch(() => null);
   await prisma.teamCollaboration.deleteMany().catch(() => null);
-  await prisma.scheduleEvent.deleteMany().catch(() => null);
   await prisma.document.deleteMany().catch(() => null);
   await prisma.fileAsset.deleteMany().catch(() => null);
   await prisma.meeting.deleteMany().catch(() => null);

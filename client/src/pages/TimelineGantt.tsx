@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import { ganttService, GanttTask } from '../services/gantt.service';
 import { cn } from '../utils/cn';
-import { useChatDock } from '../chat/ChatDockContext';
 import axios from 'axios';
 
 
@@ -83,18 +82,13 @@ function buildSeedTasks(projectId: string) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export const TimelineGantt: React.FC = () => {
-  const { isOpen: chatOpen } = useChatDock();
   const [tasks, setTasks] = useState<GanttTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<GanttTask | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
 
-  useEffect(() => {
-    if (chatOpen) {
-      setSelectedTask(null);
-    }
-  }, [chatOpen]);
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 

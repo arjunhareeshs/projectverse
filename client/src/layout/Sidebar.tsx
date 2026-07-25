@@ -19,7 +19,6 @@ import {
 import { cn } from '../utils/cn';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
 import { logout } from '../features/auth/authSlice';
-import { useChatDock } from '../chat/ChatDockContext';
 import { notificationService } from '../services/notification.service';
 
 interface NavItem {
@@ -42,7 +41,7 @@ export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const user = useAppSelector((s) => s.auth.user);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const { sidebarWidth, sidebarCollapsed: mini } = useChatDock();
+  const mini = false;
   const [unreadCount, setUnreadCount] = useState(0);
 
   const navSections: NavSection[] = [
@@ -63,7 +62,6 @@ export const Sidebar: React.FC = () => {
       title: 'WORKSPACE',
       items: [
         { icon: FileText, label: 'Documents', to: '/documents' },
-        { icon: Calendar, label: 'Schedule', to: '/schedule' },
         { icon: Bell, label: 'Notifications', to: '/notifications' },
       ],
     },
@@ -120,7 +118,7 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       className="fixed left-0 top-0 z-40 h-screen flex flex-col border-r border-border bg-card transition-[width] duration-300 ease-out"
-      style={{ width: sidebarWidth }}
+      style={{ width: 256 }}
     >
       {/* Logo & Org Switcher */}
       <div

@@ -5,8 +5,7 @@
   "private": true,
   "workspaces": [
     "client",
-    "server",
-    "github-analytics"
+    "server"
   ],
   "scripts": {
     "dev": "npm run dev --workspaces",

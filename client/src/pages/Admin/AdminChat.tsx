@@ -16,7 +16,7 @@ import {
   Paperclip,
 } from 'lucide-react';
 import { adminService } from '../../services/admin.service';
-import { renderMessageContent } from '../../chat/aiResponse';
+import { renderMessageContent } from '../../components/aiResponse';
 
 interface Message {
   role: 'user' | 'assistant';

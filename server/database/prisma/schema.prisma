@@ -51,10 +51,8 @@ model User {
   files           FileAsset[]
   notifications   Notification[]
   activityLogs    ActivityLog[]
-  aiChats         AiChat[]
   documents       Document[]
   auditLogs       AuditLog[]
-  scheduleEvents  ScheduleEvent[]
   teamMessages    TeamMessage[]
   teamInvites     TeamInvite[]
   userSkills      UserSkill[]
@@ -170,6 +168,10 @@ model Project {
   technologies        String[]        @default([])
   requirements        String?
   innovation          String?
+  // Problem-statement catalog metadata (SRP S4 combined problem statements)
+  problemId           String?         @unique // e.g. "H0001", "S0001"
+  sector              String?         // niche sector within domain, e.g. "Precision Farming / Smart Irrigation"
+  shortName           String?         // short handle for the problem statement
   status              String          @default("planned")
   isTemplate          Boolean         @default(false)
   parentProjectId     String?
@@ -315,14 +317,6 @@ model ActivityLog {
   user       User     @relation(fields: [userId], references: [id])
 }
 
-model AiChat {
-  id         String   @id @default(cuid())
-  userId     String
-  prompt     String
-  response   String
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
-}
 
 model Document {
   id          String   @id @default(cuid())
@@ -395,20 +389,6 @@ model TeamMember {
   @@unique([teamId, userId])
 }
 
-model ScheduleEvent {
-  id          String   @id @default(cuid())
-  userId      String
-  title       String
-  date        String   // YYYY-MM-DD
-  timeString  String
-  hour        Float
-  duration    Float
-  room        String
-  color       String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  user        User     @relation(fields: [userId], references: [id])
-}
 
 model UserSkill {
   id            String   @id @default(cuid())
@@ -503,20 +483,77 @@ model ProjectReview {
 }
 
 model GithubRepository {
-  id              String   @id @default(cuid())
-  projectId       String?  @unique
-  owner           String
-  repository      String
-  stars           Int      @default(0)
-  forks           Int      @default(0)
-  watchers        Int      @default(0)
-  language        String?
-  pushedAt        DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  project         Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  contributors    GithubContributor[]
-  commits         GithubCommit[]
+  id                    String    @id @default(cuid())
+  projectId             String?   @unique
+  owner                 String
+  repository            String
+  description           String?
+  visibility            String    @default("public")
+  defaultBranch         String?
+  homepage              String?
+  license               String?
+  topics                String[]  @default([])
+  language              String?
+  languages             Json?
+  repoCreatedAt         DateTime?
+  repoUpdatedAt         DateTime?
+  pushedAt              DateTime?
+  sizeKb                Int       @default(0)
+  isArchived            Boolean   @default(false)
+  isDisabled            Boolean   @default(false)
+  isTemplate            Boolean   @default(false)
+  hasWiki               Boolean   @default(false)
+  hasPages              Boolean   @default(false)
+  hasDiscussions        Boolean   @default(false)
+
+  stars                 Int       @default(0)
+  forks                 Int       @default(0)
+  watchers              Int       @default(0)
+  subscribers           Int       @default(0)
+
+  latestCommitSha       String?
+  latestCommitMessage   String?
+  latestCommitAuthor    String?
+  latestCommitDate      DateTime?
+  commitCount           Int       @default(0)
+  branchCount           Int       @default(0)
+  releaseCount          Int       @default(0)
+  tagCount              Int       @default(0)
+
+  contributorCount      Int       @default(0)
+
+  openIssues            Int       @default(0)
+  closedIssues          Int       @default(0)
+  openPullRequests      Int       @default(0)
+  closedPullRequests    Int       @default(0)
+  mergedPullRequests    Int       @default(0)
+  labels                Json?
+  milestones            Json?
+
+  hasReadme             Boolean   @default(false)
+  hasContributing       Boolean   @default(false)
+  hasCodeOfConduct      Boolean   @default(false)
+  hasSecurityPolicy     Boolean   @default(false)
+  hasChangelog          Boolean   @default(false)
+
+  structure             Json?
+
+  popularityScore       Int       @default(0)
+  maintenanceScore      Int       @default(0)
+  communityScore        Int       @default(0)
+  freshnessScore        Int       @default(0)
+
+  lastSyncedAt          DateTime?
+  lastSyncError         String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  project               Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contributors          GithubContributor[]
+  commits               GithubCommit[]
+  snapshots             GithubSnapshot[]
+
+  @@unique([owner, repository])
 }
 
 model GithubContributor {
@@ -525,6 +562,8 @@ model GithubContributor {
   username        String
   contributions   Int      @default(0)
   repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, username])
 }
 
 model GithubCommit {
@@ -535,4 +574,16 @@ model GithubCommit {
   message         String
   date            DateTime
   repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, sha])
+}
+
+model GithubSnapshot {
+  id              String   @id @default(cuid())
+  repositoryId    String
+  capturedAt      DateTime @default(now())
+  metrics         Json
+  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId, capturedAt])
 }

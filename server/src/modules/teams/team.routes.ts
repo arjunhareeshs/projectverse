@@ -39,6 +39,7 @@ router.patch('/:id/tasks/:taskId/status', teamController.updateTeamTaskStatus);
 
 router.get('/:id/projects', teamController.getTeamProjects);
 router.post('/:id/projects', teamController.createTeamProject);
+router.patch('/:id/projects/:projectId/repo-link', teamController.setProjectRepoLink);
 
 router.get('/:id/activity', teamController.getTeamActivity);
 router.get('/:id/progress', teamController.getTeamProgress);

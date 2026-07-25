@@ -1,5 +1,7 @@
 import { prisma } from '../../shared/database';
 import axios from 'axios';
+import { githubService } from '../github/github.service';
+import { logger } from '../../shared/logger';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -673,19 +675,7 @@ export const teamService = {
       };
     }
 
-    // Persist to AiChat
-    await prisma.aiChat.create({
-      data: {
-        userId: requestingUserId,
-        prompt: `Team coordination insights for team ${metrics.teamName} (${teamId})`,
-        response:
-          aiResult.summary +
-          '\n\nKey issues: ' +
-          aiResult.keyIssues.join('; ') +
-          '\n\nRecommendations: ' +
-          aiResult.recommendations.join('; '),
-      },
-    });
+
 
     return {
       metrics,
@@ -997,6 +987,7 @@ export const teamService = {
         teamId,
         name: data.name,
         description: data.description,
+        repoLink: data.repoLink || undefined,
         status: 'active',
       },
     });
@@ -1010,7 +1001,26 @@ export const teamService = {
       },
     });
 
+    if (project.repoLink) {
+      githubService.analyzeAndLinkProject(project.id, project.repoLink).catch((err) => {
+        logger.error('Background GitHub analysis failed on project creation', {
+          projectId: project.id,
+          message: err?.message,
+        });
+      });
+    }
+
     return project;
+  },
+
+  async setProjectRepoLink(organizationId: string, teamId: string, projectId: string, repoLink: string) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, organizationId, OR: [{ teamId }, { collaboratingTeamId: teamId }] },
+    });
+    if (!project) throw new Error('Project not found');
+
+    const record = await githubService.analyzeAndLinkProject(projectId, repoLink);
+    return { project: await prisma.project.findUnique({ where: { id: projectId } }), github: record };
   },
 
   // ── Activity Feed ─────────────────────────────────────────────

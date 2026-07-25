@@ -1,2 +1,0 @@
-#!/bin/sh
-npm exec --yes pnpm@10.14.0 -- lint-staged

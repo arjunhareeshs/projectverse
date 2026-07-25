@@ -117,7 +117,7 @@ export const projectService = {
       },
     });
 
-    const membersData = [{ projectId: project.id, userId: data.userId, role: 'ADMIN' as const }];
+    const membersData = [{ projectId: project.id, userId: data.userId, role: 'ADMIN' as 'ADMIN' | 'STUDENT' }];
 
     if (data.teamMembers && data.teamMembers.length > 0) {
       data.teamMembers.slice(0, 3).forEach((memberId) => {

@@ -9,7 +9,11 @@ const router = Router();
 router.use(authGuard);
 
 router.get('/active', projectController.getActiveProjects);
+router.get('/catalog/tree', catalogController.getCatalogTree);
 router.get('/catalog', catalogController.getCatalog);
+router.post('/catalog/validate-proposal', catalogController.validateProposal);
+router.post('/catalog/propose', catalogController.proposeProblemStatement);
+router.post('/catalog/mentor', catalogController.mentor);
 router.post('/catalog/:id/select', catalogController.selectProject);
 router.get('/', projectController.getProjects);
 router.post('/similarity', projectController.analyzeSimilarity);

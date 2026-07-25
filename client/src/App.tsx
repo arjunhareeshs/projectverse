@@ -18,12 +18,9 @@ import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 
-// Main App Pages
 import { Dashboard } from './pages/Dashboard';
-import { AIAssistant } from './pages/AIAssistant';
 import { AllProjects } from './pages/AllProjects';
-import { ProjectRecommendationWizard } from './pages/ProjectRecommendationWizard';
-import { ProjectProposal } from './pages/ProjectProposal';
+import { ProjectSelectionChat } from './pages/ProjectSelectionChat';
 import { ProjectCatalog } from './pages/ProjectCatalog';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { KanbanBoard } from './pages/KanbanBoard';
@@ -36,7 +33,6 @@ import { Documents } from './pages/Documents';
 import { FileManager } from './pages/FileManager';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { Notifications } from './pages/Notifications';
-import { Schedule } from './pages/Schedule';
 import { SettingsPage } from './pages/SettingsPage';
 import { Profile } from './pages/Profile';
 
@@ -74,10 +70,9 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/ai-assistant" element={<AIAssistant />} />
               <Route path="/projects" element={<AllProjects />} />
-              <Route path="/projects/recommend" element={<ProjectRecommendationWizard />} />
-              <Route path="/projects/propose" element={<ProjectProposal />} />
+              <Route path="/projects/recommend" element={<ProjectSelectionChat />} />
+              <Route path="/projects/propose" element={<Navigate to="/projects/recommend" replace />} />
               <Route path="/projects/catalog" element={<ProjectCatalog />} />
               <Route path="/projects/:id" element={<ProjectDetailPage />} />
               <Route path="/kanban" element={<KanbanBoard />} />
@@ -90,7 +85,6 @@ function App() {
               <Route path="/files" element={<FileManager />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/notifications" element={<Notifications />} />
-              <Route path="/schedule" element={<Schedule />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/profile" element={<Profile />} />
             </Route>

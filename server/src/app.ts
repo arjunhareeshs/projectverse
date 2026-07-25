@@ -12,11 +12,10 @@ import { teamRoutes } from './modules/teams/team.routes';
 import { taskRoutes } from './modules/tasks/task.routes';
 import { documentRoutes } from './modules/documents/document.routes';
 import { notificationRoutes } from './modules/notifications/notification.routes';
-import { scheduleRoutes } from './modules/schedule/schedule.routes';
 import { healthRoutes } from './routes/health.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
-import { aiRoutes } from './modules/ai/ai.routes';
 import { internalRoutes } from './modules/internal/internal.routes';
+import { githubRoutes } from './modules/github/github.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
@@ -46,10 +45,9 @@ export function createApp() {
   app.use('/api/tasks', taskRoutes);
   app.use('/api/documents', documentRoutes);
   app.use('/api/notifications', notificationRoutes);
-  app.use('/api/schedule', scheduleRoutes);
-  app.use('/api/ai', aiRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/internal', internalRoutes);
+  app.use('/api/github', githubRoutes);
 
   app.use(errorHandler);
 

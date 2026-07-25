@@ -101,6 +101,10 @@ export const teamService = {
     const res = await api.post(`/teams/${id}/projects`, data);
     return res.data;
   },
+  setProjectRepoLink: async (id: string, projectId: string, repoLink: string) => {
+    const res = await api.patch(`/teams/${id}/projects/${projectId}/repo-link`, { repoLink });
+    return res.data;
+  },
 
   // Activity
   getTeamActivity: async (id: string) => {

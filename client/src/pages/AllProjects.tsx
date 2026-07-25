@@ -26,12 +26,15 @@ interface CatalogProject {
   objective: string;
   expectedOutcome: string;
   domain: string;
+  sector: string | null;
   type: string;
   technologies: string[];
   _count: {
     childProjects: number;
   };
 }
+
+const SECTOR_PAGE_SIZE = 6;
 
 export const AllProjects: React.FC = () => {
   const [projects, setProjects] = useState<CatalogProject[]>([]);
@@ -42,6 +45,7 @@ export const AllProjects: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<string[]>([]);
   const [selecting, setSelecting] = useState(false);
   const [selectError, setSelectError] = useState<string | null>(null);
+  const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set());
 
   const token = useAppSelector((s) => s.auth.token);
   const user = useAppSelector((s) => s.auth.user);
@@ -81,7 +85,7 @@ export const AllProjects: React.FC = () => {
   };
 
   const categorizedProjects = useMemo(() => {
-    const map: Record<string, Record<string, CatalogProject[]>> = {
+    const map: Record<string, Record<string, Record<string, CatalogProject[]>>> = {
       Software: {},
       Hardware: {},
       Combination: {},
@@ -101,10 +105,14 @@ export const AllProjects: React.FC = () => {
       }
 
       const domainKey = p.domain || 'Uncategorized';
+      const sectorKey = p.sector || 'General';
       if (!map[typeKey][domainKey]) {
-        map[typeKey][domainKey] = [];
+        map[typeKey][domainKey] = {};
       }
-      map[typeKey][domainKey].push(p);
+      if (!map[typeKey][domainKey][sectorKey]) {
+        map[typeKey][domainKey][sectorKey] = [];
+      }
+      map[typeKey][domainKey][sectorKey].push(p);
     });
 
     return map;
@@ -136,11 +144,11 @@ export const AllProjects: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => navigate('/projects/propose')}
+          onClick={() => navigate('/projects/recommend')}
           className="bg-primary text-white px-6 py-2.5 rounded-xl font-semibold shadow-sm hover:shadow-md hover:bg-primary/90 transition-all flex items-center gap-2"
         >
           <Lightbulb className="w-5 h-5" />
-          Propose New Project
+          New Project
         </button>
       </div>
 
@@ -182,69 +190,104 @@ export const AllProjects: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-12">
-          {Object.entries(activeDomains).map(([domain, items]) => (
-            <div key={domain}>
-              <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3 pb-2 border-b border-gray-200/60">
-                <span className="bg-primary/10 text-primary p-2 rounded-lg">
-                  <Lightbulb className="w-5 h-5" />
-                </span>
-                {domain}
-                <span className="bg-gray-100 text-gray-500 text-xs px-2.5 py-1 rounded-full font-semibold ml-2">
-                  {items.length} items
-                </span>
-              </h2>
+          {Object.entries(activeDomains).map(([domain, sectors]) => {
+            const domainTotal = Object.values(sectors).reduce((sum, arr) => sum + arr.length, 0);
+            return (
+              <div key={domain}>
+                <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3 pb-2 border-b border-gray-200/60">
+                  <span className="bg-primary/10 text-primary p-2 rounded-lg">
+                    <Lightbulb className="w-5 h-5" />
+                  </span>
+                  {domain}
+                  <span className="bg-gray-100 text-gray-500 text-xs px-2.5 py-1 rounded-full font-semibold ml-2">
+                    {domainTotal} items
+                  </span>
+                </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {items.map((p) => {
-                  const isFull = p._count?.childProjects >= 4;
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => setSelectedProject(p)}
-                      className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col cursor-pointer hover:shadow-md hover:border-primary/40 transition-all group"
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider">
-                          {p.type || 'Software'}
+                <div className="space-y-8">
+                  {Object.entries(sectors).map(([sector, items]) => {
+                    const sectorKey = `${activeType}::${domain}::${sector}`;
+                    const isExpanded = expandedSectors.has(sectorKey);
+                    const visibleItems = isExpanded ? items : items.slice(0, SECTOR_PAGE_SIZE);
+                    return (
+                    <div key={sector}>
+                      <h3 className="text-sm font-semibold text-gray-500 mb-4 flex items-center gap-2">
+                        {sector}
+                        <span className="bg-gray-50 text-gray-400 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                          {items.length}
                         </span>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1.5 ${isFull ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}
-                        >
-                          <Users className="w-3 h-3" /> {p._count?.childProjects || 0} / 4 Teams
-                        </span>
-                      </div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-3 leading-snug group-hover:text-primary transition-colors">
-                        {p.name}
                       </h3>
-                      <p className="text-sm text-gray-600 line-clamp-3 mb-5 flex-grow">
-                        {p.problemStatement}
-                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {visibleItems.map((p) => {
+                          const isFull = p._count?.childProjects >= 4;
+                          return (
+                            <div
+                              key={p.id}
+                              onClick={() => setSelectedProject(p)}
+                              className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col cursor-pointer hover:shadow-md hover:border-primary/40 transition-all group"
+                            >
+                              <div className="flex justify-between items-start mb-4">
+                                <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider">
+                                  {p.type || 'Software'}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1.5 ${isFull ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}
+                                >
+                                  <Users className="w-3 h-3" /> {p._count?.childProjects || 0} / 4 Teams
+                                </span>
+                              </div>
+                              <h3 className="text-lg font-bold text-gray-900 mb-3 leading-snug group-hover:text-primary transition-colors">
+                                {p.name}
+                              </h3>
+                              <p className="text-sm text-gray-600 line-clamp-3 mb-5 flex-grow">
+                                {p.problemStatement}
+                              </p>
 
-                      <div className="flex flex-wrap gap-1.5 mb-5 mt-auto">
-                        {(p.technologies || []).slice(0, 3).map((tech) => (
-                          <span
-                            key={tech}
-                            className="bg-indigo-50/50 text-indigo-600 text-[10px] font-medium px-2 py-1 rounded border border-indigo-100"
-                          >
-                            {tech}
-                          </span>
-                        ))}
-                        {(p.technologies?.length || 0) > 3 && (
-                          <span className="bg-gray-50 text-gray-500 text-[10px] font-medium px-2 py-1 rounded border border-gray-200">
-                            +{(p.technologies?.length || 0) - 3} more
-                          </span>
-                        )}
-                      </div>
+                              <div className="flex flex-wrap gap-1.5 mb-5 mt-auto">
+                                {(p.technologies || []).slice(0, 3).map((tech) => (
+                                  <span
+                                    key={tech}
+                                    className="bg-indigo-50/50 text-indigo-600 text-[10px] font-medium px-2 py-1 rounded border border-indigo-100"
+                                  >
+                                    {tech}
+                                  </span>
+                                ))}
+                                {(p.technologies?.length || 0) > 3 && (
+                                  <span className="bg-gray-50 text-gray-500 text-[10px] font-medium px-2 py-1 rounded border border-gray-200">
+                                    +{(p.technologies?.length || 0) - 3} more
+                                  </span>
+                                )}
+                              </div>
 
-                      <div className="text-sm font-semibold text-primary flex items-center gap-1 group-hover:gap-2 transition-all">
-                        View Details <ArrowRight className="w-4 h-4" />
+                              <div className="text-sm font-semibold text-primary flex items-center gap-1 group-hover:gap-2 transition-all">
+                                View Details <ArrowRight className="w-4 h-4" />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
+                      {items.length > SECTOR_PAGE_SIZE && (
+                        <button
+                          onClick={() =>
+                            setExpandedSectors((prev) => {
+                              const next = new Set(prev);
+                              if (isExpanded) next.delete(sectorKey);
+                              else next.add(sectorKey);
+                              return next;
+                            })
+                          }
+                          className="mt-4 text-xs font-semibold text-primary hover:underline"
+                        >
+                          {isExpanded ? 'Show less' : `Show all ${items.length}`}
+                        </button>
+                      )}
                     </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

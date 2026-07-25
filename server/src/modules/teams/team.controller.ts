@@ -385,6 +385,29 @@ export const teamController = {
     }
   },
 
+  async setProjectRepoLink(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user || !user.organizationId)
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      const { projectId } = req.params;
+      const { repoLink } = req.body;
+      if (!repoLink) {
+        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'repoLink is required' });
+      }
+      const result = await teamService.setProjectRepoLink(
+        user.organizationId,
+        pid(req),
+        projectId as string,
+        repoLink,
+      );
+      res.json(result);
+    } catch (error: any) {
+      console.error(error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: error?.message || 'Failed to link repository' });
+    }
+  },
+
   // ── Activity ──────────────────────────────────────────────────
 
   async getTeamActivity(req: Request, res: Response) {

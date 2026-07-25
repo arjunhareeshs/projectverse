@@ -10,11 +10,14 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "npx prisma generate --schema ./database/prisma/schema.prisma",
     "prisma:migrate:dev": "npx prisma migrate dev --schema ./database/prisma/schema.prisma",
-    "prisma:seed": "tsx src/scripts/seed.ts"
+    "prisma:seed": "tsx src/scripts/seed.ts",
+    "seed:catalog": "tsx src/scripts/seedProblemStatements.ts",
+    "verify:catalog": "tsx src/scripts/verifyCatalog.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "axios": "^1.18.1",
+    "axios-retry": "^4.5.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.7.0",
     "cookie-parser": "^1.4.7",

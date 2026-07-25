@@ -2,15 +2,11 @@ import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
-import { ChatDockProvider, useChatDock } from '../chat/ChatDockContext';
-import { ChatDock } from '../chat/ChatDock';
-import { ChatLauncher } from '../chat/ChatLauncher';
 import { useDispatch } from 'react-redux';
 import { authService } from '../services/auth.service';
 import { setCredentials } from '../features/auth/authSlice';
 
-const LayoutInner: React.FC = () => {
-  const { contentLeft, contentRight } = useChatDock();
+export const MainLayout: React.FC = () => {
   const dispatch = useDispatch();
 
   useEffect(() => {
@@ -30,12 +26,11 @@ const LayoutInner: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <ChatDock />
       <Sidebar />
       <Navbar />
       <div
         className="flex min-h-screen flex-col transition-[padding] duration-300 ease-out"
-        style={{ paddingLeft: contentLeft, paddingRight: contentRight }}
+        style={{ paddingLeft: 256, paddingRight: 0 }}
       >
         <main className="flex-1 overflow-x-hidden pt-16">
           <div className="mx-auto max-w-[1400px] p-6">
@@ -43,15 +38,6 @@ const LayoutInner: React.FC = () => {
           </div>
         </main>
       </div>
-      <ChatLauncher />
     </div>
-  );
-};
-
-export const MainLayout: React.FC = () => {
-  return (
-    <ChatDockProvider>
-      <LayoutInner />
-    </ChatDockProvider>
   );
 };

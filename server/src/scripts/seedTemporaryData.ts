@@ -80,7 +80,6 @@ async function main() {
   const activityLogsToCreate: any[] = [];
   const documentsToCreate: any[] = [];
   const meetingsToCreate: any[] = [];
-  const scheduleEventsToCreate: any[] = [];
 
   console.log('\n⚡ Preparing records to seed...');
 
@@ -216,18 +215,7 @@ async function main() {
           startsAt: new Date(Date.now() + (mtIdx + 1) * 24 * 3600 * 1000),
         });
 
-        if (primaryMemberId) {
-          scheduleEventsToCreate.push({
-            userId: primaryMemberId,
-            title: meetingTitles[mtIdx % meetingTitles.length],
-            date: new Date(Date.now() + (mtIdx + 1) * 24 * 3600 * 1000).toISOString().split('T')[0],
-            timeString: '10:00 AM',
-            hour: 10.0,
-            duration: 0.5,
-            room: 'Virtual Room B1',
-            color: '#7C3AED',
-          });
-        }
+
       }
     }
   }
@@ -286,10 +274,6 @@ async function main() {
   if (meetingsToCreate.length > 0) {
     console.log(`📅 Creating ${meetingsToCreate.length} Meetings...`);
     await prisma.meeting.createMany({ data: meetingsToCreate, skipDuplicates: true });
-  }
-  if (scheduleEventsToCreate.length > 0) {
-    console.log(`⏰ Creating ${scheduleEventsToCreate.length} ScheduleEvents...`);
-    await prisma.scheduleEvent.createMany({ data: scheduleEventsToCreate, skipDuplicates: true });
   }
 
   const end = Date.now();

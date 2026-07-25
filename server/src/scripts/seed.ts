@@ -46,38 +46,54 @@ async function runSeed() {
 
   // ── 1. Clean Database ──────────────────────────────────────
   console.log('\n🧹 Cleaning database...');
-  await prisma.activityLog.deleteMany().catch(() => null);
-  await prisma.aiChat.deleteMany().catch(() => null);
-  await prisma.notification.deleteMany().catch(() => null);
-  await prisma.comment.deleteMany().catch(() => null);
-  await prisma.subtask.deleteMany().catch(() => null);
-  await prisma.label.deleteMany().catch(() => null);
-  await prisma.task.deleteMany().catch(() => null);
-  await prisma.projectMember.deleteMany().catch(() => null);
-  await prisma.project.deleteMany().catch(() => null);
-  await prisma.teamMember.deleteMany().catch(() => null);
-  await prisma.teamInvite.deleteMany().catch(() => null);
-  await prisma.teamMessage.deleteMany().catch(() => null);
-  await prisma.teamCollaboration.deleteMany().catch(() => null);
-  await prisma.scheduleEvent.deleteMany().catch(() => null);
-  await prisma.document.deleteMany().catch(() => null);
-  await prisma.fileAsset.deleteMany().catch(() => null);
-  await prisma.meeting.deleteMany().catch(() => null);
-  await prisma.report.deleteMany().catch(() => null);
-  await prisma.sprint.deleteMany().catch(() => null);
-  await prisma.milestone.deleteMany().catch(() => null);
-  await prisma.boardColumn.deleteMany().catch(() => null);
-  await prisma.board.deleteMany().catch(() => null);
-  await prisma.auditLog.deleteMany().catch(() => null);
-  await prisma.permission.deleteMany().catch(() => null);
-  await prisma.role.deleteMany().catch(() => null);
-  await prisma.userSkill.deleteMany().catch(() => null);
-  await prisma.groupRanking.deleteMany().catch(() => null);
-  
-  await prisma.user.updateMany({ data: { teamId: null } });
-  await prisma.team.deleteMany().catch(() => null);
-  await prisma.user.deleteMany().catch(() => null);
-  await prisma.organization.deleteMany().catch(() => null);
+  try {
+    const tablenames = await prisma.$queryRaw<Array<{ tablename: string }>>`
+      SELECT tablename FROM pg_tables WHERE schemaname='public'
+    `;
+    const tables = tablenames
+      .map(({ tablename }) => `"${tablename}"`)
+      .filter((name) => name !== '"_prisma_migrations"');
+
+    if (tables.length > 0) {
+      await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables.join(', ')} CASCADE;`);
+    }
+  } catch (err) {
+    console.error('Truncate failed, falling back to manual delete:', err);
+    await prisma.user.updateMany({ data: { teamId: null } });
+    await prisma.team.updateMany({ data: { leadId: null } });
+    await prisma.adminAchievement.deleteMany().catch(() => null);
+    await prisma.adminChatHistory.deleteMany().catch(() => null);
+    await prisma.userStreak.deleteMany().catch(() => null);
+    await prisma.projectReview.deleteMany().catch(() => null);
+    await prisma.userSkill.deleteMany().catch(() => null);
+    await prisma.groupRanking.deleteMany().catch(() => null);
+    await prisma.teamMember.deleteMany().catch(() => null);
+    await prisma.teamInvite.deleteMany().catch(() => null);
+    await prisma.teamMessage.deleteMany().catch(() => null);
+    await prisma.teamCollaboration.deleteMany().catch(() => null);
+    await prisma.activityLog.deleteMany().catch(() => null);
+    await prisma.notification.deleteMany().catch(() => null);
+    await prisma.comment.deleteMany().catch(() => null);
+    await prisma.subtask.deleteMany().catch(() => null);
+    await prisma.label.deleteMany().catch(() => null);
+    await prisma.task.deleteMany().catch(() => null);
+    await prisma.projectMember.deleteMany().catch(() => null);
+    await prisma.project.deleteMany().catch(() => null);
+    await prisma.document.deleteMany().catch(() => null);
+    await prisma.fileAsset.deleteMany().catch(() => null);
+    await prisma.meeting.deleteMany().catch(() => null);
+    await prisma.report.deleteMany().catch(() => null);
+    await prisma.sprint.deleteMany().catch(() => null);
+    await prisma.milestone.deleteMany().catch(() => null);
+    await prisma.boardColumn.deleteMany().catch(() => null);
+    await prisma.board.deleteMany().catch(() => null);
+    await prisma.auditLog.deleteMany().catch(() => null);
+    await prisma.permission.deleteMany().catch(() => null);
+    await prisma.role.deleteMany().catch(() => null);
+    await prisma.team.deleteMany().catch(() => null);
+    await prisma.user.deleteMany().catch(() => null);
+    await prisma.organization.deleteMany().catch(() => null);
+  }
 
   const org = await prisma.organization.create({
     data: { name: 'BITSathy PBL Program' },
@@ -585,7 +601,6 @@ async function runSeed() {
   const activityLogsToCreate: any[] = [];
   const documentsToCreate: any[] = [];
   const meetingsToCreate: any[] = [];
-  const scheduleEventsToCreate: any[] = [];
 
   const genId = (prefix: string, idx: number, projId: string) => {
     return `${prefix}_${idx}_${projId.slice(-10)}`.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -699,18 +714,7 @@ async function runSeed() {
         startsAt: new Date(Date.now() + (mtIdx + 1) * 24 * 3600 * 1000),
       });
 
-      if (primaryMemberId) {
-        scheduleEventsToCreate.push({
-          userId: primaryMemberId,
-          title: meetingTitles[mtIdx % meetingTitles.length],
-          date: new Date(Date.now() + (mtIdx + 1) * 24 * 3600 * 1000).toISOString().split('T')[0],
-          timeString: '10:00 AM',
-          hour: 10.0,
-          duration: 0.5,
-          room: 'Virtual Room B1',
-          color: '#7C3AED',
-        });
-      }
+
     }
   }
 
@@ -768,10 +772,6 @@ async function runSeed() {
     console.log(`📅 Creating ${meetingsToCreate.length} Meetings...`);
     await prisma.meeting.createMany({ data: meetingsToCreate, skipDuplicates: true });
   }
-  if (scheduleEventsToCreate.length > 0) {
-    console.log(`⏰ Creating ${scheduleEventsToCreate.length} ScheduleEvents...`);
-    await prisma.scheduleEvent.createMany({ data: scheduleEventsToCreate, skipDuplicates: true });
-  }
 
   // ── Seeding Hackathons, LeetCode Contests, and User Streaks ─────
   console.log('\n🔥 Seeding Hackathons, LeetCode Contests, and User Streaks...');
@@ -826,6 +826,86 @@ async function runSeed() {
       skipDuplicates: true,
     });
   }
+
+  // ── GitHub Analysis demo data ─────────────────────────────────────
+  // Links a handful of workspace projects to well-known public repos with
+  // static demo metrics, so the GitHub analytics tables aren't empty after
+  // a fresh seed. This does not call the live GitHub API (keeps seeding fast
+  // and independent of the unauthenticated rate limit) — real projects get
+  // their live data lazily on first read via githubService.getForProject.
+  console.log('\n🐙 Seeding GitHub analysis demo data...');
+  const demoRepos = [
+    { owner: 'facebook', repository: 'react', description: 'The library for web and native user interfaces.', language: 'JavaScript', stars: 228000, forks: 47000, watchers: 6800, subscribers: 6800, openIssues: 850, closedIssues: 14200, commitCount: 19500, contributorCount: 1650, branchCount: 120, releaseCount: 1400, tagCount: 1400 },
+    { owner: 'vercel', repository: 'next.js', description: 'The React Framework for the Web.', language: 'JavaScript', stars: 126000, forks: 26500, watchers: 1500, subscribers: 1500, openIssues: 2600, closedIssues: 18400, commitCount: 30500, contributorCount: 3200, branchCount: 90, releaseCount: 800, tagCount: 800 },
+    { owner: 'prisma', repository: 'prisma', description: 'Next-generation ORM for Node.js and TypeScript.', language: 'TypeScript', stars: 40500, forks: 1550, watchers: 260, subscribers: 260, openIssues: 2100, closedIssues: 9200, commitCount: 25800, contributorCount: 620, branchCount: 40, releaseCount: 950, tagCount: 950 },
+  ];
+
+  const demoProjects = createdProjects.slice(0, demoRepos.length);
+  for (let i = 0; i < demoProjects.length; i++) {
+    const project = demoProjects[i];
+    const demo = demoRepos[i];
+    const repoLink = `https://github.com/${demo.owner}/${demo.repository}`;
+
+    await prisma.project.update({ where: { id: project.id }, data: { repoLink } });
+
+    const popularityScore = Math.min(100, Math.round(Math.log2(demo.stars + 1) * 12 + Math.log2(demo.forks + 1) * 8 + Math.log2(demo.watchers + 1) * 5));
+    const communityScore = 92;
+    const maintenanceScore = 88;
+    const freshnessScore = 95;
+
+    const repo = await prisma.githubRepository.upsert({
+      where: { owner_repository: { owner: demo.owner, repository: demo.repository } },
+      create: {
+        owner: demo.owner,
+        repository: demo.repository,
+        projectId: project.id,
+        description: demo.description,
+        visibility: 'public',
+        defaultBranch: 'main',
+        language: demo.language,
+        stars: demo.stars,
+        forks: demo.forks,
+        watchers: demo.watchers,
+        subscribers: demo.subscribers,
+        commitCount: demo.commitCount,
+        branchCount: demo.branchCount,
+        releaseCount: demo.releaseCount,
+        tagCount: demo.tagCount,
+        contributorCount: demo.contributorCount,
+        openIssues: demo.openIssues,
+        closedIssues: demo.closedIssues,
+        hasReadme: true,
+        hasContributing: true,
+        hasCodeOfConduct: true,
+        hasSecurityPolicy: true,
+        hasChangelog: true,
+        popularityScore,
+        communityScore,
+        maintenanceScore,
+        freshnessScore,
+        lastSyncedAt: new Date(),
+      },
+      update: { projectId: project.id },
+    });
+
+    await prisma.githubSnapshot.create({
+      data: {
+        repositoryId: repo.id,
+        metrics: {
+          stars: demo.stars,
+          forks: demo.forks,
+          watchers: demo.watchers,
+          commitCount: demo.commitCount,
+          contributorCount: demo.contributorCount,
+          popularityScore,
+          maintenanceScore,
+          communityScore,
+          freshnessScore,
+        },
+      },
+    });
+  }
+  console.log(`  ✅ Linked ${demoProjects.length} demo project(s) to real public repos with sample analytics`);
 
   // ── Summary ─────────────────────────────────────────────────────
   const end = Date.now();

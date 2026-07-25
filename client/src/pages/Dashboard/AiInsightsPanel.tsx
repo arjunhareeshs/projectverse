@@ -97,16 +97,7 @@ export const AiInsightsPanel: React.FC = () => {
         )}
       </div>
 
-      {/* CTA */}
-      <div className="shrink-0 px-4 pb-4">
-        <button
-          onClick={() => navigate('/ai-assistant')}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-secondary/30 bg-secondary/5 py-2.5 text-sm font-medium text-secondary hover:bg-secondary/10 transition-colors"
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          Open AI Assistant
-        </button>
-      </div>
+
     </div>
   );
 };

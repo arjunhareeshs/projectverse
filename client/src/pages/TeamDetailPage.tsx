@@ -7,7 +7,7 @@ import {
   RefreshCw, ArrowLeft,
   Send, Plus, X, UserPlus, FolderKanban, TrendingUp,
   Settings, ClipboardList, Layers, CircleDot, LogOut,
-  Handshake, Search as SearchIcon, ShieldCheck,
+  Handshake, Search as SearchIcon, ShieldCheck, Github, Pencil,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -218,6 +218,9 @@ export const TeamDetailPage: React.FC = () => {
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [editingRepoProjectId, setEditingRepoProjectId] = useState<string | null>(null);
+  const [repoLinkDraft, setRepoLinkDraft] = useState('');
+  const [savingRepoLink, setSavingRepoLink] = useState(false);
   const [progress, setProgress] = useState<any>(null);
   const [activityLog, setActivityLog] = useState<any[]>([]);
   const [invites, setInvites] = useState<any[]>([]);
@@ -291,6 +294,22 @@ export const TeamDetailPage: React.FC = () => {
     } catch (err) { console.error(err); }
     finally { setProjectsLoaded(true); }
   }, [id]);
+
+  const saveRepoLink = async (projectId: string) => {
+    if (!id || !repoLinkDraft.trim()) return;
+    setSavingRepoLink(true);
+    try {
+      await teamService.setProjectRepoLink(id, projectId, repoLinkDraft.trim());
+      setEditingRepoProjectId(null);
+      setRepoLinkDraft('');
+      await loadProjects();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.message || 'Failed to update GitHub link.');
+    } finally {
+      setSavingRepoLink(false);
+    }
+  };
 
   const loadProgress = useCallback(async () => {
     if (!id) return;
@@ -1125,6 +1144,59 @@ export const TeamDetailPage: React.FC = () => {
                 </div>
                 <h3 className="text-[15px] font-extrabold text-foreground">{p.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{p.description || 'No description.'}</p>
+                {editingRepoProjectId === p.id ? (
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <input
+                      autoFocus
+                      type="url"
+                      value={repoLinkDraft}
+                      onChange={(e) => setRepoLinkDraft(e.target.value)}
+                      placeholder="https://github.com/owner/repo"
+                      className="flex-1 min-w-0 text-[11px] px-2 py-1 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <button
+                      disabled={savingRepoLink || !repoLinkDraft.trim()}
+                      onClick={() => saveRepoLink(p.id)}
+                      className="text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 shrink-0"
+                    >
+                      {savingRepoLink ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => { setEditingRepoProjectId(null); setRepoLinkDraft(''); }}
+                      className="text-[11px] text-muted-foreground hover:text-foreground shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-2">
+                    {p.repoLink ? (
+                      <a
+                        href={p.repoLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-medium text-primary hover:underline truncate max-w-full"
+                      >
+                        <Github className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{p.repoLink.replace(/^https?:\/\/(www\.)?github\.com\//i, '')}</span>
+                      </a>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Github className="h-3.5 w-3.5 shrink-0" /> No GitHub link linked
+                      </span>
+                    )}
+                    {isMember && (
+                      <button
+                        onClick={() => { setEditingRepoProjectId(p.id); setRepoLinkDraft(p.repoLink || ''); }}
+                        className="text-muted-foreground hover:text-primary shrink-0"
+                        title="Change GitHub link"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                )}
                 <div className="flex items-center justify-between mt-4 mb-1.5">
                   <span className="text-[10px] text-muted-foreground">{p.taskCount} tasks</span>
                   <span className="text-xs font-bold text-primary">{p.progress}%</span>
@@ -1692,13 +1764,14 @@ const CreateTaskModal: React.FC<{ teamId: string; members: any[]; onClose: () =>
 const CreateProjectModal: React.FC<{ teamId: string; onClose: () => void; onCreated: () => void }> = ({ teamId, onClose, onCreated }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [repoLink, setRepoLink] = useState('');
   const [saving, setSaving] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      await teamService.createTeamProject(teamId, { name, description });
+      await teamService.createTeamProject(teamId, { name, description, repoLink: repoLink.trim() || undefined });
       onCreated();
     } catch (err) {
       console.error(err);
@@ -1718,6 +1791,16 @@ const CreateProjectModal: React.FC<{ teamId: string; onClose: () => void; onCrea
         <div>
           <label className={labelClass}>Description</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>GitHub Repository Link</label>
+          <input
+            type="url"
+            placeholder="https://github.com/owner/repo"
+            value={repoLink}
+            onChange={(e) => setRepoLink(e.target.value)}
+            className={inputClass}
+          />
         </div>
         <button disabled={saving} type="submit" className="w-full py-2.5 mt-1 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50">
           {saving ? 'Creating…' : 'Create Project'}
