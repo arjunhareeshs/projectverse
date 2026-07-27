@@ -2,7 +2,6 @@ import type { Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import type { AuthenticatedRequest } from '../../middleware/authGuard';
 import { AdminService } from './admin.service';
-import axios from 'axios';
 
 export const adminController = {
 
@@ -151,47 +150,6 @@ export const adminController = {
     try {
       const { prompt, response, sessionId } = req.body;
       const chat = await AdminService.saveAdminChat(req.user!.id, prompt, response, sessionId);
-      res.status(StatusCodes.CREATED).json(chat);
-    } catch (err: any) {
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
-    }
-  },
-
-  generateChat: async (req: AuthenticatedRequest, res: Response) => {
-    try {
-      const { prompt, sessionId } = req.body;
-      const lp = prompt.toLowerCase();
-
-      let aiResponseText = '';
-
-      // Match demo flow prompts
-      if (lp.includes('ai core') && (lp.includes('team') || lp.includes('group') || lp.includes('top'))) {
-        aiResponseText = 'Found 4 teams in ai core. The panel on the right lists them — tap one to bring its context into this chat.';
-      } else if (lp.includes('pull team pulse 2') || lp.includes('pulse 2 into context')) {
-        aiResponseText = 'Pulled Team Pulse 2 into context. Lead Mia K., 3 members, at risk at 44%. Domain: AI Core. Problem: Vector search over departmental docs. Ask follow-ups about members, milestones, or blockers.';
-      } else if (lp.includes('pull team alpha 2') || lp.includes('alpha 2 into context')) {
-        aiResponseText = 'Pulled Team Alpha 2 into context. Lead John D., 3 members, completed at 100%. Domain: AI Core. Problem: Low bandwidth image compression at the edge. Ask follow-ups about members, milestones, or blockers.';
-      } else if (lp.includes('pull team pulse 1') || lp.includes('pulse 1 into context')) {
-        aiResponseText = 'Pulled Team Pulse 1 into context. Lead Dr. Sarah, 3 members, on track at 28%. Domain: AI Core. Problem: Federated learning for hospital scans. Ask follow-ups about members, milestones, or blockers.';
-      } else if (lp.includes('pull team alpha 1') || lp.includes('alpha 1 into context')) {
-        aiResponseText = 'Pulled Team Alpha 1 into context. Lead Amy W., 3 members, on track at 20%. Domain: AI Core. Problem: Realtime speech translation for classrooms. Ask follow-ups about members, milestones, or blockers.';
-      } else if (lp.includes('at risk') || lp.includes('at-risk')) {
-        aiResponseText = 'Currently, Team Pulse 2 is At Risk (44% progress). They are facing blockers on vector search database configuration.';
-      } else if (lp.includes('completed')) {
-        aiResponseText = 'Team Alpha 2 has completed their project: Low bandwidth image compression at the edge (100% progress).';
-      } else {
-        // Try calling actual AI service
-        const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-        try {
-          const aiRes = await axios.post(`${AI_SERVICE_URL}/api/v1/inference`, { prompt });
-          aiResponseText = aiRes.data?.output || 'I could not generate a response.';
-        } catch (err: any) {
-          console.error('AI chat error:', err.message);
-          aiResponseText = 'I am your AI assistant for ProjectVerse. I have loaded context on the BITSathy PBL Program teams, students, and milestones. Ask me details about any team or student.';
-        }
-      }
-
-      const chat = await AdminService.saveAdminChat(req.user!.id, prompt, aiResponseText, sessionId);
       res.status(StatusCodes.CREATED).json(chat);
     } catch (err: any) {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });

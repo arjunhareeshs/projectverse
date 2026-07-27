@@ -3,28 +3,22 @@ import {
   MessageSquare,
   Send,
   Plus,
-  History,
   Sparkles,
   Users,
-  TrendingUp,
   UserCheck,
   ChevronRight,
   ChevronLeft,
-  Info,
-  Calendar,
-  Zap,
   Paperclip,
+  X,
 } from 'lucide-react';
 import { adminService } from '../../services/admin.service';
+import { adminAiService } from '../../services/adminAi.service';
 import { renderMessageContent } from '../../components/aiResponse';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
-  specialTeamId?: string;
-  specialStudentId?: string;
   teamsGrid?: any[];
-  studentGrid?: any[];
   teamDetailCard?: any;
   studentDetailCard?: any;
 }
@@ -35,48 +29,24 @@ interface ChatSession {
   lastAt: string;
 }
 
-// Helpers to get progress and score dynamically based on PBL screenshot values
-const getTeamProgress = (team: any) => {
-  if (!team) return 50;
-  const name = team.name || '';
-  if (name.includes('Pulse 2')) return 44;
-  if (name.includes('Alpha 2')) return 100;
-  if (name.includes('Pulse 1')) return 28;
-  if (name.includes('Alpha 1')) return 20;
-  return team.ranking ? Math.min(100, Math.round(team.ranking.totalPoints / 10)) : 50;
-};
+interface PinnedContext {
+  type: 'team' | 'student';
+  id: string;
+  name: string;
+}
 
-const getTeamScore = (team: any) => {
-  if (!team) return 60;
-  const name = team.name || '';
-  if (name.includes('Pulse 2')) return 66;
-  if (name.includes('Alpha 2')) return 64;
-  if (name.includes('Pulse 1')) return 62;
-  if (name.includes('Alpha 1')) return 60;
-  return team.ranking?.totalPoints ? Math.round(team.ranking.totalPoints / 10) : 60;
-};
+const getTeamScore = (team: any) => team?.liveRanking?.score ?? 0;
+const getTeamRank = (team: any) => team?.liveRanking?.rank ?? null;
 
-// Card rendering component matching screenshot exactly
+// Card rendering component
 const TeamCard: React.FC<{ team: any; onClick: () => void }> = ({ team, onClick }) => {
-  const progress = getTeamProgress(team);
   const score = getTeamScore(team);
-  const status = team.projects?.[0]?.status || team.status || 'On Track';
+  const status = team.projects?.[0]?.status || team.status || 'planned';
 
-  const isCompleted = status.toLowerCase() === 'completed' || progress === 100;
+  const isCompleted = status.toLowerCase() === 'completed';
   const isAtRisk = status.toLowerCase() === 'at-risk' || status.toLowerCase() === 'at risk';
 
-  let statusColor = 'text-green-600';
-  let progressColor = 'bg-indigo-600';
-  let dotColor = 'bg-indigo-500';
-
-  if (isAtRisk) {
-    statusColor = 'text-red-500';
-  } else if (isCompleted) {
-    statusColor = 'text-green-600';
-  } else {
-    statusColor = 'text-green-600';
-  }
-
+  const statusColor = isAtRisk ? 'text-red-500' : 'text-green-600';
   const statusLabel = isAtRisk ? 'At Risk' : isCompleted ? 'Completed' : 'On Track';
 
   return (
@@ -88,10 +58,10 @@ const TeamCard: React.FC<{ team: any; onClick: () => void }> = ({ team, onClick 
       <div className="w-full space-y-1">
         <div className="flex justify-between items-center text-[10px]">
           <span className="flex items-center gap-1.5 text-gray-500 font-semibold uppercase">
-            <span className={`h-2 w-2 rounded-full ${dotColor}`} />
-            {team.domain || 'AI Core'}
+            <span className="h-2 w-2 rounded-full bg-indigo-500" />
+            {team.domain || 'General'}
           </span>
-          <span className="font-extrabold text-gray-800">{score}</span>
+          <span className="font-extrabold text-gray-800">{score}%</span>
         </div>
         <h4 className="text-sm font-extrabold text-gray-800 line-clamp-1">
           {team.name}
@@ -101,21 +71,13 @@ const TeamCard: React.FC<{ team: any; onClick: () => void }> = ({ team, onClick 
         </p>
       </div>
 
-      {/* Progress */}
       <div className="w-full pt-2">
         <div className="w-full h-1 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className={`h-full ${progressColor} rounded-full`}
-            style={{ width: `${progress}%` }}
-          />
+          <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${score}%` }} />
         </div>
         <div className="flex justify-between items-center text-[10px] mt-1">
-          <span className="text-gray-400 font-bold">
-            {progress}%
-          </span>
-          <span className={`font-extrabold ${statusColor}`}>
-            {statusLabel}
-          </span>
+          <span className="text-gray-400 font-bold">{score}%</span>
+          <span className={`font-extrabold ${statusColor}`}>{statusLabel}</span>
         </div>
       </div>
     </button>
@@ -133,21 +95,17 @@ const StudentCard: React.FC<{ student: any; onClick: () => void }> = ({ student,
       <div className="w-full space-y-1">
         <div className="flex justify-between items-center text-[10px]">
           <span className="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-md uppercase font-extrabold">
-            {student.ssgDomain || 'AI'}
+            {student.ssgDomain || 'General'}
           </span>
           <ChevronRight className="h-3 w-3 text-gray-300 group-hover:text-indigo-500 transition-colors" />
         </div>
         <h4 className="text-sm font-extrabold text-gray-800 line-clamp-1 group-hover:text-indigo-600 transition-colors">
           {student.fullName}
         </h4>
-        <p className="text-xs text-gray-400">
-          {student.regNo || 'S-0041'}
-        </p>
+        <p className="text-xs text-gray-400">{student.regNo || 'No Reg No.'}</p>
       </div>
       <div className="flex items-center justify-between text-[10px] text-gray-500 pt-1.5 border-t border-gray-50 mt-1.5">
-        <span className="font-bold text-indigo-600">
-          {student.rewardPoints || 90} pts
-        </span>
+        <span className="font-bold text-indigo-600">{student.rewardPoints || 0} pts</span>
       </div>
     </button>
   );
@@ -155,23 +113,18 @@ const StudentCard: React.FC<{ student: any; onClick: () => void }> = ({ student,
 
 // Team detailed card rendering inline inside chat bubble
 const TeamDetailCardInline: React.FC<{ team: any }> = ({ team }) => {
-  const isCompleted = team.status?.toLowerCase() === 'completed' || team.progress === 100;
+  const isCompleted = team.status?.toLowerCase() === 'completed';
   const isAtRisk = team.status?.toLowerCase() === 'at risk' || team.status?.toLowerCase() === 'at-risk';
 
-  const badgeColor = isAtRisk 
-    ? 'bg-rose-50 text-rose-600 border border-rose-100' 
-    : isCompleted 
-      ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
+  const badgeColor = isAtRisk
+    ? 'bg-rose-50 text-rose-600 border border-rose-100'
+    : isCompleted
+      ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
       : 'bg-green-50 text-green-600 border border-green-100';
 
-  // Mock peer progress values for graph
-  const peers = [
-    { name: 'Alpha 1', progress: 20 },
-    { name: 'Pulse 1', progress: 28 },
-    { name: 'Alpha 2', progress: 100 },
-    { name: 'Peer A', progress: 55 },
-    { name: team.name, progress: team.progress, current: true }
-  ];
+  const peers: Array<{ name: string; progress: number; current?: boolean }> = (team.domainPeers || []).map(
+    (p: any) => ({ name: p.name, progress: p.score, current: p.isCurrent }),
+  );
 
   return (
     <div className="border border-gray-200 rounded-2xl p-5 bg-white space-y-4 animate-in fade-in-50 text-gray-800 shadow-sm mt-3 text-left w-full select-text max-w-xl">
@@ -186,19 +139,17 @@ const TeamDetailCardInline: React.FC<{ team: any }> = ({ team }) => {
             </span>
           </div>
           <p className="text-xs text-gray-400 font-semibold">
-            {team.domain || 'AI Core'} • Lead {team.lead} • Updated {team.updateDate || 'Jul 1, 2026'}
+            {team.domain || 'General'} • Lead {team.lead} • Rank #{team.rank ?? '-'}
           </p>
         </div>
         <div className="text-right shrink-0">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">SCORE</span>
-          <p className="text-2xl font-black text-gray-900 leading-none mt-1">{team.score}</p>
+          <p className="text-2xl font-black text-gray-900 leading-none mt-1">{team.score}%</p>
         </div>
       </div>
 
       {/* Description */}
-      <div className="text-sm font-semibold text-gray-700 leading-relaxed">
-        {team.description}
-      </div>
+      <div className="text-sm font-semibold text-gray-700 leading-relaxed">{team.description}</div>
 
       {/* Members Section */}
       <div className="space-y-1.5">
@@ -226,30 +177,32 @@ const TeamDetailCardInline: React.FC<{ team: any }> = ({ team }) => {
         </div>
       )}
 
-      {/* Progress vs Peers Chart */}
+      {/* Progress vs Peers Chart — real teams in the same domain */}
       <div className="space-y-2 pt-2 border-t border-gray-100">
-        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PROGRESS VS PEERS</h4>
-        <div className="flex items-end justify-between h-20 px-2 py-1 bg-gray-50/50 rounded-xl border border-gray-100">
-          <span className="text-[10px] font-bold text-gray-400 self-end mb-1">peers</span>
-          <div className="flex gap-3 items-end h-full">
-            {peers.map((p, idx) => (
-              <div key={idx} className="flex flex-col items-center gap-1 group relative h-full justify-end">
-                {/* Tooltip */}
-                <span className="absolute -top-6 scale-0 group-hover:scale-100 bg-slate-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition-all whitespace-nowrap z-20">
-                  {p.name}: {p.progress}%
-                </span>
-                {/* Bar */}
-                <div className="w-6 bg-gray-200/80 rounded-t-md overflow-hidden h-[75%] relative flex items-end">
-                  <div 
-                    className={`w-full rounded-t-md ${p.current ? 'bg-indigo-600' : 'bg-indigo-200'}`} 
-                    style={{ height: `${p.progress}%` }} 
-                  />
+        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">PROGRESS VS DOMAIN PEERS</h4>
+        {peers.length > 0 ? (
+          <div className="flex items-end justify-between h-20 px-2 py-1 bg-gray-50/50 rounded-xl border border-gray-100">
+            <span className="text-[10px] font-bold text-gray-400 self-end mb-1">peers</span>
+            <div className="flex gap-3 items-end h-full">
+              {peers.map((p, idx) => (
+                <div key={idx} className="flex flex-col items-center gap-1 group relative h-full justify-end">
+                  <span className="absolute -top-6 scale-0 group-hover:scale-100 bg-slate-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow transition-all whitespace-nowrap z-20">
+                    {p.name}: {p.progress}%
+                  </span>
+                  <div className="w-6 bg-gray-200/80 rounded-t-md overflow-hidden h-[75%] relative flex items-end">
+                    <div
+                      className={`w-full rounded-t-md ${p.current ? 'bg-indigo-600' : 'bg-indigo-200'}`}
+                      style={{ height: `${p.progress}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <span className="text-xs font-black text-indigo-600 self-end mb-1">{team.score}%</span>
           </div>
-          <span className="text-xs font-black text-indigo-600 self-end mb-1">{team.progress}%</span>
-        </div>
+        ) : (
+          <p className="text-xs text-gray-400 italic">No other teams in this domain yet to compare against.</p>
+        )}
       </div>
     </div>
   );
@@ -263,12 +216,12 @@ const StudentDetailCardInline: React.FC<{ student: any }> = ({ student }) => {
         <div className="space-y-1">
           <h3 className="text-base font-extrabold text-gray-900">{student.fullName}</h3>
           <p className="text-xs text-gray-400 font-semibold">
-            {student.ssgDomain || 'AI Core'} • ID {student.regNo || 'S-0041'}
+            {student.ssgDomain || 'General'} • {student.regNo || 'No Reg No.'} • Rank #{student.rank ?? '-'}
           </p>
         </div>
         <div className="text-right shrink-0">
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">REWARD POINTS</span>
-          <p className="text-2xl font-black text-indigo-600 leading-none mt-1">{student.rewardPoints || 90} pts</p>
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">PERFORMANCE</span>
+          <p className="text-2xl font-black text-indigo-600 leading-none mt-1">{student.performanceScore ?? 0}%</p>
         </div>
       </div>
 
@@ -276,18 +229,18 @@ const StudentDetailCardInline: React.FC<{ student: any }> = ({ student }) => {
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
           <span className="text-[9px] text-gray-400 uppercase font-bold">TEAM</span>
-          <p className="font-extrabold text-gray-800 mt-0.5">{student.team?.name || 'Individual'}</p>
+          <p className="font-extrabold text-gray-800 mt-0.5">{student.team?.name || 'No team'}</p>
         </div>
         <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-          <span className="text-[9px] text-gray-400 uppercase font-bold">ROLE / DOMAIN</span>
-          <p className="font-extrabold text-gray-800 mt-0.5">{student.ssgDomain || 'General'}</p>
+          <span className="text-[9px] text-gray-400 uppercase font-bold">REWARD POINTS</span>
+          <p className="font-extrabold text-gray-800 mt-0.5">{student.rewardPoints || 0} pts</p>
         </div>
       </div>
 
       {/* Skills */}
-      {student.userSkills && student.userSkills.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">SKILLS PERFORMANCE</h4>
+      <div className="space-y-2">
+        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">SKILLS PERFORMANCE</h4>
+        {student.userSkills && student.userSkills.length > 0 ? (
           <div className="bg-gray-50 border border-gray-100 rounded-xl p-3.5 space-y-2.5">
             {student.userSkills.map((sk: any, idx: number) => (
               <div key={idx} className="space-y-1">
@@ -301,8 +254,10 @@ const StudentDetailCardInline: React.FC<{ student: any }> = ({ student }) => {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        ) : (
+          <p className="text-xs text-gray-400 italic">No skills recorded yet.</p>
+        )}
+      </div>
     </div>
   );
 };
@@ -313,6 +268,7 @@ export const AdminChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [pinned, setPinned] = useState<PinnedContext | null>(null);
 
   // Context bar state
   const [contextType, setContextType] = useState<'teams' | 'students' | 'mixed'>('mixed');
@@ -321,14 +277,9 @@ export const AdminChat: React.FC = () => {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [showContext, setShowContext] = useState<boolean>(false);
 
-  // State variables kept for compilation safety
-  const [activeTeamDetail, setActiveTeamDetail] = useState<any>(null);
-  const [activeStudentDetail, setActiveStudentDetail] = useState<any>(null);
-
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Generate initial session ID
     const newId = 'session_' + Math.random().toString(36).substr(2, 9);
     setCurrentSessionId(newId);
     loadSessions();
@@ -339,100 +290,35 @@ export const AdminChat: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Load chat history of selected session and map back to inline components if applicable
+  // Load chat history of the selected session as plain prompt/response turns.
   useEffect(() => {
     if (!currentSessionId) return;
-    adminService.getChatHistory()
-      .then(async (history: any[]) => {
-        // Filter history by sessionId and sort chronologically
+    setPinned(null);
+    adminService
+      .getChatHistory()
+      .then((history: any[]) => {
         const sessionMsgs = history
           .filter((h) => h.sessionId === currentSessionId)
           .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        
+
         const mapped: Message[] = [];
-        
-        for (const h of sessionMsgs) {
+        sessionMsgs.forEach((h) => {
           mapped.push({ role: 'user', content: h.prompt });
-
-          const isCoreSearch = h.prompt.toLowerCase().includes('ai core');
-          let teamsGrid: any[] | undefined = undefined;
-          let teamDetailCard: any = undefined;
-          let studentDetailCard: any = undefined;
-
-          if (isCoreSearch && h.response.includes('Found 4 teams')) {
-            // Fetch teams from DB
-            const searchRes = await adminService.searchContext(h.prompt);
-            if (searchRes.type === 'teams') {
-              teamsGrid = searchRes.results;
-            }
-          }
-
-          // If it pulled a team details card
-          if (h.response.includes('Pulled Team')) {
-            const match = h.response.match(/Pulled (Team [a-zA-Z0-9 ]+)/);
-            if (match) {
-              const teamName = match[1].replace(' into context', '').trim();
-              const searchRes = await adminService.searchContext(teamName);
-              if (searchRes.type === 'teams' && searchRes.results.length > 0) {
-                const details = await adminService.getTeamDetail(searchRes.results[0].id);
-                
-                const leadName = details.members?.find((m: any) => m.id === details.leadId)?.fullName || details.members?.[0]?.fullName || 'Lead';
-                const membersCount = details.members?.length || 0;
-                const progressVal = getTeamProgress(details);
-                
-                teamDetailCard = {
-                  id: details.id,
-                  name: details.name,
-                  domain: details.domain,
-                  description: details.description || details.projects?.[0]?.description,
-                  lead: leadName,
-                  score: getTeamScore(details),
-                  progress: progressVal,
-                  status: details.projects?.[0]?.status === 'at-risk' ? 'At Risk' : details.projects?.[0]?.status === 'completed' ? 'Completed' : 'On Track',
-                  members: details.members?.map((m: any) => m.fullName) || [],
-                  achievements: details.achievements?.map((a: any) => a.title) || (details.name === 'Team Pulse 2' ? ['Hackathon SF25 Winner', 'Best Poster'] : []),
-                  updateDate: details.updatedAt ? new Date(details.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Jul 1, 2026'
-                };
-              }
-            }
-          }
-
-          mapped.push({
-            role: 'assistant',
-            content: h.response,
-            teamsGrid,
-            teamDetailCard,
-            studentDetailCard
-          });
-        }
-
-        // Update active context side panels if it was an ai core search
-        const hasCoreSearch = sessionMsgs.some(h => h.prompt.toLowerCase().includes('ai core'));
-        if (hasCoreSearch) {
-          const searchRes = await adminService.searchContext('AI Core');
-          if (searchRes.type === 'teams') {
-            setContextResults({ teams: searchRes.results, students: [] });
-            setContextType('teams');
-            setContextSearchQuery('ai core');
-            setShowContext(true);
-          }
-        }
-
+          mapped.push({ role: 'assistant', content: h.response });
+        });
         setMessages(mapped);
       })
       .catch(() => {});
   }, [currentSessionId]);
 
   const loadSessions = () => {
-    adminService.getChatSessions()
-      .then(setSessions)
-      .catch(() => {});
+    adminService.getChatSessions().then(setSessions).catch(() => {});
   };
 
   const loadDefaultContext = () => {
-    // Start with default search results
-    adminService.searchContext('teams')
-      .then(res => {
+    adminService
+      .searchContext('teams')
+      .then((res) => {
         setContextType(res.type);
         if (res.type === 'teams') {
           setContextResults({ teams: res.results || [], students: [] });
@@ -448,8 +334,9 @@ export const AdminChat: React.FC = () => {
       loadDefaultContext();
       return;
     }
-    adminService.searchContext(q)
-      .then(res => {
+    adminService
+      .searchContext(q)
+      .then((res) => {
         setContextType(res.type);
         let hasResults = false;
         if (res.type === 'teams') {
@@ -466,42 +353,36 @@ export const AdminChat: React.FC = () => {
           setContextResults({ teams, students });
           hasResults = teams.length > 0 || students.length > 0;
         }
-
-        if (hasResults) {
-          setShowContext(true);
-        }
+        if (hasResults) setShowContext(true);
       })
       .catch(() => {});
   };
 
-  const handleAutoSubmit = async (query: string) => {
-    setMessages(prev => [...prev, { role: 'user', content: query }]);
-    setLoading(true);
+  const askAndRender = async (question: string, opts?: { pinnedTeamId?: string; pinnedStudentId?: string }) => {
+    const res = await adminAiService.ask(question, { sessionId: currentSessionId, ...opts });
 
+    let teamsGrid: any[] | undefined;
+    if (question.toLowerCase().includes('ai core')) {
+      const searchRes = await adminService.searchContext(question);
+      if (searchRes.type === 'teams') teamsGrid = searchRes.results;
+    }
+
+    setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, teamsGrid }]);
+    loadSessions();
+  };
+
+  const handleAutoSubmit = async (query: string) => {
+    setMessages((prev) => [...prev, { role: 'user', content: query }]);
+    setLoading(true);
     try {
       handleSearchContext(query);
-      const chat = await adminService.generateChat({
-        prompt: query,
-        sessionId: currentSessionId,
+      await askAndRender(query, {
+        pinnedTeamId: pinned?.type === 'team' ? pinned.id : undefined,
+        pinnedStudentId: pinned?.type === 'student' ? pinned.id : undefined,
       });
-
-      let teamsGrid: any[] | undefined = undefined;
-      if (query.toLowerCase().includes('ai core')) {
-        const searchRes = await adminService.searchContext(query);
-        if (searchRes.type === 'teams') {
-          teamsGrid = searchRes.results;
-        }
-      }
-
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: chat.response || 'No response generated.',
-        teamsGrid
-      }]);
       setShowContext(true);
-      loadSessions();
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Apologies, I encountered an error communicating with the AI service.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Apologies, I encountered an error communicating with the AI service.' }]);
     } finally {
       setLoading(false);
     }
@@ -511,8 +392,7 @@ export const AdminChat: React.FC = () => {
     const newId = 'session_' + Math.random().toString(36).substr(2, 9);
     setCurrentSessionId(newId);
     setMessages([]);
-    setActiveTeamDetail(null);
-    setActiveStudentDetail(null);
+    setPinned(null);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -521,81 +401,58 @@ export const AdminChat: React.FC = () => {
 
     const userText = input;
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userText }]);
+    setMessages((prev) => [...prev, { role: 'user', content: userText }]);
     setLoading(true);
 
     try {
       handleSearchContext(userText);
-      const chat = await adminService.generateChat({
-        prompt: userText,
-        sessionId: currentSessionId,
+      await askAndRender(userText, {
+        pinnedTeamId: pinned?.type === 'team' ? pinned.id : undefined,
+        pinnedStudentId: pinned?.type === 'student' ? pinned.id : undefined,
       });
-
-      let teamsGrid: any[] | undefined = undefined;
-      if (userText.toLowerCase().includes('ai core')) {
-        const searchRes = await adminService.searchContext(userText);
-        if (searchRes.type === 'teams') {
-          teamsGrid = searchRes.results;
-        }
-      }
-
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: chat.response || 'No response generated.',
-        teamsGrid
-      }]);
-
-      loadSessions();
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Apologies, I encountered an error communicating with the AI service.' }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Apologies, I encountered an error communicating with the AI service.' }]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Card click triggers pulling context and appends detail block inline in the chat
+  // Card click pins the team as active context and asks the real AI for a grounded overview.
   const handleSelectTeam = async (id: string) => {
     setLoading(true);
     try {
       const details = await adminService.getTeamDetail(id);
-      
-      const leadName = details.members?.find((m: any) => m.id === details.leadId)?.fullName || details.members?.[0]?.fullName || 'Lead';
-      const membersCount = details.members?.length || 0;
-      const progressVal = getTeamProgress(details);
-      const statusLabel = details.projects?.[0]?.status === 'at-risk' ? 'at risk' : details.projects?.[0]?.status === 'completed' ? 'completed' : 'on track';
-      
-      const assistantText = `Pulled ${details.name} into context. Lead ${leadName}, ${membersCount} members, ${statusLabel} at ${progressVal}%. Domain: ${details.domain || 'AI Core'}. Problem: ${details.description || details.projects?.[0]?.description}. Ask follow-ups about members, milestones, or blockers.`;
-      
-      await adminService.saveChat({
-        prompt: `Pull ${details.name} into context`,
-        response: assistantText,
-        sessionId: currentSessionId
-      });
+      setPinned({ type: 'team', id: details.id, name: details.name });
+
+      const question = `Give me a quick status overview of ${details.name}.`;
+      setMessages((prev) => [...prev, { role: 'user', content: question }]);
+
+      const res = await adminAiService.ask(question, { sessionId: currentSessionId, pinnedTeamId: id });
+
+      const leadName = details.members?.find((m: any) => m.id === details.leadId)?.fullName || details.members?.[0]?.fullName || 'Unassigned';
+      const activeProject = details.projects?.[0];
+      const statusLabel = activeProject?.status === 'at-risk' ? 'At Risk' : activeProject?.status === 'completed' ? 'Completed' : 'On Track';
 
       const mappedDetails = {
         id: details.id,
         name: details.name,
         domain: details.domain,
-        description: details.description || details.projects?.[0]?.description,
+        description: details.description || activeProject?.description,
         lead: leadName,
         score: getTeamScore(details),
-        progress: progressVal,
-        status: details.projects?.[0]?.status === 'at-risk' ? 'At Risk' : details.projects?.[0]?.status === 'completed' ? 'Completed' : 'On Track',
+        rank: getTeamRank(details),
+        status: statusLabel,
         members: details.members?.map((m: any) => m.fullName) || [],
-        achievements: details.achievements?.map((a: any) => a.title) || (details.name === 'Team Pulse 2' ? ['Hackathon SF25 Winner', 'Best Poster'] : []),
-        updateDate: details.updatedAt ? new Date(details.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Jul 1, 2026'
+        achievements: details.achievements?.map((a: any) => a.title) || [],
+        domainPeers: details.domainPeers || [],
       };
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: assistantText,
-        teamDetailCard: mappedDetails
-      }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, teamDetailCard: mappedDetails }]);
+      loadSessions();
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
-      loadSessions();
     }
   };
 
@@ -603,38 +460,31 @@ export const AdminChat: React.FC = () => {
     setLoading(true);
     try {
       const details = await adminService.getStudentDetail(id);
-      
-      const assistantText = `Pulled student profile for **${details.fullName}** (ID: ${details.regNo}) into context. Ask me questions about their performance, SSG domain or group status.`;
+      setPinned({ type: 'student', id: details.id, name: details.fullName });
 
-      await adminService.saveChat({
-        prompt: `Pull ${details.fullName} into context`,
-        response: assistantText,
-        sessionId: currentSessionId
-      });
+      const question = `Give me a quick performance overview of ${details.fullName}.`;
+      setMessages((prev) => [...prev, { role: 'user', content: question }]);
+
+      const res = await adminAiService.ask(question, { sessionId: currentSessionId, pinnedStudentId: id });
 
       const mappedStudent = {
         id: details.id,
         fullName: details.fullName,
         regNo: details.regNo,
-        ssgDomain: details.ssgDomain || details.team?.domain || 'AI Core',
-        rewardPoints: details.rewardPoints || 90,
-        team: details.team || { name: 'Individual', domain: 'AI Core' },
-        userSkills: details.userSkills || [
-          { skillName: 'Python', totalPoints: 90 },
-          { skillName: 'PyTorch', totalPoints: 85 }
-        ]
+        ssgDomain: details.ssgDomain || details.team?.domain,
+        rewardPoints: details.rewardPoints || 0,
+        performanceScore: details.performanceScore,
+        rank: details.rank,
+        team: details.team,
+        userSkills: details.userSkills || [],
       };
 
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: assistantText,
-        studentDetailCard: mappedStudent
-      }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: res.answer, studentDetailCard: mappedStudent }]);
+      loadSessions();
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
-      loadSessions();
     }
   };
 
@@ -643,9 +493,7 @@ export const AdminChat: React.FC = () => {
       {/* 1. Left Conversation History Panel */}
       <aside className="border-r border-gray-100 flex flex-col bg-gray-50/50 shrink-0 transition-all duration-300 ease-in-out overflow-hidden w-64">
         <div className="p-4 border-b border-gray-100 flex items-center justify-between shrink-0">
-          <span className="text-sm font-bold text-gray-800">
-            Conversations
-          </span>
+          <span className="text-sm font-bold text-gray-800">Conversations</span>
           <button
             onClick={startNewChat}
             className="p-1 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
@@ -682,17 +530,17 @@ export const AdminChat: React.FC = () => {
         <div className="h-14 border-b border-gray-100 flex items-center justify-between px-6 shrink-0 bg-white shadow-sm z-10">
           <div>
             <h1 className="text-sm font-bold text-gray-900 leading-tight">
-              {sessions.find(s => s.sessionId === currentSessionId)?.title || 'New conversation'}
+              {sessions.find((s) => s.sessionId === currentSessionId)?.title || 'New conversation'}
             </h1>
             <p className="text-[10px] text-gray-400">
-              Ask about teams, students, achievements. Try: "get me top AI Core performing teams".
+              Ask about teams, students, achievements. Try: "which teams are at risk on deadlines?".
             </p>
           </div>
           <button
             onClick={() => setShowContext(!showContext)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
-              showContext 
-                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm' 
+              showContext
+                ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
                 : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
             }`}
           >
@@ -700,6 +548,24 @@ export const AdminChat: React.FC = () => {
             <span>{showContext ? 'Hide Context' : 'Show Context'}</span>
           </button>
         </div>
+
+        {/* Pinned context chip */}
+        {pinned && (
+          <div className="px-6 pt-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-semibold">
+              <Sparkles className="h-3.5 w-3.5" />
+              Grounded on {pinned.type === 'team' ? 'team' : 'student'}: {pinned.name}
+              <button
+                type="button"
+                onClick={() => setPinned(null)}
+                className="p-0.5 hover:bg-indigo-100 rounded-full transition-colors"
+                title="Clear pinned context"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
@@ -709,17 +575,18 @@ export const AdminChat: React.FC = () => {
                 <Sparkles className="h-8 w-8" />
               </div>
               <div className="space-y-2">
-                <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Ask Projectverse</h2>
+                <h2 className="text-xl font-extrabold text-gray-900 tracking-tight">Ask ProjectVerse</h2>
                 <p className="text-xs text-gray-500 leading-relaxed max-w-sm">
-                  Query teams, students, domains or status. Results appear in the right panel — tap any card to bring it into this chat.
+                  Query teams, students, domains or status — answered live against real project data. Tap any
+                  card in the right panel to ground the conversation on it.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-center max-w-md pt-2">
                 {[
-                  'top AI Core teams',
-                  'top Data students',
-                  'at risk teams',
-                  'completed teams in Web'
+                  'Which final-year projects have HIGH plagiarism risk?',
+                  'Show me teams with inactive members or timeline delays',
+                  'Which teams are at risk on deadlines?',
+                  'What are the top performing teams overall?',
                 ].map((query) => (
                   <button
                     key={query}
@@ -740,42 +607,32 @@ export const AdminChat: React.FC = () => {
                     <Sparkles className="h-4 w-4" />
                   </div>
                 )}
-                <div className={`max-w-2xl rounded-2xl p-4 text-sm ${
-                  m.role === 'user' ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'bg-gray-50 text-gray-800'
-                }`}>
+                <div
+                  className={`max-w-2xl rounded-2xl p-4 text-sm ${
+                    m.role === 'user' ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'bg-gray-50 text-gray-800'
+                  }`}
+                >
                   {m.role === 'user' ? (
                     <p className="leading-relaxed font-semibold">{m.content}</p>
                   ) : (
                     <div className="space-y-3">
                       <div>{renderMessageContent(m.content)}</div>
-                      
-                      {/* Inline Teams Grid inside the message bubble */}
+
                       {m.teamsGrid && m.teamsGrid.length > 0 && (
                         <div className="mt-4 space-y-3 select-none">
                           <p className="text-xs font-bold text-gray-400">
-                            Top teams • ai core — {m.teamsGrid.length} results shown on right panel.
+                            {m.teamsGrid.length} teams found — shown on right panel.
                           </p>
                           <div className="grid grid-cols-2 gap-2.5">
                             {m.teamsGrid.map((team) => (
-                              <TeamCard
-                                key={team.id}
-                                team={team}
-                                onClick={() => handleSelectTeam(team.id)}
-                              />
+                              <TeamCard key={team.id} team={team} onClick={() => handleSelectTeam(team.id)} />
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Inline Team Detail Card inside the message bubble */}
-                      {m.teamDetailCard && (
-                        <TeamDetailCardInline team={m.teamDetailCard} />
-                      )}
-
-                      {/* Inline Student Detail Card inside the message bubble */}
-                      {m.studentDetailCard && (
-                        <StudentDetailCardInline student={m.studentDetailCard} />
-                      )}
+                      {m.teamDetailCard && <TeamDetailCardInline team={m.teamDetailCard} />}
+                      {m.studentDetailCard && <StudentDetailCardInline student={m.studentDetailCard} />}
                     </div>
                   )}
                 </div>
@@ -798,22 +655,23 @@ export const AdminChat: React.FC = () => {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar matching screenshot */}
+        {/* Input Bar */}
         <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-100 bg-white">
           <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm max-w-4xl mx-auto font-sans">
             <button
               type="button"
               className="text-gray-400 hover:text-gray-600 transition-colors shrink-0"
               title="Attach files"
+              disabled
             >
               <Paperclip className="h-4.5 w-4.5" />
             </button>
             <input
               type="text"
-              placeholder="Ask about teams, students, achievements..."
+              placeholder={pinned ? `Ask about ${pinned.name}...` : 'Ask about teams, students, achievements...'}
               className="flex-1 bg-transparent border-none text-sm text-gray-800 placeholder-gray-400 focus:outline-none"
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={(e) => setInput(e.target.value)}
             />
             <button
               type="submit"
@@ -827,12 +685,13 @@ export const AdminChat: React.FC = () => {
       </div>
 
       {/* 3. Right Context Bar (Expandable Grid Layout) */}
-      <aside className={`border-l border-gray-100 flex flex-col bg-white shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
-        showContext ? (isExpanded ? 'w-[520px]' : 'w-80') : 'w-16'
-      }`}>
+      <aside
+        className={`border-l border-gray-100 flex flex-col bg-white shrink-0 transition-all duration-300 ease-in-out overflow-hidden ${
+          showContext ? (isExpanded ? 'w-[520px]' : 'w-80') : 'w-16'
+        }`}
+      >
         {!showContext ? (
           <div className="flex flex-col h-full bg-white select-none">
-            {/* Top Toggle Button to Open Context Feed */}
             <div className="flex flex-col items-center py-4 border-b border-gray-100 shrink-0">
               <button
                 type="button"
@@ -844,9 +703,7 @@ export const AdminChat: React.FC = () => {
               </button>
             </div>
 
-            {/* List of Icons for Teams / Students */}
             <div className="flex-1 overflow-y-auto p-2 space-y-5">
-              {/* Teams Section */}
               {contextResults.teams.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex justify-center text-gray-400 py-1" title="Active Teams">
@@ -859,7 +716,7 @@ export const AdminChat: React.FC = () => {
                         type="button"
                         onClick={() => handleSelectTeam(team.id)}
                         className="group w-full rounded-xl transition-all flex items-center p-2.5 justify-center border border-transparent hover:border-indigo-100 hover:text-indigo-600 hover:bg-indigo-50/50"
-                        title={`Team: ${team.name} (${team.domain || 'AI Core'})`}
+                        title={`Team: ${team.name} (${team.domain || 'General'})`}
                       >
                         <div className="h-6 w-6 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xs uppercase shrink-0">
                           {team.name ? team.name[0] : 'T'}
@@ -870,7 +727,6 @@ export const AdminChat: React.FC = () => {
                 </div>
               )}
 
-              {/* Students Section */}
               {contextResults.students.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex justify-center text-gray-400 py-1" title="Top Students">
@@ -887,7 +743,7 @@ export const AdminChat: React.FC = () => {
                           type="button"
                           onClick={() => handleSelectStudent(student.id)}
                           className="group w-full rounded-xl transition-all flex items-center p-2.5 justify-center border border-transparent hover:border-indigo-100 hover:text-indigo-600 hover:bg-indigo-50/50"
-                          title={`Student: ${student.fullName} (${student.ssgDomain || 'AI'})`}
+                          title={`Student: ${student.fullName} (${student.ssgDomain || 'General'})`}
                         >
                           <div className="h-6 w-6 rounded-full bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-[10px] uppercase shrink-0">
                             {initials}
@@ -902,12 +758,11 @@ export const AdminChat: React.FC = () => {
           </div>
         ) : (
           <>
-            {/* Header with Search and Expand/Collapse Button */}
             <div className="p-4 border-b border-gray-100 space-y-2.5 select-none font-sans">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold tracking-wider text-gray-800 uppercase flex items-center gap-1.5">
                   <Users className="h-4 w-4 text-indigo-500" />
-                  {contextSearchQuery ? `Top teams • ${contextSearchQuery.toLowerCase()}` : 'AI Context Feed'}
+                  {contextSearchQuery ? `Results • ${contextSearchQuery.toLowerCase()}` : 'AI Context Feed'}
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black text-gray-400 mr-1">
@@ -917,7 +772,7 @@ export const AdminChat: React.FC = () => {
                     type="button"
                     onClick={() => setIsExpanded(!isExpanded)}
                     className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-indigo-600 transition-all active:scale-95"
-                    title={isExpanded ? "Collapse Sidebar" : "Expand Sidebar"}
+                    title={isExpanded ? 'Collapse Sidebar' : 'Expand Sidebar'}
                   >
                     {isExpanded ? (
                       <div className="flex items-center gap-1 text-[10px] font-medium text-indigo-500">
@@ -939,7 +794,7 @@ export const AdminChat: React.FC = () => {
                   placeholder="Search teams or students..."
                   className="w-full text-xs rounded-xl border border-gray-200 pl-8 pr-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50/50"
                   value={contextSearchQuery}
-                  onChange={e => {
+                  onChange={(e) => {
                     setContextSearchQuery(e.target.value);
                     handleSearchContext(e.target.value);
                   }}
@@ -950,39 +805,26 @@ export const AdminChat: React.FC = () => {
               </div>
             </div>
 
-            {/* Dynamic Grid Layout boxes of Teams / Students */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {contextType === 'teams' || contextType === 'mixed' ? (
+              {(contextType === 'teams' || contextType === 'mixed') && (
                 <div className="space-y-3">
-                  <div className={`grid gap-2.5 transition-all ${
-                    isExpanded ? 'grid-cols-3' : 'grid-cols-1'
-                  }`}>
+                  <div className={`grid gap-2.5 transition-all ${isExpanded ? 'grid-cols-3' : 'grid-cols-1'}`}>
                     {contextResults.teams.map((team: any) => (
-                      <TeamCard
-                        key={team.id}
-                        team={team}
-                        onClick={() => handleSelectTeam(team.id)}
-                      />
+                      <TeamCard key={team.id} team={team} onClick={() => handleSelectTeam(team.id)} />
                     ))}
                   </div>
                 </div>
-              ) : null}
+              )}
 
-              {contextType === 'students' || contextType === 'mixed' ? (
+              {(contextType === 'students' || contextType === 'mixed') && (
                 <div className="space-y-3">
-                  <div className={`grid gap-2.5 transition-all ${
-                    isExpanded ? 'grid-cols-3' : 'grid-cols-1'
-                  }`}>
+                  <div className={`grid gap-2.5 transition-all ${isExpanded ? 'grid-cols-3' : 'grid-cols-1'}`}>
                     {contextResults.students.map((student: any) => (
-                      <StudentCard
-                        key={student.id}
-                        student={student}
-                        onClick={() => handleSelectStudent(student.id)}
-                      />
+                      <StudentCard key={student.id} student={student} onClick={() => handleSelectStudent(student.id)} />
                     ))}
                   </div>
                 </div>
-              ) : null}
+              )}
             </div>
           </>
         )}

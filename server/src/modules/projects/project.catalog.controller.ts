@@ -4,6 +4,14 @@ import { prisma } from '../../shared/database';
 import { chatJSON, ChatMessage } from '../ai/llm.service';
 import { githubService, GithubAnalysisError } from '../github/github.service';
 import { logger } from '../../shared/logger';
+import { projectLogService } from '../lifecycle/projectLog.service';
+import { ProjectCategory } from '../../shared/projectLog.types';
+import { wordOverlapRatio, isTooSimilar } from '../../shared/stringUtils';
+
+const VALID_CATEGORIES: ProjectCategory[] = ['MINI', 'FINAL_YEAR', 'RESEARCH'];
+function coerceCategory(value: unknown): ProjectCategory | undefined {
+  return VALID_CATEGORIES.includes(value as ProjectCategory) ? (value as ProjectCategory) : undefined;
+}
 
 type ProposalValidation = {
   valid: boolean;
@@ -15,33 +23,6 @@ type ProposalValidation = {
   suggestedShortName: string;
   suggestedDifficulty: string;
 };
-
-function normalize(s: string) {
-  return (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-// Word-overlap ratio (0-1), shared by the duplicate guard and the
-// "related work" ranking used for the mentor's differentiation challenge.
-function wordOverlapRatio(a: string, b: string) {
-  const na = normalize(a);
-  const nb = normalize(b);
-  if (!na || !nb) return 0;
-  if (na === nb) return 1;
-  const wordsA = new Set(na.split(' ').filter((w) => w.length > 3));
-  const wordsB = new Set(nb.split(' ').filter((w) => w.length > 3));
-  if (wordsA.size === 0 || wordsB.size === 0) return 0;
-  let overlap = 0;
-  wordsA.forEach((w) => {
-    if (wordsB.has(w)) overlap++;
-  });
-  return overlap / Math.min(wordsA.size, wordsB.size);
-}
-
-// Cheap similarity check used by both the heuristic fallback and as a guard
-// rail before we ever bother calling the LLM.
-function isTooSimilar(a: string, b: string) {
-  return wordOverlapRatio(a, b) > 0.7;
-}
 
 // Checklist dimensions the mentor conversation is meant to cover before a
 // team is considered "ready" to proceed to selection.
@@ -110,6 +91,22 @@ function typeToPrefix(type: string): 'H' | 'S' | 'HS' {
 }
 
 export const catalogController = {
+  // The selection flow is stateless/client-driven (no server-side session store exists
+  // for it), so per 00-OVERVIEW.md/PART-1 this endpoint just validates the category choice;
+  // the client carries it forward and passes it again as a required field on
+  // propose/select/finalize, which is where it actually lands on Project.category + the log.
+  async startCatalogSession(req: Request, res: Response) {
+    try {
+      const category = coerceCategory(req.body?.category);
+      if (!category) {
+        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid or missing category' });
+      }
+      res.json({ success: true, category, sessionId: `session_${Date.now()}` });
+    } catch (error) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
+    }
+  },
+
   // Get all catalog items with the number of times they've been selected.
   // Supports optional ?type=&domain=&sector= filters for the guided flow.
   async getCatalog(req: Request, res: Response) {
@@ -355,26 +352,69 @@ export const catalogController = {
       const systemPrompt: ChatMessage = {
         role: 'system',
         content:
-          `You are a project mentor helping a student team scope out how they will build ` +
-          `the following problem statement:\n\n"${template.problemStatement}"\n` +
+          `You are a warm, supportive project mentor having a real, free-flowing conversation with a ` +
+          `student team about the following problem statement:\n\n"${template.problemStatement}"\n` +
           `(Domain: ${template.domain}, Subdomain: ${template.sector || 'N/A'}, ` +
           `Difficulty: ${template.difficultyLevel}, Type: ${template.type}).\n\n` +
           (relatedWork
             ? `Other related problem statements already in this domain, for context:\n${relatedWork}\n\n` +
-              `Early in the conversation (but only once), ask the team to explain how their ` +
+              `IMPORTANT: Do NOT ask the differentiation question until the student has confirmed they ` +
+              `understand their own problem statement first. Only then (once, naturally) ask how their ` +
               `approach will be different from these related statements.\n\n`
             : '') +
-          `Your goal is to get the team to clearly articulate, across the conversation: their ` +
-          `problem understanding, target users, unique value/differentiation, tech stack, MVP ` +
-          `scope, timeline (how many weeks/months they have), key risks, and success metrics. ` +
-          `Ask one short, focused follow-up question at a time (2-4 sentences). Do not repeat ` +
-          `questions already answered. If the team's scope looks too large for the timeline ` +
-          `they mention, push back and suggest cutting scope to an MVP.\n\n` +
+          `YOUR TONE — this applies to every single reply:\n` +
+          `- Be the supportive senior colleague: patient, warm, never condescending.\n` +
+          `- Use phrases like "Let me help you think through this", "That's a great question", ` +
+          `"No worries — let's break this down together" rather than "You should know this".\n` +
+          `- Celebrate small wins: "Great, that's a solid starting point!"\n\n` +
+          `OPENING TURN (if conversation history is empty):\n` +
+          `Start by warmly explaining the problem statement in plain, simple language — what it means, ` +
+          `why it matters in the real world, and who it helps. Then ask: "Does this give you a clear ` +
+          `picture of what we're building? Any questions before we dive in?" Do NOT immediately ask ` +
+          `the student to walk you through their understanding or present a plan.\n\n` +
+          `KNOWLEDGE-LEVEL DETECTION:\n` +
+          `- Pay close attention to how the student responds. If they say "I don't know", "explain ` +
+          `this to me", "you tell me", or give very short uncertain answers in 2+ consecutive turns, ` +
+          `switch to TEACH-FIRST MODE: propose everything yourself (tech stack, target users, MVP ` +
+          `features) and ask simple Yes/No/Tell-me-more reactions instead of open-ended questions.\n` +
+          `- If the student demonstrates strong knowledge (detailed answers, specific technologies, ` +
+          `clear reasoning), treat them as a peer and ask deeper technical questions.\n` +
+          `- Adapt continuously — don't lock into one mode.\n\n` +
+          `CONVERSATION RULES — read carefully, these take priority over everything else:\n` +
+          `1. ALWAYS respond directly to what the student just said before doing anything else. If they ` +
+          `ask a question (e.g. "explain this project", "what does X mean", "why is this hard"), answer ` +
+          `it clearly and concretely using the problem statement, domain, and related work above — never ` +
+          `dodge a question by asking an unrelated one back.\n` +
+          `2. If the student asks you to decide, suggest, or lead ("you tell me", "you decide", "what do ` +
+          `you think we should do", "just tell me the tech stack"), do NOT deflect the question back to ` +
+          `them. Proactively propose 2-3 concrete, specific options grounded in this exact problem ` +
+          `statement (e.g. a plausible tech stack, a candidate target user group, an MVP cut) and ask ` +
+          `them to pick, react, or refine — give them something real to respond to, not another open ` +
+          `question.\n` +
+          `3. The student can ask clarifying questions or go off-script at ANY point, in any order — this ` +
+          `is a discussion, not an interrogation or a fixed script. Only steer toward an uncovered ` +
+          `checklist dimension once you've fully addressed what they actually said, and do it as a ` +
+          `natural continuation of the conversation, not a rigid checklist march.\n` +
+          `4. PROGRESSIVE DISCLOSURE — cover checklist dimensions in this order, not randomly:\n` +
+          `   Stage 1 (Foundation): problemClarity, targetUsers, uniqueValue — cover these FIRST.\n` +
+          `   Stage 2 (Technical): techStack, mvpScope — only after Stage 1 is solid.\n` +
+          `   Stage 3 (Planning): timeline, risks, successMetrics — only after Stages 1 & 2.\n` +
+          `   Never ask about risks or success metrics before the student understands the problem.\n` +
+          `5. If the team's scope looks too large for their stated timeline, push back and suggest ` +
+          `cutting to an MVP.\n` +
+          `6. Keep replies short and concrete (2-5 sentences) — real mentor talk, not a lecture.\n` +
+          `7. VALIDATION BEFORE PROGRESSION: If the student states they "don't know" or asks for an ` +
+          `explanation, explain the concept simply and then STOP. Explicitly validate their understanding ` +
+          `(e.g., "Does that make sense?" or "Are we on the same page?") before pivoting to the next ` +
+          `checklist topic or demanding architectural decisions. DO NOT blindly ask them for a plan if ` +
+          `they just told you they don't know.\n\n` +
           `Respond ONLY with a JSON object: {"reply": string, "checklist": {${CHECKLIST_DIMENSIONS.map((d) => `"${d.id}": boolean`).join(', ')}}, "readinessScore": number}. ` +
-          `The checklist booleans mean "has this been clearly covered in the conversation so far ` +
-          `(including this reply's question)". readinessScore is 0-100, how ready the team is to ` +
-          `move to a readiness report. Dimensions: ${dimensionList}.`,
+          `CHECKLIST CALIBRATION: Only mark a dimension as true if the student has demonstrated genuine ` +
+          `understanding or made a specific, informed decision — NOT merely if they said "ok" or "yes" ` +
+          `to your suggestion without elaborating. A passive "ok" does not count as coverage. ` +
+          `readinessScore is 0-100, how ready the team is to move to a readiness report. Dimensions: ${dimensionList}.`,
       };
+
 
       if (mode === 'report') {
         const fallbackExtracted: ExtractedPlan = {
@@ -425,9 +465,8 @@ export const catalogController = {
       const fallbackChecklist: Checklist = { ...EMPTY_CHECKLIST, ...(clientChecklist || {}) };
       const fallbackResult: MentorChatResult = {
         reply:
-          "Thanks — that gives a good sense of direction. Could you tell me a bit more about " +
-          "how your team plans to make this implementation stand out in terms of quality or " +
-          "a specific niche within the problem?",
+          "Let me help you think through this step by step. First — do you have a general idea " +
+          "of what this problem statement is about, or would you like me to explain it in simple terms?",
         checklist: fallbackChecklist,
         readinessScore: 0,
       };
@@ -536,11 +575,15 @@ export const catalogController = {
       }
 
       const { id } = req.params;
-      const { teamMembers = [], repoLink, plan } = req.body as {
+      const { teamMembers = [], repoLink, plan, category } = req.body as {
         teamMembers?: string[];
         repoLink?: string;
         plan?: ExtractedPlan;
+        category?: string;
       };
+      // Category chosen in the first step of the selection flow (Mini / Final
+      // Year / Research). The flow is client-driven, so it arrives here on select.
+      const projectCategory = coerceCategory(category);
 
       if (repoLink) {
         try {
@@ -620,6 +663,7 @@ export const catalogController = {
           requirements: moscowText,
           innovation: plan?.uniqueValue || undefined,
           repoLink: repoLink || undefined,
+          category: projectCategory,
           status: 'pending_approval',
         },
       });
@@ -638,12 +682,62 @@ export const catalogController = {
         data: projectMembers,
       });
 
+      // 6. Bootstrap canonical ProjectLog lifecycle state
+      try {
+        await projectLogService.initLog(newProject.id, {
+          title: newProject.name,
+          category: (newProject.category as ProjectCategory) || 'FINAL_YEAR',
+          teamId: user.teamId,
+          durationMonths: 6,
+        });
+
+        if (newProject.technologies && newProject.technologies.length > 0) {
+          await projectLogService.appendEvent(newProject.id, {
+            type: 'TECHNOLOGIES_SET',
+            actorUserId: user.id,
+            data: { technologies: newProject.technologies },
+          });
+        }
+      } catch (logErr: any) {
+        logger.error('Failed to initialize ProjectLog state on project selection', {
+          projectId: newProject.id,
+          message: logErr?.message,
+        });
+      }
+
       if (newProject.repoLink) {
         githubService.analyzeAndLinkProject(newProject.id, newProject.repoLink).catch((err) => {
           logger.error('Background GitHub analysis failed on project selection', {
             projectId: newProject.id,
             message: err?.message,
           });
+        });
+      }
+
+      // 6. Initialize the canonical AI-lifecycle Project Log (Overview §3.3).
+      // Best-effort: a failure here must never break project selection.
+      try {
+        await projectLogService.initLog(newProject.id, {
+          title: newProject.name,
+          category: (newProject.category as ProjectCategory) || undefined,
+          teamId: newProject.teamId || undefined,
+        });
+        await projectLogService.appendEvent(newProject.id, {
+          type: 'PROJECT_CREATED',
+          actorUserId: user.id,
+          data: { title: newProject.name, category: newProject.category },
+        });
+        if (newProject.repoLink) {
+          await projectLogService.appendEvent(newProject.id, {
+            type: 'GITHUB_LINKED',
+            actorUserId: user.id,
+            data: { repoFullName: newProject.repoLink },
+          });
+        }
+      } catch (logErr) {
+        logger.error('Failed to initialize ProjectLog on selection', {
+          projectId: newProject.id,
+          message: (logErr as any)?.message,
         });
       }
 

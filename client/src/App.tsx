@@ -8,7 +8,7 @@ import { useAppSelector } from './app/hooks';
 
 const TeamRedirect = () => {
   const user = useAppSelector((s) => s.auth.user);
-  return <Navigate to={`/teams/${user?.teamId || '1'}`} replace />;
+  return <Navigate to={user?.teamId ? `/teams/${user.teamId}` : '/teams'} replace />;
 };
 
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -43,6 +43,7 @@ import { ProjectManagement } from './pages/Admin/ProjectManagement';
 import { DocumentManagement } from './pages/Admin/DocumentManagement';
 import { AdminAnalytics } from './pages/Admin/AdminAnalytics';
 import { AdminUpload } from './pages/Admin/AdminUpload';
+import { AdminDirectory } from './pages/Admin/AdminDirectory';
 import { AdminTeamTrends } from './pages/Admin/AdminTeamTrends';
 import { AdminStudentTrends } from './pages/Admin/AdminStudentTrends';
 import { AdminChat } from './pages/Admin/AdminChat';
@@ -78,6 +79,7 @@ function App() {
               <Route path="/kanban" element={<KanbanBoard />} />
               <Route path="/timeline" element={<TimelineGantt />} />
               <Route path="/team" element={<TeamRedirect />} />
+              <Route path="/teams" element={<TeamPage />} />
               <Route path="/teams/:id" element={<TeamDetailPage />} />
               <Route path="/teams/:teamId/members" element={<TeamMembers />} />
               <Route path="/teams/:id/collaborate" element={<TeamCollaborate />} />
@@ -91,11 +93,13 @@ function App() {
 
             {/* Admin Portal Routes — separate layout */}
             <Route element={<AdminLayout />}>
-              <Route path="/admin" element={<Navigate to="/admin/upload" replace />} />
+              <Route path="/admin" element={<Navigate to="/admin/directory" replace />} />
+              <Route path="/admin/directory" element={<AdminDirectory />} />
               <Route path="/admin/upload" element={<AdminUpload />} />
               <Route path="/admin/team-trends" element={<AdminTeamTrends />} />
               <Route path="/admin/student-trends" element={<AdminStudentTrends />} />
               <Route path="/admin/chat" element={<AdminChat />} />
+              <Route path="/admin/ai-assistant" element={<Navigate to="/admin/chat" replace />} />
               <Route path="/admin/users" element={<UserManagement />} />
               <Route path="/admin/teams" element={<TeamManagement />} />
               <Route path="/admin/projects" element={<ProjectManagement />} />

@@ -8,6 +8,7 @@ export interface AuthUser {
   organizationId?: string | null;
   teamId?: string | null;
   regNo?: string | null;
+  githubUsername?: string | null;
   year?: string | null;
   department?: string | null;
   deptCode?: string | null;

@@ -10,6 +10,7 @@ router.post('/login', AuthController.login);
 
 // Protected routes
 router.get('/me', authGuard, AuthController.me as any);
+router.patch('/github-username', authGuard, AuthController.updateGithubUsername as any);
 router.get('/users', authGuard, AuthController.getUsers as any);
 
 export { router as authRoutes };

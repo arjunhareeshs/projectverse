@@ -76,7 +76,9 @@ export const AllProjects: React.FC = () => {
       const res = await api.post(`/projects/catalog/${projectId}/select`, {
         teamMembers,
       });
-      navigate('/dashboard');
+      const newProjId = res.data?.id || res.data?.projectId || projectId;
+      window.dispatchEvent(new CustomEvent('pv:refresh', { detail: { type: 'project-selected' } }));
+      navigate(`/projects/${newProjId}`);
     } catch (err: any) {
       setSelectError(err.response?.data?.message || 'Failed to select project');
     } finally {

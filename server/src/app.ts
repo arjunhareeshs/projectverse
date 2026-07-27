@@ -16,6 +16,7 @@ import { healthRoutes } from './routes/health.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { internalRoutes } from './modules/internal/internal.routes';
 import { githubRoutes } from './modules/github/github.routes';
+import { lifecycleRoutes } from './modules/lifecycle/lifecycle.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
@@ -33,6 +34,14 @@ export function createApp() {
   app.use(cors(corsOptions));
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
+  // express.json() skips parsing (leaves req.body undefined) when a request has no
+  // Content-Type: application/json body — e.g. axios.post(url) with no second arg.
+  // Routes that do `const { x } = req.body` or `schema.safeParse(req.body)` then throw/400
+  // on a perfectly valid "no options" call. Default it to {} so those routes see an empty object.
+  app.use((req, _res, next) => {
+    if (req.body === undefined) req.body = {};
+    next();
+  });
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -48,6 +57,15 @@ export function createApp() {
   app.use('/api/admin', adminRoutes);
   app.use('/api/internal', internalRoutes);
   app.use('/api/github', githubRoutes);
+  app.use('/api/lifecycle', lifecycleRoutes);
+
+  // This is a JSON API with no root page of its own — the actual app lives
+  // on the frontend dev server (http://localhost:7333). Anyone landing here
+  // directly (typo, stale bookmark, address-bar autocomplete) gets a clear
+  // JSON message instead of Express's default HTML 404 page.
+  app.use((_req, res) => {
+    res.status(404).json({ message: 'Not found. This is the API server — the app is at http://localhost:7333' });
+  });
 
   app.use(errorHandler);
 

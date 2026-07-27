@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   LogOut,
   Users,
+  FileText,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
@@ -17,10 +18,12 @@ import { logout } from '../features/auth/authSlice';
 import { adminService } from '../services/admin.service';
 
 const adminNav = [
+  { icon: Users, label: 'Directory', to: '/admin/directory' },
+  { icon: FileText, label: 'Execution Docs', to: '/admin/documents' },
   { icon: Upload, label: 'Upload', to: '/admin/upload' },
   { icon: TrendingUp, label: 'Team Trends', to: '/admin/team-trends' },
   { icon: GraduationCap, label: 'Student Trends', to: '/admin/student-trends' },
-  { icon: MessageSquare, label: 'Chat', to: '/admin/chat' },
+  { icon: MessageSquare, label: 'AI Assistant', to: '/admin/chat' },
 ];
 
 interface Stats {

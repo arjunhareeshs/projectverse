@@ -1,9 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useAppSelector } from '../app/hooks';
 import { Sparkles, Send, CheckCircle, X, ArrowLeft, Bot, User as UserIcon } from 'lucide-react';
 import { TeamMemberSelect } from '../components/projects/TeamMemberSelect';
+import { lifecycleService } from '../services/lifecycle.service';
+import { IntakeWizard } from '../components/lifecycle/IntakeWizard';
+import { ProjectCategory } from '../types/projectLog';
 
 type ChatRole = 'bot' | 'user';
 
@@ -27,6 +30,7 @@ interface CatalogTreeNode {
 interface ProblemStatement {
   id: string;
   name: string;
+  shortName?: string | null;
   problemStatement: string;
   domain: string;
   sector: string | null;
@@ -38,6 +42,7 @@ interface ProblemStatement {
 }
 
 type Phase =
+  | 'projectCategory'
   | 'category'
   | 'domain'
   | 'subdomain'
@@ -93,10 +98,11 @@ export const ProjectSelectionChat: React.FC = () => {
   const user = useAppSelector((s) => s.auth.user);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [phase, setPhase] = useState<Phase>('category');
+  const [phase, setPhase] = useState<Phase>('projectCategory');
   const [backStack, setBackStack] = useState<Phase[]>([]);
   const [tree, setTree] = useState<CatalogTreeNode[]>([]);
 
+  const [projectCategory, setProjectCategory] = useState<ProjectCategory>('MINI');
   const [category, setCategory] = useState<string | null>(null);
   const [domain, setDomain] = useState<string | null>(null);
   const [subdomain, setSubdomain] = useState<string | null>(null);
@@ -123,6 +129,9 @@ export const ProjectSelectionChat: React.FC = () => {
   const [repoLink, setRepoLink] = useState('');
   const [selecting, setSelecting] = useState(false);
 
+  const [showIntakeWizard, setShowIntakeWizard] = useState(false);
+  const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -139,7 +148,7 @@ export const ProjectSelectionChat: React.FC = () => {
 
   const didInit = useRef(false);
 
-  // Kick things off with the hardcoded, static greeting — not an LLM call.
+  // Kick things off with category-first step — Mini, Final Year, Research
   useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
@@ -151,11 +160,11 @@ export const ProjectSelectionChat: React.FC = () => {
         console.error('Failed to load catalog tree', err);
       }
       addBotMessage(
-        "Hi! You're here to select a new project. What kind of project would you like to explore?",
+        "What are you planning to build?",
         [
-          { label: 'Hardware', value: 'Hardware' },
-          { label: 'Software', value: 'Software' },
-          { label: 'Hardware & Software', value: 'Hardware & Software' },
+          { label: 'Mini Project', value: 'MINI' },
+          { label: 'Final Year Project', value: 'FINAL_YEAR' },
+          { label: 'Research Project', value: 'RESEARCH' },
         ],
       );
     })();
@@ -163,6 +172,27 @@ export const ProjectSelectionChat: React.FC = () => {
   }, []);
 
   const pushBack = (from: Phase) => setBackStack((prev) => [...prev, from]);
+
+  const handleProjectCategorySelect = async (opt: Option) => {
+    addUserMessage(opt.label);
+    const cat = opt.value as ProjectCategory;
+    setProjectCategory(cat);
+    try {
+      await lifecycleService.startCatalogSession(cat);
+    } catch (err) {
+      console.error('Failed to start catalog session', err);
+    }
+    pushBack('projectCategory');
+    setPhase('category');
+    addBotMessage(
+      `Great — ${opt.label}! What kind of project focus would you like to explore?`,
+      [
+        { label: 'Hardware', value: 'Hardware' },
+        { label: 'Software', value: 'Software' },
+        { label: 'Hardware & Software', value: 'Hardware & Software' },
+      ],
+    );
+  };
 
   const handleCategorySelect = (opt: Option) => {
     addUserMessage(opt.label);
@@ -217,6 +247,10 @@ export const ProjectSelectionChat: React.FC = () => {
   };
 
   const handleProblemPick = (ps: ProblemStatement) => {
+    // Guard against double-clicks / stray re-clicks re-firing this while the
+    // card list is still visible — without this, a second click re-adds the
+    // same "Do you like this problem statement?" prompt.
+    if (selectedTemplate || busy) return;
     addUserMessage(ps.name || ps.shortName || ps.problemId || 'Selected statement');
     setSelectedTemplate(ps);
     addBotMessage(
@@ -243,13 +277,11 @@ export const ProjectSelectionChat: React.FC = () => {
       setMentorHistory([{ role: 'assistant', content: reply }]);
       setChecklist(res.data.checklist || {});
       setReadinessScore(res.data.readinessScore || 0);
-      addBotMessage(
-        `Nice pick! Difficulty: ${ps.difficultyLevel ?? 'N/A'}. ${reply}`,
-      );
+      addBotMessage(reply);
     } catch (err) {
       console.error('Mentor start failed', err);
       addBotMessage(
-        "Let's talk through your plan. What's your main approach to implementing this?",
+        "Great choice! Let me help you understand this problem statement step by step. Do you have any initial thoughts about it, or would you like me to explain what it's about?",
       );
     } finally {
       setBusy(false);
@@ -259,6 +291,7 @@ export const ProjectSelectionChat: React.FC = () => {
   const handlePostPickOption = (value: string) => {
     if (value === 'accept' && selectedTemplate) {
       addUserMessage("Yes, let's discuss it");
+      pushBack('problemList');
       startMentor(selectedTemplate);
       return;
     }
@@ -279,7 +312,21 @@ export const ProjectSelectionChat: React.FC = () => {
 
   const goBackTo = (target: Phase) => {
     setInputEnabled(false);
-    if (target === 'domain') {
+    if (target === 'projectCategory') {
+      setCategory(null);
+      setDomain(null);
+      setSubdomain(null);
+      setSelectedTemplate(null);
+      setPhase('projectCategory');
+      addBotMessage(
+        "What are you planning to build?",
+        [
+          { label: 'Mini Project', value: 'MINI' },
+          { label: 'Final Year Project', value: 'FINAL_YEAR' },
+          { label: 'Research Project', value: 'RESEARCH' },
+        ],
+      );
+    } else if (target === 'domain') {
       setSubdomain(null);
       setSelectedTemplate(null);
       const domains = tree.find((t) => t.type === category)?.domains || [];
@@ -294,7 +341,7 @@ export const ProjectSelectionChat: React.FC = () => {
       setSelectedTemplate(null);
       setPhase('category');
       addBotMessage(
-        "Let's start over. What kind of project would you like to explore?",
+        "Let's start over. What kind of project focus would you like to explore?",
         [
           { label: 'Hardware', value: 'Hardware' },
           { label: 'Software', value: 'Software' },
@@ -310,6 +357,26 @@ export const ProjectSelectionChat: React.FC = () => {
         'Which subdomain would you like instead?',
         subdomains.map((s) => ({ label: s, value: s })),
       );
+    } else if (target === 'problemList') {
+      setSelectedTemplate(null);
+      setPhase('problemList');
+      addBotMessage(
+        'Let\'s pick another problem statement.',
+      );
+    } else if (target === 'proposeConfirm') {
+      setSelectedTemplate(null);
+      setPhase('proposeConfirm');
+      addBotMessage(
+        'Shall I add this to the catalog and set it as your problem statement?',
+        [
+          { label: 'Confirm and add', value: 'confirm' },
+          { label: 'Let me revise it', value: 'revise' },
+        ],
+      );
+    } else if (target === 'mentor') {
+      setPhase('mentor');
+      setInputEnabled(true);
+      addBotMessage('Let\'s continue our discussion.');
     }
   };
 
@@ -381,6 +448,7 @@ export const ProjectSelectionChat: React.FC = () => {
         const created: ProblemStatement = res.data;
         setSelectedTemplate(created);
         addBotMessage("Added to the catalog. Let's dig into how you'll build it.");
+        pushBack('proposeConfirm');
         await startMentor(created);
       } catch (err) {
         console.error('Failed to persist proposal', err);
@@ -399,6 +467,7 @@ export const ProjectSelectionChat: React.FC = () => {
     }
     if (value === 'back-list') {
       addUserMessage('Go back to problem list');
+      setSelectedTemplate(null);
       setPhase('problemList');
       addBotMessage('Here are the problem statements again — pick one to explore:');
     }
@@ -447,10 +516,9 @@ export const ProjectSelectionChat: React.FC = () => {
       setExtractedPlan(res.data.extracted || null);
       addBotMessage(res.data.report);
       if (ready) {
+        pushBack('mentor');
         setPhase('report');
       } else {
-        // Mentor decided the discussion isn't thorough enough yet — stay in
-        // chat mode so the team can keep answering instead of a dead end.
         setInputEnabled(true);
       }
     } catch (err) {
@@ -474,13 +542,17 @@ export const ProjectSelectionChat: React.FC = () => {
     if (!selectedTemplate) return;
     setSelecting(true);
     try {
-      await api.post(`/projects/catalog/${selectedTemplate.id}/select`, {
+      const res = await api.post(`/projects/catalog/${selectedTemplate.id}/select`, {
         teamMembers,
         repoLink: repoLink.trim() || undefined,
         plan: extractedPlan || undefined,
+        category: projectCategory,
       });
-      alert('Project selected successfully and is pending approval.');
-      navigate('/dashboard');
+      setShowTeamModal(false);
+      const newProjId = res.data?.id || res.data?.projectId || selectedTemplate.id;
+      setCreatedProjectId(newProjId);
+      window.dispatchEvent(new CustomEvent('pv:refresh', { detail: { type: 'project-selected' } }));
+      setShowIntakeWizard(true);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to select project');
       setSelecting(false);
@@ -505,6 +577,7 @@ export const ProjectSelectionChat: React.FC = () => {
   };
 
   const handleOptionClick = (opt: Option) => {
+    if (phase === 'projectCategory') return handleProjectCategorySelect(opt);
     if (phase === 'category') return handleCategorySelect(opt);
     if (phase === 'domain') return handleDomainSelect(opt);
     if (phase === 'subdomain') return handleSubdomainSelect(opt);
@@ -517,9 +590,48 @@ export const ProjectSelectionChat: React.FC = () => {
     if (phase === 'mentor') return sendMentorMessage();
   };
 
+  // Determine active stage number (1..4) for progress bar
+  const currentStageIndex = useMemo(() => {
+    if (['projectCategory', 'category', 'domain', 'subdomain'].includes(phase)) return 1;
+    if (['problemList', 'proposeInput', 'proposeConfirm'].includes(phase)) return 2;
+    if (phase === 'mentor') return 3;
+    return 4; // report / team setup
+  }, [phase]);
+
   return (
-    <div className="max-w-3xl mx-auto my-8 p-6">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="max-w-6xl mx-auto my-8 p-6 space-y-6">
+      {/* Stage Progress Bar */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm border border-primary/20 shrink-0">
+            {currentStageIndex}/4
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Project Selection Journey</h2>
+            <p className="text-xs text-gray-500">Guided engineering stage flow</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 text-xs font-semibold">
+          <div className={`px-3 py-1.5 rounded-full border transition-all ${currentStageIndex >= 1 ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+            1. Category & Domain
+          </div>
+          <span className="text-gray-300">→</span>
+          <div className={`px-3 py-1.5 rounded-full border transition-all ${currentStageIndex >= 2 ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+            2. Problem Selection
+          </div>
+          <span className="text-gray-300">→</span>
+          <div className={`px-3 py-1.5 rounded-full border transition-all ${currentStageIndex >= 3 ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+            3. AI Mentor Discussion
+          </div>
+          <span className="text-gray-300">→</span>
+          <div className={`px-3 py-1.5 rounded-full border transition-all ${currentStageIndex >= 4 ? 'bg-primary text-white border-primary' : 'bg-gray-50 text-gray-400 border-gray-200'}`}>
+            4. Team Setup
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <Sparkles className="w-6 h-6 text-primary" />
@@ -529,7 +641,7 @@ export const ProjectSelectionChat: React.FC = () => {
             Chat through category, domain and subdomain to land on a problem statement.
           </p>
         </div>
-        {backStack.length > 0 && phase !== 'mentor' && phase !== 'report' && (
+        {backStack.length > 0 && (
           <button
             onClick={handleGlobalBack}
             className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-gray-800"
@@ -539,182 +651,218 @@ export const ProjectSelectionChat: React.FC = () => {
         )}
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col h-[65vh]">
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`flex items-start gap-2 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}
-              >
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                    m.role === 'user' ? 'bg-primary text-white' : 'bg-indigo-100 text-indigo-600'
-                  }`}
-                >
-                  {m.role === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                </div>
-                <div>
-                  <div
-                    className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap ${
-                      m.role === 'user'
-                        ? 'bg-primary text-white rounded-tr-sm'
-                        : 'bg-gray-100 text-gray-800 rounded-tl-sm'
-                    }`}
-                  >
-                    {m.text}
-                  </div>
-                  {m.options && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {m.options.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => handleOptionClick(opt)}
-                          disabled={busy}
-                          className="text-xs font-semibold px-3 py-1.5 rounded-full border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition disabled:opacity-50"
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {phase === 'problemList' && problems.length > 0 && (
-            <div className="space-y-3">
-              {problems.map((ps) => {
-                const isFull = (ps._count?.childProjects || 0) >= 4;
-                return (
-                  <button
-                    key={ps.id}
-                    disabled={isFull || busy}
-                    onClick={() => handleProblemPick(ps)}
-                    className={`w-full text-left p-4 rounded-xl border transition ${
-                      isFull
-                        ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
-                        : 'border-gray-200 hover:border-primary/40 hover:bg-primary/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide">
-                        {ps.problemId}
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide">
-                        Difficulty {ps.difficultyLevel}
-                      </span>
-                    </div>
-                    <div className="font-semibold text-gray-900 text-sm mb-1">{ps.name}</div>
-                    <div className="text-xs text-gray-500 line-clamp-2">{ps.problemStatement}</div>
-                  </button>
-                );
-              })}
-              <button
-                onClick={() =>
-                  handlePostPickOption('propose')
-                }
-                className="text-xs font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-4"
-              >
-                None of these — propose a new problem statement
-              </button>
-            </div>
-          )}
-
+      <div className={`grid grid-cols-1 ${ (phase === 'mentor' || phase === 'report') ? 'lg:grid-cols-[1fr_340px]' : '' } gap-6 items-start`}>
+        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm flex flex-col h-[65vh]">
+          {/* Compact mobile readiness bar during mentor phase */}
           {phase === 'mentor' && (
-            <div className="pt-2 space-y-3">
-              <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                    Discussion readiness
-                  </span>
-                  <span className="text-xs font-bold text-primary">{readinessScore}%</span>
-                </div>
-                <div className="h-1.5 w-full rounded-full bg-gray-200 overflow-hidden mb-3">
+            <div className="lg:hidden p-3 border-b border-gray-100 bg-gray-50/80 flex items-center justify-between">
+              <div className="flex items-center gap-2 flex-1 mr-3">
+                <span className="text-xs font-bold text-gray-700">Readiness</span>
+                <div className="h-1.5 flex-1 max-w-[120px] rounded-full bg-gray-200 overflow-hidden">
                   <div
                     className="h-full rounded-full bg-primary transition-all"
                     style={{ width: `${Math.min(100, Math.max(0, readinessScore))}%` }}
                   />
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {CHECKLIST_DIMENSIONS.map((d) => (
-                    <span
-                      key={d.id}
-                      className={`text-[10px] font-semibold px-2 py-1 rounded-full border ${
-                        checklist[d.id]
-                          ? 'border-green-300 bg-green-50 text-green-700'
-                          : 'border-gray-200 bg-white text-gray-400'
-                      }`}
-                    >
-                      {checklist[d.id] ? '✓ ' : ''}
-                      {d.label}
-                    </span>
-                  ))}
-                </div>
+                <span className="text-xs font-bold text-primary">{readinessScore}%</span>
               </div>
               <button
                 onClick={requestReport}
                 disabled={busy}
-                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition disabled:opacity-50"
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition disabled:opacity-50 shrink-0"
               >
-                I'm ready — generate readiness report
+                Report
               </button>
             </div>
           )}
 
-          {phase === 'report' && readyToSelect && (
-            <div className="pt-2">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-4">
+            {messages.map((m) => (
+              <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`flex items-start gap-2 max-w-[85%] ${m.role === 'user' ? 'flex-row-reverse' : ''}`}
+                >
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                      m.role === 'user' ? 'bg-primary text-white' : 'bg-indigo-100 text-indigo-600'
+                    }`}
+                  >
+                    {m.role === 'user' ? <UserIcon className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <div
+                      className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap ${
+                        m.role === 'user'
+                          ? 'bg-primary text-white rounded-tr-sm'
+                          : 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                      }`}
+                    >
+                      {m.text}
+                    </div>
+                    {m.options && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {m.options.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => handleOptionClick(opt)}
+                            disabled={busy}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-full border border-primary/30 text-primary bg-primary/5 hover:bg-primary/10 transition disabled:opacity-50"
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {phase === 'problemList' && problems.length > 0 && !selectedTemplate && (
+              <div className="space-y-3">
+                {problems.map((ps) => {
+                  const isFull = (ps._count?.childProjects || 0) >= 4;
+                  return (
+                    <button
+                      key={ps.id}
+                      disabled={isFull || busy}
+                      onClick={() => handleProblemPick(ps)}
+                      className={`w-full text-left p-4 rounded-xl border transition ${
+                        isFull
+                          ? 'border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed'
+                          : 'border-gray-200 hover:border-primary/40 hover:bg-primary/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-600 uppercase tracking-wide">
+                          {ps.problemId}
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-700 uppercase tracking-wide">
+                          Difficulty {ps.difficultyLevel}
+                        </span>
+                      </div>
+                      <div className="font-semibold text-gray-900 text-sm mb-1">{ps.name}</div>
+                      <div className="text-xs text-gray-500 line-clamp-2">{ps.problemStatement}</div>
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() =>
+                    handlePostPickOption('propose')
+                  }
+                  className="text-xs font-semibold text-gray-500 hover:text-gray-800 underline underline-offset-4"
+                >
+                  None of these — propose a new problem statement
+                </button>
+              </div>
+            )}
+
+            {phase === 'report' && readyToSelect && (
+              <div className="pt-2">
+                <button
+                  onClick={handleFinalSelect}
+                  className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm hover:bg-primary/90"
+                >
+                  <CheckCircle className="w-4.5 h-4.5" /> Select This Project
+                </button>
+              </div>
+            )}
+
+            {busy && <div className="text-xs text-gray-400 pl-9">Thinking…</div>}
+          </div>
+
+          {(phase === 'proposeInput' || phase === 'mentor') && (
+            <div className="border-t border-gray-100 p-4 flex items-center gap-2">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !busy) {
+                    if (phase === 'proposeInput') {
+                      setProposalDraft(inputValue);
+                      submitProposal();
+                    } else {
+                      handleSend();
+                    }
+                  }
+                }}
+                disabled={!inputEnabled || busy}
+                placeholder={
+                  phase === 'proposeInput'
+                    ? 'Describe your problem statement idea...'
+                    : 'Tell your mentor about your plan...'
+                }
+                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 text-sm disabled:opacity-50"
+              />
               <button
-                onClick={handleFinalSelect}
-                className="flex items-center gap-2 bg-primary text-white px-5 py-2.5 rounded-xl font-semibold shadow-sm hover:bg-primary/90"
-              >
-                <CheckCircle className="w-4.5 h-4.5" /> Select This Project
-              </button>
-            </div>
-          )}
-
-          {busy && <div className="text-xs text-gray-400 pl-9">Thinking…</div>}
-        </div>
-
-        {(phase === 'proposeInput' || phase === 'mentor') && (
-          <div className="border-t border-gray-100 p-4 flex items-center gap-2">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !busy) {
+                onClick={() => {
                   if (phase === 'proposeInput') {
                     setProposalDraft(inputValue);
                     submitProposal();
                   } else {
                     handleSend();
                   }
-                }
-              }}
-              disabled={!inputEnabled || busy}
-              placeholder={
-                phase === 'proposeInput'
-                  ? 'Describe your problem statement idea...'
-                  : 'Tell your mentor about your plan...'
-              }
-              className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 text-sm disabled:opacity-50"
-            />
-            <button
-              onClick={() => {
-                if (phase === 'proposeInput') {
-                  setProposalDraft(inputValue);
-                  submitProposal();
-                } else {
-                  handleSend();
-                }
-              }}
-              disabled={!inputEnabled || busy || !inputValue.trim()}
-              className="p-2.5 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
+                }}
+                disabled={!inputEnabled || busy || !inputValue.trim()}
+                className="p-2.5 rounded-xl bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Side Panel for Discussion Readiness */}
+        {(phase === 'mentor' || phase === 'report') && (
+          <aside className="hidden lg:block sticky top-6 bg-white border border-gray-200 rounded-2xl shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">
+                Discussion Readiness
+              </span>
+              <span className="text-sm font-extrabold text-primary">{readinessScore}%</span>
+            </div>
+
+            <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, readinessScore))}%` }}
+              />
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">
+                Required Topics
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {CHECKLIST_DIMENSIONS.map((d) => (
+                  <span
+                    key={d.id}
+                    className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                      checklist[d.id]
+                        ? 'border-green-300 bg-green-50 text-green-700'
+                        : 'border-gray-200 bg-gray-50 text-gray-400'
+                    }`}
+                  >
+                    {checklist[d.id] ? '✓ ' : ''}
+                    {d.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {phase === 'mentor' && (
+              <div className="pt-2 border-t border-gray-100">
+                <button
+                  onClick={requestReport}
+                  disabled={busy}
+                  className="w-full text-xs font-bold px-4 py-2.5 rounded-xl border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 transition shadow-2xs disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" /> Generate Readiness Report
+                </button>
+              </div>
+            )}
+          </aside>
         )}
       </div>
 
@@ -838,6 +986,21 @@ export const ProjectSelectionChat: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showIntakeWizard && createdProjectId && (
+        <IntakeWizard
+          projectId={createdProjectId}
+          category={projectCategory}
+          onComplete={() => {
+            setShowIntakeWizard(false);
+            navigate(`/projects/${createdProjectId}`);
+          }}
+          onClose={() => {
+            setShowIntakeWizard(false);
+            navigate(`/projects/${createdProjectId}`);
+          }}
+        />
       )}
     </div>
   );

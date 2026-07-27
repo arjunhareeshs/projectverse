@@ -1,0 +1,462 @@
+import { Request, Response } from 'express';
+import { StatusCodes } from 'http-status-codes';
+import { prisma } from '../../shared/database';
+import { projectLogService } from './projectLog.service';
+import { dailyLogService } from './dailyLog.service';
+import { intakeService } from './intake.service';
+import { docGeneratorEngine } from './engines/docGenerator.engine';
+import { evaluationEngine } from './engines/evaluation.engine';
+import { mentorEngine } from './engines/mentor.engine';
+import { renderDocPdfBuffer } from './render/docPdf';
+import { intakeSchema, dailyLogSchema, durationCheckSchema, suggestMembersSchema, mentorAskSchema } from './lifecycle.schemas';
+
+/**
+ * Access guard for project-scoped lifecycle endpoints (Overview §5).
+ * Admins may access any project; students only projects whose team they belong
+ * to (either as the team owner or as a ProjectMember). Returns false → 403.
+ */
+async function userCanAccessProject(user: any, projectId: string): Promise<boolean> {
+  if (!user) return false;
+  if (user.role === 'ADMIN') return true;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { teamId: true },
+  });
+  if (!project) return false;
+
+  if (project.teamId && user.teamId && project.teamId === user.teamId) return true;
+
+  const membership = await prisma.projectMember.findFirst({
+    where: { projectId, userId: user.id },
+    select: { id: true },
+  });
+  return Boolean(membership);
+}
+
+export class LifecycleController {
+  async handleIntake(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const parsed = intakeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid intake payload', errors: parsed.error.issues });
+        return;
+      }
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const result = await intakeService.handleIntakeStep(projectId, actorUserId, parsed.data);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async checkDuration(req: Request, res: Response): Promise<void> {
+    try {
+      const parsed = durationCheckSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+        return;
+      }
+      const { months, category, title } = parsed.data;
+      const result = await mentorEngine.checkDurationAdvisory(months, category, title);
+      res.status(StatusCodes.OK).json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async suggestMembers(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const parsed = suggestMembersSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+        return;
+      }
+      const { desiredCount, requiredSkills } = parsed.data;
+      const result = await mentorEngine.suggestMembers(projectId, desiredCount, requiredSkills);
+      res.status(StatusCodes.OK).json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async getLogState(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const state = await projectLogService.getState(projectId);
+      if (!state) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Project log state not found' });
+        return;
+      }
+      res.status(StatusCodes.OK).json(state);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async getEvents(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const { cursor, limit, types } = req.query;
+      const typeList = types ? (types as string).split(',') : undefined;
+      const limitNum = limit ? parseInt(limit as string, 10) : undefined;
+
+      const result = await projectLogService.getEvents(projectId, {
+        cursor: cursor as string,
+        limit: limitNum,
+        types: typeList,
+      });
+      res.status(StatusCodes.OK).json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async generateDocument(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const result = await docGeneratorEngine.generateDocument(projectId, actorUserId);
+      res.status(StatusCodes.OK).json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({ message: err.message });
+    }
+  }
+
+  async getDocument(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const requestedVersion = req.query.version ? parseInt(req.query.version as string, 10) : undefined;
+
+      // Always fetch all version numbers for the version selector
+      const allDocs = await prisma.executionDocument.findMany({
+        where: { projectId },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      });
+      const allVersions = allDocs.map((d) => d.version);
+
+      // Fetch the specific version or the latest
+      const doc = requestedVersion
+        ? await prisma.executionDocument.findFirst({ where: { projectId, version: requestedVersion } })
+        : allDocs.length > 0
+          ? await prisma.executionDocument.findFirst({ where: { projectId }, orderBy: { version: 'desc' } })
+          : null;
+
+      if (!doc) {
+        res.status(StatusCodes.OK).json({
+          version: 0,
+          doc: null,
+          allVersions: [],
+          generated: false,
+          message: 'Execution document not generated yet',
+        });
+        return;
+      }
+      res.status(StatusCodes.OK).json({
+        version: doc.version,
+        doc: doc.content,
+        allVersions,
+        generatedAt: doc.createdAt,
+      });
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+
+  async downloadDocument(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const format = (req.query.format as string) || 'md';
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      const doc = await prisma.executionDocument.findFirst({
+        where: { projectId },
+        orderBy: { version: 'desc' },
+      });
+
+      if (!doc) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Execution document not generated yet' });
+        return;
+      }
+
+      const sanitizeTitle = (project?.name || 'execution-plan').toLowerCase().replace(/[^a-z0-9]/g, '-');
+      const filename = `${sanitizeTitle}-v${doc.version}.${format}`;
+
+      if (format === 'pdf') {
+        const pdfBuffer = await renderDocPdfBuffer(doc.content as any, project?.name || 'Project Execution Plan');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(pdfBuffer);
+      } else {
+        res.setHeader('Content-Type', 'text/markdown');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(doc.markdown);
+      }
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async upsertDailyLog(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User ID required' });
+        return;
+      }
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const parsed = dailyLogSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid daily log payload', errors: parsed.error.issues });
+        return;
+      }
+      const log = await dailyLogService.upsertDailyLog(projectId, userId, parsed.data);
+      res.status(StatusCodes.OK).json(log);
+    } catch (err: any) {
+      if (err.message.includes('older than 2 days')) {
+        res.status(StatusCodes.CONFLICT).json({ message: err.message });
+        return;
+      }
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async getDailyLogs(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const { from, to, userId } = req.query;
+      const logs = await dailyLogService.getDailyLogs(projectId, {
+        from: from as string,
+        to: to as string,
+        userId: userId as string,
+      });
+      res.status(StatusCodes.OK).json(logs);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async runEvaluation(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const { cycle } = req.body;
+      const result = await evaluationEngine.runEvaluationCycle(projectId, cycle ? parseInt(cycle, 10) : undefined);
+      res.status(StatusCodes.OK).json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async getEvaluations(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const reports = await prisma.evaluationReport.findMany({
+        where: { projectId },
+        orderBy: { cycle: 'desc' },
+        select: {
+          id: true,
+          cycle: true,
+          periodStart: true,
+          periodEnd: true,
+          createdAt: true,
+          content: true,
+        },
+      });
+
+      const summaries = reports.map((r) => {
+        const c: any = r.content;
+        return {
+          id: r.id,
+          cycle: r.cycle,
+          periodStart: r.periodStart,
+          periodEnd: r.periodEnd,
+          authenticity: c?.authenticityConfidence?.score || 0,
+          plagiarismRisk: c?.plagiarismRisk || 'LOW',
+          overall: Math.round(
+            ((c?.scopeAdherence?.score || 0) +
+              (c?.technicalProgress?.score || 0) +
+              (c?.timelineCompliance?.score || 0) +
+              (c?.memberParticipation?.score || 0) +
+              (c?.documentationQuality?.score || 0) +
+              (c?.authenticityConfidence?.score || 0)) / 6,
+          ),
+          createdAt: r.createdAt,
+        };
+      });
+
+      res.status(StatusCodes.OK).json(summaries);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async getEvaluationById(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const reportId = req.params.reportId as string;
+      const report = await prisma.evaluationReport.findFirst({
+        where: { id: reportId, projectId },
+      });
+      if (!report) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Evaluation report not found' });
+        return;
+      }
+      res.status(StatusCodes.OK).json(report);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async getMentorStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const status = await mentorEngine.getMentorStatus(projectId);
+      res.status(StatusCodes.OK).json(status);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async askMentor(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const parsed = mentorAskSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid request', errors: parsed.error.flatten() });
+        return;
+      }
+      const answer = await mentorEngine.askMentor(projectId, parsed.data.question);
+      res.status(StatusCodes.OK).json({ answer });
+    } catch (err: any) {
+      res.status(StatusCodes.OK).json({ answer: 'AI mentor is not configured or encountered an error.' });
+    }
+  }
+
+
+  async updateWorkPackageStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const wpId = req.params.wpId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { status } = req.body;
+      const result = await projectLogService.updateWorkPackageStatus(projectId, wpId, status, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async assignWorkPackage(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const wpId = req.params.wpId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { assignedTo } = req.body;
+      const result = await projectLogService.assignWorkPackage(projectId, wpId, assignedTo, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async updateMilestoneStatus(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const msId = req.params.msId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { status } = req.body;
+      const result = await projectLogService.updateMilestoneStatus(projectId, msId, status, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async changeDeadline(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const msId = req.params.msId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { dueDate, reason } = req.body;
+      const result = await projectLogService.changeDeadline(projectId, msId, dueDate, reason, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async resolveFlag(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const flagId = req.params.flagId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { note } = req.body;
+      const result = await projectLogService.resolveFlag(projectId, flagId, actorUserId, note);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async addManualNote(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { note } = req.body;
+      const result = await projectLogService.addManualNote(projectId, note, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async addMember(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const { userId, name } = req.body;
+      const result = await projectLogService.addMember(projectId, userId, name, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async removeMember(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const userId = req.params.userId as string;
+      const actorUserId = (req as any).user?.id || 'SYSTEM';
+      const result = await projectLogService.removeMember(projectId, userId, actorUserId);
+      res.status(StatusCodes.OK).json({ success: true, state: result });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+}
+
+export const lifecycleController = new LifecycleController();
+

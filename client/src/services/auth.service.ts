@@ -17,4 +17,8 @@ export const authService = {
     const response = await api.get('/auth/users');
     return response.data;
   },
+  updateGithubUsername: async (githubUsername: string | null) => {
+    const response = await api.patch('/auth/github-username', { githubUsername });
+    return response.data;
+  },
 };

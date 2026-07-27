@@ -4,7 +4,7 @@ import { verifyAccessToken } from '../config/jwt';
 import { prisma } from '../shared/database';
 
 export interface AuthenticatedRequest extends Request {
-  user?: any; // Using any for simplicity in this prototype, or type properly if User is exported from prisma
+  user?: any;
 }
 
 export async function authGuard(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -21,7 +21,6 @@ export async function authGuard(req: AuthenticatedRequest, res: Response, next: 
   try {
     const payload = verifyAccessToken(token);
     
-    // Fetch the user from the database to attach organizationId and other details
     const user = await prisma.user.findUnique({
       where: { id: payload.sub }
     });
@@ -36,4 +35,14 @@ export async function authGuard(req: AuthenticatedRequest, res: Response, next: 
   } catch (error) {
     res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Invalid access token' });
   }
+}
+
+export function requireRole(role: 'ADMIN' | 'STUDENT' | string) {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user || req.user.role !== role) {
+      res.status(StatusCodes.FORBIDDEN).json({ message: 'Forbidden: Insufficient privileges' });
+      return;
+    }
+    next();
+  };
 }

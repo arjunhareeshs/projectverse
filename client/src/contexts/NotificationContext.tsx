@@ -16,6 +16,7 @@ interface NotificationContextType {
   unreadCount: number;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  socket: Socket | null;
 }
 
 const NotificationContext = createContext<NotificationContextType>({
@@ -23,6 +24,7 @@ const NotificationContext = createContext<NotificationContextType>({
   unreadCount: 0,
   markAsRead: async () => {},
   markAllAsRead: async () => {},
+  socket: null,
 });
 
 export const useNotifications = () => useContext(NotificationContext);
@@ -111,7 +113,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     : 0;
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, socket }}>
       {children}
     </NotificationContext.Provider>
   );

@@ -1,6 +1,7 @@
 import { prisma } from '../../shared/database';
 import * as XLSX from 'xlsx';
 import bcrypt from 'bcrypt';
+import { RankingService, type TeamRankingResult, type StudentRankingResult } from '../ranking/ranking.service';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,60 @@ export interface AdminStats {
   avgProgress: number;
 }
 
+// ─── Ranking fallbacks (team/student with no computed rank yet) ──────────────
+
+function defaultTeamRanking(teamId: string, fallbackRank: number): TeamRankingResult {
+  return {
+    teamId,
+    score: 0,
+    rank: fallbackRank,
+    domain: null,
+    domainRank: null,
+    domainPercentile: null,
+    deadlineCompleteness: 0,
+    finishment: 0,
+    productivity: 0,
+    categories: { execution: 0, productivity: 0, quality: 0, collaboration: 0 },
+    githubLinked: false,
+    plagiarismRisk: null,
+    hasActivity: false,
+  };
+}
+
+function defaultStudentRanking(userId: string, fallbackRank: number): StudentRankingResult {
+  return {
+    userId,
+    score: 0,
+    rank: fallbackRank,
+    domain: null,
+    domainRank: null,
+    domainPercentile: null,
+    deadlineCompleteness: 0,
+    finishment: 0,
+    productivity: 0,
+    categories: { execution: 0, productivity: 0, quality: 0, collaboration: 0 },
+    githubLinked: false,
+    hasActivity: false,
+  };
+}
+
+function rankingToResponseShape(r: TeamRankingResult | StudentRankingResult) {
+  return {
+    totalPoints: r.score * 10,
+    score: r.score,
+    rank: r.rank,
+    domainRank: r.domainRank,
+    domainPercentile: r.domainPercentile,
+    deadlineCompleteness: r.deadlineCompleteness,
+    finishment: r.finishment,
+    productivity: r.productivity,
+    categories: r.categories,
+    githubLinked: r.githubLinked,
+    plagiarismRisk: 'plagiarismRisk' in r ? r.plagiarismRisk : null,
+    hasActivity: r.hasActivity,
+  };
+}
+
 // ─── Admin Service ────────────────────────────────────────────────────────────
 
 export class AdminService {
@@ -18,16 +73,16 @@ export class AdminService {
   // ── Stats ──────────────────────────────────────────────────────────────────
 
   static async getStats(): Promise<AdminStats> {
-    const [totalTeams, totalStudents, totalAchievements, rankings] = await Promise.all([
+    const [totalTeams, totalStudents, totalAchievements, teamRankings] = await Promise.all([
       prisma.team.count(),
       prisma.user.count({ where: { role: 'STUDENT' } }),
       prisma.adminAchievement.count(),
-      prisma.groupRanking.findMany({ select: { totalPoints: true } }),
+      RankingService.getTeamRankings(),
     ]);
 
-    const avgProgress = rankings.length > 0
-      ? Math.round(rankings.reduce((sum, r) => sum + r.totalPoints, 0) / rankings.length / 10)
-      : 58;
+    const activeRankings = teamRankings.filter((r) => r.hasActivity);
+    const sumScores = activeRankings.reduce((sum, r) => sum + r.score, 0);
+    const avgProgress = activeRankings.length > 0 ? Math.round(sumScores / activeRankings.length) : 0;
 
     return { totalTeams, totalStudents, totalAchievements, avgProgress };
   }
@@ -68,7 +123,7 @@ export class AdminService {
 
   static async getStudents(page = 1, limit = 50) {
     const skip = (page - 1) * limit;
-    const [students, total] = await Promise.all([
+    const [students, total, studentRankings] = await Promise.all([
       prisma.user.findMany({
         where: { role: 'STUDENT' },
         skip,
@@ -80,8 +135,23 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.user.count({ where: { role: 'STUDENT' } }),
+      RankingService.getStudentRankings(),
     ]);
-    return { students, total, page, limit };
+
+    const rankingMap = new Map(studentRankings.map((r) => [r.userId, r]));
+
+    const enrichedStudents = students.map((student) => {
+      const liveRank = rankingMap.get(student.id) || defaultStudentRanking(student.id, studentRankings.length + 1);
+
+      return {
+        ...student,
+        liveRanking: liveRank,
+        performanceScore: liveRank.score,
+        rank: liveRank.rank,
+      };
+    });
+
+    return { students: enrichedStudents, total, page, limit };
   }
 
   // ── Team CRUD ──────────────────────────────────────────────────────────────
@@ -130,7 +200,7 @@ export class AdminService {
 
   static async getTeams(page = 1, limit = 50) {
     const skip = (page - 1) * limit;
-    const [teams, total] = await Promise.all([
+    const [teams, total, teamRankings] = await Promise.all([
       prisma.team.findMany({
         skip,
         take: limit,
@@ -142,8 +212,22 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.team.count(),
+      RankingService.getTeamRankings(),
     ]);
-    return { teams, total, page, limit };
+
+    const rankingMap = new Map(teamRankings.map((r) => [r.teamId, r]));
+
+    const enrichedTeams = teams.map((team) => {
+      const liveRank = rankingMap.get(team.id) || defaultTeamRanking(team.id, teamRankings.length + 1);
+
+      return {
+        ...team,
+        liveRanking: liveRank,
+        ranking: rankingToResponseShape(liveRank),
+      };
+    });
+
+    return { teams: enrichedTeams, total, page, limit };
   }
 
   // ── Achievement CRUD ───────────────────────────────────────────────────────
@@ -338,33 +422,50 @@ export class AdminService {
   // ── Team Trends ────────────────────────────────────────────────────────────
 
   static async getTeamTrends() {
-    const teams = await prisma.team.findMany({
-      include: {
-        ranking: true,
-        members: { select: { id: true, fullName: true, regNo: true, ssgDomain: true } },
-        projects: { select: { id: true, name: true, description: true, status: true } },
-      },
-      orderBy: { ranking: { totalPoints: 'desc' } },
+    const [teams, teamRankings] = await Promise.all([
+      prisma.team.findMany({
+        include: {
+          ranking: true,
+          members: { select: { id: true, fullName: true, regNo: true, ssgDomain: true } },
+          projects: { select: { id: true, name: true, description: true, status: true } },
+        },
+      }),
+      RankingService.getTeamRankings(),
+    ]);
+
+    const rankingMap = new Map(teamRankings.map((r) => [r.teamId, r]));
+
+    const enrichedTeams = teams.map((team) => {
+      const r = rankingMap.get(team.id) || defaultTeamRanking(team.id, teamRankings.length + 1);
+
+      return {
+        ...team,
+        liveRanking: r,
+        ranking: rankingToResponseShape(r),
+      };
     });
 
+    // Sort by live score desc
+    enrichedTeams.sort((a, b) => b.liveRanking.score - a.liveRanking.score);
+
     // Domain-wise top teams (top 2 per domain)
-    const domainMap: Record<string, typeof teams> = {};
-    for (const team of teams) {
+    const domainMap: Record<string, typeof enrichedTeams> = {};
+    for (const team of enrichedTeams) {
       if (!team.domain) continue;
       if (!domainMap[team.domain]) domainMap[team.domain] = [];
       if (domainMap[team.domain].length < 2) domainMap[team.domain].push(team);
     }
 
     // Top 10 teams overall
-    const top10 = teams.slice(0, 10);
+    const top10 = enrichedTeams.slice(0, 10);
 
     // Unique team projects
-    const uniqueProjects = teams
-      .filter(t => t.projects.length > 0)
-      .map(t => ({
+    const uniqueProjects = enrichedTeams
+      .filter((t) => t.projects.length > 0)
+      .map((t) => ({
         ...t.projects[0],
         team: { id: t.id, name: t.name, domain: t.domain },
-        progress: t.ranking ? Math.min(100, Math.round(t.ranking.totalPoints / 10)) : 0,
+        progress: t.liveRanking.score,
         status: t.projects[0]?.status || 'planned',
       }));
 
@@ -374,22 +475,32 @@ export class AdminService {
   // ── Student Trends ─────────────────────────────────────────────────────────
 
   static async getStudentTrends() {
-    const students = await prisma.user.findMany({
-      where: { role: 'STUDENT' },
-      include: {
-        team: { select: { id: true, name: true, domain: true } },
-        userSkills: { orderBy: { totalPoints: 'desc' }, take: 3 },
-      },
-    });
+    const [students, studentRankings] = await Promise.all([
+      prisma.user.findMany({
+        where: { role: 'STUDENT' },
+        include: {
+          team: { select: { id: true, name: true, domain: true } },
+          userSkills: { orderBy: { totalPoints: 'desc' }, take: 3 },
+        },
+      }),
+      RankingService.getStudentRankings(),
+    ]);
 
-    // Score each student by rewardPoints + activityPoints
-    const scored = students.map(s => ({
-      ...s,
-      score: s.rewardPoints + s.activityPoints,
-      progress: Math.min(100, Math.round((s.rewardPoints + s.activityPoints) / 2)),
-      domain: s.ssgDomain || s.team?.domain || 'General',
-      initials: s.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
-    })).sort((a, b) => b.score - a.score);
+    const rankMap = new Map(studentRankings.map((r) => [r.userId, r]));
+
+    const scored = students.map((s) => {
+      const r = rankMap.get(s.id) || defaultStudentRanking(s.id, studentRankings.length + 1);
+
+      return {
+        ...s,
+        liveRanking: r,
+        score: r.score,
+        progress: r.score,
+        rank: r.rank,
+        domain: s.ssgDomain || s.team?.domain || 'General',
+        initials: s.fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase(),
+      };
+    }).sort((a, b) => b.score - a.score);
 
     // Domain-wise top 2 students
     const domainMap: Record<string, typeof scored> = {};
@@ -402,10 +513,8 @@ export class AdminService {
     // Top 10 students
     const top10 = scored.slice(0, 10);
 
-    // Top student projects - students who have a team with projects
-    const topWithProjects = scored
-      .filter(s => s.team)
-      .slice(0, 8);
+    // Top student projects
+    const topWithProjects = scored.filter((s) => s.team).slice(0, 8);
 
     return { domainWise: domainMap, top10, topProjects: topWithProjects };
   }
@@ -471,7 +580,6 @@ export class AdminService {
           members: { select: { id: true, fullName: true, regNo: true } },
           projects: { select: { id: true, name: true, description: true, status: true } },
         },
-        orderBy: { ranking: { totalPoints: 'desc' } },
         take: 10,
       });
       return { type: 'teams', results: teams };
@@ -498,7 +606,6 @@ export class AdminService {
       prisma.team.findMany({
         take: 5,
         include: { ranking: true, projects: { select: { name: true, status: true }, take: 1 } },
-        orderBy: { ranking: { totalPoints: 'desc' } },
       }),
       prisma.user.findMany({
         where: { role: 'STUDENT' },
@@ -510,39 +617,113 @@ export class AdminService {
     return { type: 'mixed', teams, students };
   }
 
-  // Get team detail for chat
+  // Get team detail
   static async getTeamDetail(teamId: string) {
-    return await prisma.team.findUnique({
-      where: { id: teamId },
-      include: {
-        ranking: true,
-        members: {
-          select: {
-            id: true,
-            fullName: true,
-            regNo: true,
-            ssgDomain: true,
-            rewardPoints: true,
-            activityPoints: true,
-            userSkills: { orderBy: { totalPoints: 'desc' }, take: 3 },
+    const [team, teamRankings, studentRankings] = await Promise.all([
+      prisma.team.findUnique({
+        where: { id: teamId },
+        include: {
+          ranking: true,
+          members: {
+            select: {
+              id: true,
+              fullName: true,
+              regNo: true,
+              ssgDomain: true,
+              rewardPoints: true,
+              activityPoints: true,
+              userSkills: { orderBy: { totalPoints: 'desc' }, take: 3 },
+            },
+          },
+          projects: {
+            select: { id: true, name: true, description: true, status: true, repoLink: true },
+            take: 5,
+          },
+          achievements: {
+            orderBy: { date: 'desc' },
+            take: 10,
           },
         },
-        projects: {
-          select: { id: true, name: true, description: true, status: true },
-          take: 5,
-        },
-      },
+      }),
+      RankingService.getTeamRankings(),
+      RankingService.getStudentRankings(),
+    ]);
+
+    if (!team) return null;
+
+    const studentRankMap = new Map(studentRankings.map((s) => [s.userId, s]));
+
+    const membersWithRanking = team.members.map((m) => {
+      const sr = studentRankMap.get(m.id) || defaultStudentRanking(m.id, studentRankings.length + 1);
+      return {
+        ...m,
+        liveRanking: sr,
+        performanceScore: sr.score,
+        rank: sr.rank,
+      };
     });
+
+    const liveRank = teamRankings.find((r) => r.teamId === team.id) || defaultTeamRanking(team.id, teamRankings.length + 1);
+
+    // Real peers for the "progress vs peers" comparison — other teams in the same domain.
+    let domainPeers: Array<{ id: string; name: string; score: number; isCurrent: boolean }> = [];
+    if (team.domain) {
+      const sameDomain = teamRankings
+        .filter((r) => r.domain === team.domain)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 6);
+      const peerNames = await prisma.team.findMany({
+        where: { id: { in: sameDomain.map((r) => r.teamId) } },
+        select: { id: true, name: true },
+      });
+      const nameMap = new Map(peerNames.map((t) => [t.id, t.name]));
+      domainPeers = sameDomain.map((r) => ({
+        id: r.teamId,
+        name: nameMap.get(r.teamId) || 'Team',
+        score: r.score,
+        isCurrent: r.teamId === team.id,
+      }));
+    }
+
+    return {
+      ...team,
+      members: membersWithRanking,
+      liveRanking: liveRank,
+      ranking: rankingToResponseShape(liveRank),
+      domainPeers,
+    };
   }
 
-  // Get student detail for chat
+  // Get student detail
   static async getStudentDetail(studentId: string) {
-    return await prisma.user.findUnique({
-      where: { id: studentId },
-      include: {
-        team: { select: { id: true, name: true, domain: true } },
-        userSkills: { orderBy: { totalPoints: 'desc' } },
-      },
-    });
+    const [student, liveRanking] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: studentId },
+        include: {
+          team: {
+            select: {
+              id: true,
+              name: true,
+              domain: true,
+              groupCode: true,
+              leadId: true,
+            },
+          },
+          userSkills: { orderBy: { totalPoints: 'desc' } },
+        },
+      }),
+      RankingService.getStudentRanking(studentId),
+    ]);
+
+    if (!student) return null;
+
+    const rankResult = liveRanking || defaultStudentRanking(student.id, 999);
+
+    return {
+      ...student,
+      liveRanking: rankResult,
+      performanceScore: rankResult.score,
+      rank: rankResult.rank,
+    };
   }
 }

@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useSelector } from 'react-redux';
+import { Link } from 'react-router-dom';
 import {
   FileText, Upload, Download, Eye, Trash2, Plus,
   Globe, Folder, RefreshCw, X, AlertCircle, FileCode,
-  FileImage, FileSpreadsheet, Check
+  FileImage, FileSpreadsheet, Check, Search, Filter,
+  Sparkles, ExternalLink, Layers, FolderKanban
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { documentService } from '../services/document.service';
@@ -44,6 +46,8 @@ export const Documents: React.FC = () => {
   
   // Filtering & Selection
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'file' | 'text'>('all');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -184,6 +188,13 @@ export const Documents: React.FC = () => {
     }
   }, [activeTab, selectedProjectId]);
 
+  const openModalWithContext = (dest: 'global' | 'project', projId?: string) => {
+    setDestSpace(dest);
+    if (projId) setIngestProjectId(projId);
+    else if (selectedProjectId) setIngestProjectId(selectedProjectId);
+    setModalOpen(true);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
@@ -251,7 +262,6 @@ export const Documents: React.FC = () => {
     }
   };
 
-
   const getFileIcon = (mime: string | null) => {
     if (!mime) return FileText;
     if (mime.includes('image')) return FileImage;
@@ -267,95 +277,359 @@ export const Documents: React.FC = () => {
     return `${(kb / 1024).toFixed(1)} MB`;
   };
 
+  // Processed document list (search & file-type filter)
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      // Search text
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesTitle = doc.title.toLowerCase().includes(q);
+        const matchesFile = doc.fileName?.toLowerCase().includes(q);
+        const matchesUser = doc.user?.fullName?.toLowerCase().includes(q);
+        const matchesProject = doc.project?.name?.toLowerCase().includes(q);
+        if (!matchesTitle && !matchesFile && !matchesUser && !matchesProject) return false;
+      }
+      // Type filter
+      if (typeFilter === 'file' && !doc.fileUrl) return false;
+      if (typeFilter === 'text' && doc.fileUrl) return false;
+      return true;
+    });
+  }, [documents, searchQuery, typeFilter]);
 
+  // Grouped documents for Project-Wise view
+  const projectGroupedDocs = useMemo(() => {
+    const map: Record<string, { project: ProjectOption | { id: string; name: string }; docs: DocumentItem[] }> = {};
+    
+    // Seed with known projects
+    projects.forEach((p) => {
+      map[p.id] = { project: p, docs: [] };
+    });
+
+    filteredDocuments.forEach((doc) => {
+      if (doc.projectId && doc.projectId !== 'global') {
+        if (!map[doc.projectId]) {
+          map[doc.projectId] = {
+            project: doc.project || { id: doc.projectId, name: 'Project Workspace' },
+            docs: [],
+          };
+        }
+        map[doc.projectId].docs.push(doc);
+      }
+    });
+
+    return map;
+  }, [projects, filteredDocuments]);
+
+  // Document Metrics Summary
+  const metrics = useMemo(() => {
+    const total = documents.length;
+    const globalCount = documents.filter((d) => !d.projectId || d.projectId === 'global').length;
+    const projectCount = total - globalCount;
+    return { total, globalCount, projectCount };
+  }, [documents]);
 
   return (
     <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Documents Portal</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Store, view, and organize file assets globally or project-wise.
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2.5">
+            <FileText className="h-7 w-7 text-primary" />
+            Documents Portal
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Organize, ingest, and inspect project-wise baseline documents and global file assets.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-border hover:bg-muted text-muted-foreground transition-colors"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-border hover:bg-muted text-muted-foreground transition-colors"
+            title="Refresh documents"
           >
             <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
           </button>
           <button
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 transition-colors shadow-md"
+            onClick={() => openModalWithContext(activeTab === 'project' ? 'project' : 'global')}
+            className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/95 transition-colors shadow-sm"
           >
             <Plus className="h-4 w-4" /> Ingest Document
           </button>
         </div>
       </div>
 
-      {/* Tabs & Project filter */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-px">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={cn(
-              'px-4 py-2.5 text-sm font-medium border-b-2 transition-all',
-              activeTab === 'all'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            All Docs
-          </button>
-          <button
-            onClick={() => setActiveTab('global')}
-            className={cn(
-              'px-4 py-2.5 text-sm font-medium border-b-2 transition-all',
-              activeTab === 'global'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Global Space
-          </button>
-          <button
-            onClick={() => setActiveTab('project')}
-            className={cn(
-              'px-4 py-2.5 text-sm font-medium border-b-2 transition-all',
-              activeTab === 'project'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Project-Wise
-          </button>
+      {/* Overview Stat Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Total Documents</span>
+            <span className="text-lg font-extrabold text-foreground">{metrics.total}</span>
+          </div>
         </div>
 
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center font-bold">
+            <Globe className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Global Space</span>
+            <span className="text-lg font-extrabold text-foreground">{metrics.globalCount}</span>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-border bg-card shadow-2xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
+            <FolderKanban className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Project-Wise Assets</span>
+            <span className="text-lg font-extrabold text-foreground">{metrics.projectCount}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs & Search Filter Controls */}
+      <div className="flex flex-col gap-4 border-b border-border pb-3">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          {/* Main Space Tabs */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted/50 border border-border/60">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={cn(
+                'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all',
+                activeTab === 'all'
+                  ? 'bg-card text-primary shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              All Docs ({metrics.total})
+            </button>
+            <button
+              onClick={() => setActiveTab('global')}
+              className={cn(
+                'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5',
+                activeTab === 'global'
+                  ? 'bg-card text-sky-600 shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Globe className="w-3.5 h-3.5" /> Global Space
+            </button>
+            <button
+              onClick={() => setActiveTab('project')}
+              className={cn(
+                'px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5',
+                activeTab === 'project'
+                  ? 'bg-card text-amber-600 shadow-2xs'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Folder className="w-3.5 h-3.5" /> Project-Wise
+            </button>
+          </div>
+
+          {/* Search & Type Filter Bar */}
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64">
+              <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search document title, user..."
+                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as any)}
+              className="px-3 py-1.5 text-xs rounded-xl border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="all">All Types</option>
+              <option value="text">Markdown & Text</option>
+              <option value="file">File Attachments</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Project Selector Pills (when Project-Wise tab is active) */}
         {activeTab === 'project' && (
-          <select
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="w-full sm:w-64 px-3 py-1.5 text-sm rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="">All Projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1 scrollbar-none">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 mr-1">
+              Select Project:
+            </span>
+            <button
+              onClick={() => setSelectedProjectId('')}
+              className={cn(
+                'px-3 py-1 text-xs font-semibold rounded-full border transition-all shrink-0',
+                !selectedProjectId
+                  ? 'border-amber-500 bg-amber-500/10 text-amber-600 font-bold'
+                  : 'border-border bg-card hover:bg-muted text-muted-foreground'
+              )}
+            >
+              All Projects ({metrics.projectCount})
+            </button>
+            {projects.map((p) => {
+              const pCount = documents.filter((d) => d.projectId === p.id).length;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedProjectId(p.id)}
+                  className={cn(
+                    'px-3 py-1 text-xs font-semibold rounded-full border transition-all shrink-0 flex items-center gap-1.5',
+                    selectedProjectId === p.id
+                      ? 'border-amber-500 bg-amber-500/10 text-amber-600 font-bold'
+                      : 'border-border bg-card hover:bg-muted text-muted-foreground'
+                  )}
+                >
+                  <span>{p.name}</span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-muted text-muted-foreground font-extrabold">
+                    {pCount}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
-      {/* Main Grid View */}
+      {/* Main Content Area */}
       {loading ? (
         <div className="flex items-center justify-center py-20 text-muted-foreground">
           <RefreshCw className="h-5 w-5 animate-spin mr-2" /> Loading documents...
         </div>
-      ) : documents.length === 0 ? (
+      ) : activeTab === 'project' && !selectedProjectId ? (
+        /* Grouped Project-Wise View */
+        <div className="space-y-8">
+          {Object.values(projectGroupedDocs).map(({ project, docs }) => (
+            <div key={project.id} className="space-y-3">
+              <div className="flex items-center justify-between border-b border-border pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                    <Folder className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      {project.name}
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        {docs.length} Assets
+                      </span>
+                    </h2>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openModalWithContext('project', project.id)}
+                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Asset
+                  </button>
+                  <Link
+                    to={`/projects/${project.id}?tab=document`}
+                    className="text-xs font-bold text-indigo-600 hover:underline flex items-center gap-1 ml-2"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Baseline Workspace
+                  </Link>
+                </div>
+              </div>
+
+              {docs.length === 0 ? (
+                <div className="p-6 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground">
+                  No documents ingested for {project.name} yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {docs.map((doc) => {
+                    const isFile = !!doc.fileUrl;
+                    const DocIcon = isFile ? getFileIcon(doc.mimeType) : FileText;
+                    const isCreator = doc.userId === currentUser?.id;
+                    const isAdmin = currentUser?.role === 'ADMIN';
+
+                    return (
+                      <div
+                        key={doc.id}
+                        className="group relative rounded-2xl border border-border bg-card p-4 flex flex-col gap-3 hover:shadow-md hover:border-primary/30 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border',
+                              isFile ? 'bg-info/10 text-info border-info/10' : 'bg-primary/10 text-primary border-primary/10'
+                            )}>
+                              <DocIcon className="h-4.5 w-4.5" />
+                            </span>
+                            <div className="min-w-0">
+                              <h3 className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors" title={doc.title}>
+                                {doc.title}
+                              </h3>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                by {doc.user.fullName}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                          {isFile ? (
+                            <div className="flex flex-col gap-0.5 p-2 rounded-lg bg-muted/40 font-mono text-[10px]">
+                              <div className="truncate">Name: {doc.fileName}</div>
+                              <div>Size: {formatSize(doc.fileSize)}</div>
+                            </div>
+                          ) : (
+                            doc.content || 'Empty text document.'
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-border/60 pt-2.5 text-[10px] text-muted-foreground">
+                          <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPreviewDoc(doc)}
+                              title="View Document"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => downloadDoc(doc)}
+                              title="Download"
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </button>
+                            {(isCreator || isAdmin) && (
+                              <button
+                                onClick={() => handleDelete(doc.id)}
+                                title="Delete Document"
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/20 text-rose-500 hover:bg-rose-500/10 transition-colors"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : filteredDocuments.length === 0 ? (
         <div className="rounded-2xl border border-border border-dashed bg-card p-16 text-center flex flex-col items-center justify-center gap-4">
           <span className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
             <FileText className="h-6 w-6" />
@@ -368,8 +642,9 @@ export const Documents: React.FC = () => {
           </div>
         </div>
       ) : (
+        /* Flat Grid View (All Docs / Global / Selected Project) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {documents.map((doc) => {
+          {filteredDocuments.map((doc) => {
             const isFile = !!doc.fileUrl;
             const DocIcon = isFile ? getFileIcon(doc.mimeType) : FileText;
             const isCreator = doc.userId === currentUser?.id;
@@ -378,7 +653,7 @@ export const Documents: React.FC = () => {
             return (
               <div
                 key={doc.id}
-                className="group relative rounded-2xl border border-border bg-card p-5 flex flex-col gap-4 hover:shadow-md hover:border-border/80 transition-all"
+                className="group relative rounded-2xl border border-border bg-card p-5 flex flex-col gap-4 hover:shadow-md hover:border-primary/30 transition-all"
               >
                 {/* File Metadata Row */}
                 <div className="flex items-start justify-between gap-3">

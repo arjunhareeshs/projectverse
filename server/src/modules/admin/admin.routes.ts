@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { adminController } from './admin.controller';
-import { authGuard } from '../../middleware/authGuard';
-import { requireRole } from '../../middleware/requireRole';
+import { authGuard, requireRole } from '../../middleware/authGuard';
+import { askAdminAi } from './adminAi.controller';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -11,16 +11,21 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 router.use(authGuard);
 router.use(requireRole('ADMIN'));
 
+// Admin AI Assistant
+router.post('/ai/ask', askAdminAi as any);
+
 // Stats
 router.get('/stats', adminController.getStats);
 
 // Students
 router.get('/students', adminController.getStudents);
+router.get('/students/:id', adminController.getStudentDetail);
 router.post('/students', adminController.createStudent);
 router.post('/students/bulk', upload.single('file'), adminController.bulkUploadStudents);
 
 // Teams
 router.get('/teams', adminController.getTeams);
+router.get('/teams/:id', adminController.getTeamDetail);
 router.post('/teams', adminController.createTeam);
 router.post('/teams/bulk', upload.single('file'), adminController.bulkUploadTeams);
 
@@ -37,7 +42,7 @@ router.get('/trends/students', adminController.getStudentTrends);
 router.get('/chat/sessions', adminController.getChatSessions);
 router.get('/chat/history', adminController.getChatHistory);
 router.post('/chat', adminController.saveChat);
-router.post('/chat/generate', adminController.generateChat);
+router.post('/chat/generate', askAdminAi as any);
 router.get('/chat/search', adminController.searchContext);
 router.get('/chat/teams/:id', adminController.getTeamDetail);
 router.get('/chat/students/:id', adminController.getStudentDetail);

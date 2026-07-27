@@ -1137,15 +1137,23 @@ export const TeamDetailPage: React.FC = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {projects.map((p: any) => (
-              <div key={p.id} className="rounded-2xl border border-border bg-card p-5">
+              <div
+                key={p.id}
+                onClick={() => navigate(`/projects/${p.id}`)}
+                className="rounded-2xl border border-border bg-card p-5 cursor-pointer hover:border-primary/40 hover:shadow-md transition-all"
+              >
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">MERN Stack</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    {Array.isArray(p.technologies) && p.technologies.length > 0
+                      ? p.technologies.slice(0, 3).join(' · ')
+                      : p.domain || 'Project'}
+                  </span>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{p.status}</span>
                 </div>
                 <h3 className="text-[15px] font-extrabold text-foreground">{p.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{p.description || 'No description.'}</p>
                 {editingRepoProjectId === p.id ? (
-                  <div className="flex items-center gap-1.5 mt-2">
+                  <div className="flex items-center gap-1.5 mt-2" onClick={(e) => e.stopPropagation()}>
                     <input
                       autoFocus
                       type="url"
@@ -1188,7 +1196,7 @@ export const TeamDetailPage: React.FC = () => {
                     )}
                     {isMember && (
                       <button
-                        onClick={() => { setEditingRepoProjectId(p.id); setRepoLinkDraft(p.repoLink || ''); }}
+                        onClick={(e) => { e.stopPropagation(); setEditingRepoProjectId(p.id); setRepoLinkDraft(p.repoLink || ''); }}
                         className="text-muted-foreground hover:text-primary shrink-0"
                         title="Change GitHub link"
                       >

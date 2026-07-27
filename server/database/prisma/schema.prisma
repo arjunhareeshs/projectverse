@@ -14,6 +14,12 @@ enum RoleType {
   STUDENT
 }
 
+enum ProjectCategory {
+  MINI
+  FINAL_YEAR
+  RESEARCH
+}
+
 model User {
   id              String          @id @default(cuid())
   email           String          @unique
@@ -24,6 +30,7 @@ model User {
   role            RoleType
   organizationId  String?
   teamId          String?
+  githubUsername  String?         // self-linked GitHub login, used to attribute repo contributions in ranking
   // Student profile fields (from Excel data)
   year            String?         // "I", "II", "III", "IV"
   department      String?         // "Agricultural Engineering", etc.
@@ -60,6 +67,7 @@ model User {
   adminAchievements AdminAchievement[] @relation("AchievementRecipient")
   adminChats      AdminChatHistory[] @relation("AdminChatUser")
   projectReviews  ProjectReview[]
+  dailyWorkLogs   DailyWorkLog[]
 }
 
 model Organization {
@@ -190,8 +198,13 @@ model Project {
   sprints         Sprint[]
   milestones      Milestone[]
   documents       Document[]
+  category            ProjectCategory?   // null for legacy projects
   reviews         ProjectReview[]
   githubRepo      GithubRepository?
+  projectLog      ProjectLog?
+  dailyWorkLogs   DailyWorkLog[]
+  executionDocuments ExecutionDocument[]
+  evaluationReports EvaluationReport[]
 }
 
 model ProjectMember {
@@ -587,3 +600,73 @@ model GithubSnapshot {
 
   @@index([repositoryId, capturedAt])
 }
+
+model ProjectLog {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version     Int      @default(0)
+  state       Json     // ProjectLogState
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  events      ProjectLogEvent[]
+}
+
+model ProjectLogEvent {
+  id          String     @id @default(cuid())
+  logId       String
+  log         ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  seq         Int        // monotonically increasing per log; equals state.version after apply
+  type        String     // ProjectLogEventType
+  actorUserId String     // userId | "SYSTEM" | "AI"
+  data        Json
+  note        String?
+  createdAt   DateTime   @default(now())
+
+  @@unique([logId, seq])
+  @@index([logId, type])
+}
+
+model DailyWorkLog {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date         DateTime @db.Date
+  workDone     String
+  hoursSpent   Float?
+  blockers     String?
+  evidenceUrls Json?    // string[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([projectId, userId, date])
+  @@index([projectId, date])
+}
+
+model ExecutionDocument {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version    Int
+  content    Json     // ExecutionDocContent
+  markdown   String   // rendered markdown, source of truth for download
+  createdAt  DateTime @default(now())
+
+  @@unique([projectId, version])
+}
+
+model EvaluationReport {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cycle        Int      // 1, 2, 3… (15-day cycles)
+  periodStart  DateTime
+  periodEnd    DateTime
+  content      Json     // EvaluationReportContent
+  createdAt    DateTime @default(now())
+
+  @@unique([projectId, cycle])
+}
+

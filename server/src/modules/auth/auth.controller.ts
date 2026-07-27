@@ -54,6 +54,24 @@ export class AuthController {
     }
   }
 
+  static async updateGithubUsername(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+        return;
+      }
+      const result = await AuthService.updateGithubUsername(userId, req.body);
+      res.status(StatusCodes.OK).json(result);
+    } catch (error: any) {
+      if (error instanceof ZodError) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid request', issues: error.issues });
+      } else {
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to update GitHub username' });
+      }
+    }
+  }
+
   static async getUsers(req: AuthenticatedRequest, res: Response) {
     try {
       const user = req.user;

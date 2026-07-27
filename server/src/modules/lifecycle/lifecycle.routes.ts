@@ -1,0 +1,62 @@
+import { Router } from 'express';
+import { authGuard } from '../../middleware/authGuard';
+import { requireRole } from '../../middleware/requireRole';
+import { validateBody, requireProjectAccess } from './lifecycle.middleware';
+import {
+  intakeSchema,
+  durationCheckSchema,
+  suggestMembersSchema,
+  dailyLogSchema,
+  mentorAskSchema,
+  workPackageStatusSchema,
+  workPackageAssignSchema,
+  milestoneStatusSchema,
+  deadlineChangeSchema,
+  flagResolveSchema,
+  manualNoteSchema,
+  memberAddSchema,
+} from './lifecycle.schemas';
+import { lifecycleController } from './lifecycle.controller';
+
+const router = Router();
+
+router.use(authGuard);
+
+// Intake endpoints
+router.post('/:projectId/intake', requireProjectAccess, validateBody(intakeSchema), lifecycleController.handleIntake as any);
+router.post('/:projectId/intake/duration-check', validateBody(durationCheckSchema), lifecycleController.checkDuration as any);
+router.post('/:projectId/intake/suggest-members', validateBody(suggestMembersSchema), lifecycleController.suggestMembers as any);
+
+// State & event endpoints
+router.get('/:projectId/log-state', requireProjectAccess, lifecycleController.getLogState as any);
+router.get('/:projectId/events', requireProjectAccess, lifecycleController.getEvents as any);
+
+// Operational state endpoints
+router.patch('/:projectId/work-packages/:wpId/status', requireProjectAccess, validateBody(workPackageStatusSchema), lifecycleController.updateWorkPackageStatus as any);
+router.patch('/:projectId/work-packages/:wpId/assign', requireProjectAccess, validateBody(workPackageAssignSchema), lifecycleController.assignWorkPackage as any);
+router.patch('/:projectId/milestones/:msId/status', requireProjectAccess, validateBody(milestoneStatusSchema), lifecycleController.updateMilestoneStatus as any);
+router.patch('/:projectId/milestones/:msId/deadline', requireProjectAccess, validateBody(deadlineChangeSchema), lifecycleController.changeDeadline as any);
+router.patch('/:projectId/flags/:flagId/resolve', requireProjectAccess, validateBody(flagResolveSchema), lifecycleController.resolveFlag as any);
+router.post('/:projectId/notes', requireProjectAccess, validateBody(manualNoteSchema), lifecycleController.addManualNote as any);
+router.post('/:projectId/members/add', requireProjectAccess, validateBody(memberAddSchema), lifecycleController.addMember as any);
+router.delete('/:projectId/members/:userId', requireProjectAccess, lifecycleController.removeMember as any);
+
+// Execution Document endpoints
+router.post('/:projectId/document/generate', requireProjectAccess, lifecycleController.generateDocument as any);
+router.get('/:projectId/document', requireProjectAccess, lifecycleController.getDocument as any);
+router.get('/:projectId/document/download', requireProjectAccess, lifecycleController.downloadDocument as any);
+
+// Daily work log endpoints
+router.post('/:projectId/daily-log', requireProjectAccess, validateBody(dailyLogSchema), lifecycleController.upsertDailyLog as any);
+router.get('/:projectId/daily-logs', requireProjectAccess, lifecycleController.getDailyLogs as any);
+
+// 15-day evaluation endpoints
+router.post('/:projectId/evaluation/run', requireRole('ADMIN') as any, lifecycleController.runEvaluation as any);
+router.get('/:projectId/evaluations', requireProjectAccess, lifecycleController.getEvaluations as any);
+router.get('/:projectId/evaluations/:reportId', requireProjectAccess, lifecycleController.getEvaluationById as any);
+
+// AI Mentor endpoints
+router.get('/:projectId/mentor/status', requireProjectAccess, lifecycleController.getMentorStatus as any);
+router.post('/:projectId/mentor/ask', requireProjectAccess, validateBody(mentorAskSchema), lifecycleController.askMentor as any);
+
+export const lifecycleRoutes = router;

@@ -131,7 +131,10 @@ export const teamController = {
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
       const stats = await teamService.getTeamStats(user.organizationId, pid(req));
       res.json(stats);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.message === 'Team not found') {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Team not found' });
+      }
       console.error(error);
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to fetch team stats' });
     }

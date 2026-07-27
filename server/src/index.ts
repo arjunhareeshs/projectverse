@@ -3,11 +3,13 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { bootstrapSocket } from './infrastructure/socket';
 import { logger } from './shared/logger';
+import { startEvaluationScheduler } from './modules/lifecycle/evaluation.scheduler';
 
 const app = createApp();
 const httpServer = createServer(app);
 
 bootstrapSocket(httpServer);
+startEvaluationScheduler();
 
 httpServer.listen(env.SERVER_PORT, () => {
   logger.info(`Server running on port ${env.SERVER_PORT}`);

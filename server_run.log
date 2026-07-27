@@ -1,0 +1,603 @@
+
+> @projectverse/server@0.1.0 dev
+> tsx watch src/index.ts
+
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+10:22:20 pm [tsx] change in ./src\modules\teams\team.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:18:59 am [tsx] change in ./src\modules\admin\admin.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:19:08 am [tsx] change in ./src\modules\admin\admin.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+9:19:24 am [tsx] change in ./src\modules\admin\admin.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+9:19:33 am [tsx] change in ./src\modules\admin\admin.routes.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+Login error: ZodError: [
+  {
+    "expected": "string",
+    "code": "invalid_type",
+    "path": [
+      "identifier"
+    ],
+    "message": "Invalid input: expected string, received undefined"
+  }
+]
+    at Function.login (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\auth\auth.service.ts:65:32)
+    at login (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\auth\auth.controller.ts:28:40)
+    at Layer.handleRequest (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\layer.js:152:17)
+    at next (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\route.js:157:13)
+    at Route.dispatch (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\route.js:117:3)
+    at handle (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\index.js:435:11)
+    at Layer.handleRequest (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\layer.js:152:17)
+    at C:\SSG projects\ProjectVerse\projectverse\node_modules\router\index.js:295:15
+    at processParams (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\index.js:582:12)
+    at next (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\index.js:291:5)
+10:30:09 am [tsx] unlink in ./..\node_modules\.prisma\client\default.js Restarting...
+◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[INFO] Server running on port 4000
+10:32:31 am [tsx] unlink in ./..\node_modules\.prisma\client\default.js Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+10:32:40 am [tsx] change in ./src\modules\auth\auth.service.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[INFO] Server running on port 4000
+10:32:48 am [tsx] change in ./src\modules\auth\auth.service.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[INFO] Server running on port 4000
+10:32:53 am [tsx] change in ./src\modules\auth\auth.service.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[INFO] Server running on port 4000
+10:33:00 am [tsx] change in ./src\modules\auth\auth.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[INFO] Server running on port 4000
+10:33:05 am [tsx] change in ./src\modules\auth\auth.routes.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ suppress logs { quiet: true }
+[INFO] Server running on port 4000
+10:35:21 am [tsx] change in ./src\modules\ranking\ranking.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+10:37:18 am [tsx] change in ./src\modules\ranking\ranking.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+10:37:38 am [tsx] change in ./src\modules\ranking\ranking.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+10:38:38 am [tsx] change in ./src\modules\admin\admin.service.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[INFO] Server running on port 4000
+10:38:52 am [tsx] change in ./src\modules\admin\admin.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+10:39:06 am [tsx] change in ./src\modules\admin\admin.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+10:39:20 am [tsx] change in ./src\modules\admin\admin.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+10:39:32 am [tsx] change in ./src\modules\admin\admin.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+10:39:52 am [tsx] change in ./src\modules\admin\admin.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+10:40:02 am [tsx] change in ./src\modules\admin\admin.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ suppress logs { quiet: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+11:04:14 am [tsx] change in ./src\app.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[INFO] Server running on port 4000
+Login error: Error: Invalid credentials
+    at Function.login (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\auth\auth.service.ts:85:13)
+    at async login (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\auth\auth.controller.ts:28:22)
+Groq chatJSON error: Request failed with status code 429
+11:17:12 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ suppress logs { quiet: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+11:17:40 am [tsx] change in ./src\modules\admin\admin.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+11:17:45 am [tsx] change in ./src\modules\lifecycle\lifecycle.schemas.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[INFO] Server running on port 4000
+11:17:51 am [tsx] change in ./src\modules\lifecycle\intake.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+11:18:00 am [tsx] change in ./src\modules\lifecycle\lifecycle.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[INFO] Server running on port 4000
+11:18:04 am [tsx] change in ./src\modules\admin\admin.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\route.js:228
+        throw new TypeError('argument handler must be a function')
+              ^
+
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\index.js:448:19)
+    at multer (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\admin\admin.routes.ts:45:8)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\admin\admin.routes.ts:50:28)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
+
+Node.js v20.19.5
+11:18:33 am [tsx] change in ./src\modules\admin\admin.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\route.js:228
+        throw new TypeError('argument handler must be a function')
+              ^
+
+TypeError: argument handler must be a function
+    at Route.<computed> [as post] (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\lib\route.js:228:15)
+    at Router.<computed> [as post] (C:\SSG projects\ProjectVerse\projectverse\node_modules\router\index.js:448:19)
+    at multer (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\admin\admin.routes.ts:45:8)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\modules\admin\admin.routes.ts:50:28)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at Module.require (node:internal/modules/cjs/loader:1289:19)
+    at require (node:internal/modules/helpers:182:18)
+
+Node.js v20.19.5
+11:18:44 am [tsx] change in ./src\modules\admin\admin.routes.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+11:19:13 am [tsx] change in ./src\modules\admin\admin.routes.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[INFO] Server running on port 4000
+Groq chatJSON error: Request failed with status code 429
+Groq chatJSON error: Request failed with status code 429
+Groq chatJSON error: Request failed with status code 429
+11:39:58 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+11:42:11 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[INFO] Server running on port 4000
+11:42:21 am [tsx] change in ./src\modules\lifecycle\prompts\adminAssistant.prompt.ts Restarting...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+Groq chat error: Request failed with status code 429
+Groq chat error: Request failed with status code 429
+Groq chat error: Request failed with status code 429
+11:47:23 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+11:47:31 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+11:47:38 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+11:47:49 am [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+Groq chatJSON error: Request failed with status code 429
+Groq chatJSON error: Request failed with status code 429
+Groq chatJSON error: Request failed with status code 429
+1:23:17 pm [tsx] change in ./src\modules\lifecycle\render\docPdf.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+1:23:20 pm [tsx] change in ./src\modules\lifecycle\lifecycle.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+1:23:22 pm [tsx] change in ./src\modules\lifecycle\prompts\adminAssistant.prompt.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[INFO] Server running on port 4000
+1:23:33 pm [tsx] change in ./src\modules\lifecycle\prompts\mentor.prompt.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+1:24:18 pm [tsx] change in ./src\modules\lifecycle\render\docPdf.ts Rerunning...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+[INFO] Server running on port 4000
+1:36:54 pm [tsx] change in ./src\modules\lifecycle\render\docPdf.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+1:39:38 pm [tsx] change in ./src\modules\lifecycle\render\docPdf.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+[INFO] Server running on port 4000
+2:13:52 pm [tsx] change in ./src\modules\projects\project.catalog.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+2:14:11 pm [tsx] change in ./src\modules\lifecycle\prompts\mentor.prompt.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+2:14:29 pm [tsx] change in ./src\modules\lifecycle\prompts\adminAssistant.prompt.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ suppress logs { quiet: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+2:21:52 pm [tsx] change in ./src\modules\projects\project.catalog.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+2:22:20 pm [tsx] change in ./src\modules\projects\project.catalog.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+2:23:11 pm [tsx] change in ./src\modules\lifecycle\prompts\mentor.prompt.ts Restarting...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+2:23:42 pm [tsx] change in ./src\modules\lifecycle\prompts\adminAssistant.prompt.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5

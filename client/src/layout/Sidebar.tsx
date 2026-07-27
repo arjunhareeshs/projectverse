@@ -15,11 +15,13 @@ import {
   ShieldCheck,
   Calendar,
   BookOpen,
+  Rocket,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
 import { logout } from '../features/auth/authSlice';
 import { notificationService } from '../services/notification.service';
+import { teamService } from '../services/team.service';
 
 interface NavItem {
   icon: React.ElementType;
@@ -43,6 +45,41 @@ export const Sidebar: React.FC = () => {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const mini = false;
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  const fetchActiveProject = useCallback(async () => {
+    if (!user?.teamId) {
+      setActiveProjectId(null);
+      return;
+    }
+    try {
+      const projects = await teamService.getTeamProjects(user.teamId!);
+      if (Array.isArray(projects) && projects.length > 0) {
+        const active = projects.find((p: any) => !p.isTemplate) || projects[0];
+        if (active && active.id) {
+          setActiveProjectId(active.id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch active project for sidebar:', err);
+    }
+  }, [user?.teamId]);
+
+  useEffect(() => {
+    fetchActiveProject();
+
+    const handleRefresh = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.type === 'project-selected') {
+        fetchActiveProject();
+      }
+    };
+    window.addEventListener('pv:refresh', handleRefresh);
+
+    return () => {
+      window.removeEventListener('pv:refresh', handleRefresh);
+    };
+  }, [fetchActiveProject]);
 
   const navSections: NavSection[] = [
     {
@@ -52,10 +89,17 @@ export const Sidebar: React.FC = () => {
     {
       title: 'PROJECTS',
       items: [
+        {
+          icon: Rocket,
+          label: 'My Project',
+          to: activeProjectId ? `/projects/${activeProjectId}` : '/projects/recommend',
+          badge: activeProjectId ? 'Active' : undefined,
+          badgeColor: 'bg-emerald-500/10 text-emerald-600',
+        },
         { icon: FolderOpen, label: 'All Projects', to: '/projects' },
         { icon: Kanban, label: 'Kanban Board', to: '/kanban' },
         { icon: GanttChart, label: 'Timeline & Gantt', to: '/timeline' },
-        { icon: Users, label: 'Team', to: `/teams/${user?.teamId || '1'}` },
+        { icon: Users, label: 'Team', to: user?.teamId ? `/teams/${user.teamId}` : '/teams' },
       ],
     },
     {
@@ -184,6 +228,7 @@ export const Sidebar: React.FC = () => {
                     <li key={item.to}>
                       <NavLink
                         to={item.to}
+                        end={item.to === '/projects' || item.to === '/dashboard'}
                         title={mini ? item.label : undefined}
                         className={({ isActive }) =>
                           cn(

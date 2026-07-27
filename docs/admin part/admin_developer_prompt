@@ -1,0 +1,121 @@
+# Developer Specification & Prompt: Admin Panel Directory Integration
+
+## Task Objective
+Implement a fully functional **Directory** feature in the ProjectVerse Admin Portal. The directory must present two tabs: **Teams** and **Students**. Clicking any item from these directories must open a sleek slide-over side drawer containing detailed metrics, progress, associations, and skill logs. The system must utilize the existing backend service endpoints by defining clean API routes.
+
+---
+
+## 🏗️ Architectural Overview & File Locations
+
+```mermaid
+graph TD
+  Layout[AdminLayout.tsx] --> AppRoute[App.tsx Router]
+  AppRoute --> Directory[AdminDirectory.tsx Hub]
+  Directory --> TeamGrid[Teams Tab Grid]
+  Directory --> StudentGrid[Students Tab List]
+  TeamGrid --> TeamPanel[AdminTeamDetailPanel.tsx]
+  StudentGrid --> StudentPanel[AdminStudentDetailPanel.tsx]
+  
+  TeamPanel --> ClientService[admin.service.ts client]
+  StudentPanel --> ClientService
+  
+  ClientService --> API_Routes[admin.routes.ts server]
+  API_Routes --> Controller[admin.controller.ts]
+  Controller --> DbService[admin.service.ts server]
+  DbService --> Prisma[(PostgreSQL Database)]
+```
+
+### Affected Files:
+1. **Sidebar Navigation**: `client/src/layout/AdminLayout.tsx`
+2. **Routing Config**: `client/src/App.tsx`
+3. **API Client Service**: `client/src/services/admin.service.ts`
+4. **API Router**: `server/src/modules/admin/admin.routes.ts`
+5. **DB Queries**: `server/src/modules/admin/admin.service.ts`
+6. **Main Hub Page [NEW]**: `client/src/pages/Admin/AdminDirectory.tsx`
+7. **Team Side Panel [NEW]**: `client/src/pages/Admin/AdminTeamDetailPanel.tsx`
+8. **Student Side Panel [NEW]**: `client/src/pages/Admin/AdminStudentDetailPanel.tsx`
+9. **Bugfix Interface**: `client/src/pages/ProjectSelectionChat.tsx`
+
+---
+
+## 🛠️ Database Schema Context (Prisma)
+Understanding these structures is essential for binding fields:
+- **`Team` Model**:
+  - `id` (String, primary key)
+  - `name` (String)
+  - `groupCode` (String, e.g., `"A#100161"`)
+  - `domain` (String, domain area)
+  - `ranking` (One-to-one relation with `GroupRanking` model containing `rank` [Int] and `totalPoints` [Int])
+  - `members` (Array of `User` models)
+  - `projects` (Array of `Project` models containing `id`, `name`, `description`, `status`)
+  - `achievements` (Array of `AdminAchievement` models containing `title`, `description`, `points`, `date`)
+- **`User` Model** (where `role` == `'STUDENT'`):
+  - `id`, `fullName`, `email`, `regNo`
+  - `year` (academic year), `department` (dept name), `deptCode` (abbreviation)
+  - `gender` (M/F), `resident` (H/D for Hosteller/Day-scholar)
+  - `ssgDomain` (Hardware/Software)
+  - `rewardPoints` (Int), `activityPoints` (Int)
+  - `team` (Relation to `Team` model)
+  - `userSkills` (Array of `UserSkill` models containing `skillName`, `skillType`, `totalPoints`, `skillRank`, `totalRanks`)
+
+---
+
+## 📥 Detailed Requirements per Component
+
+### 1. Navigation Link
+- Add a new object inside the `adminNav` array in `AdminLayout.tsx`.
+- Properties: `{ icon: Users, label: 'Directory', to: '/admin/directory' }`
+
+### 2. Main Directory Component (`AdminDirectory.tsx`)
+- **Dual Tab Header**: Pills-style button toggle. Active tab is highlighted with a shadow card. Tabs display count badges using totals fetched from pagination responses (`teamsTotal`, `studentsTotal`).
+- **Control Bar**:
+  - Search Input: Real-time, case-insensitive client-side filters. Teams are filtered by `name` or `groupCode`. Students are filtered by `fullName`, `regNo`, or `email`.
+  - Filter Dropdown: Selector for domains. Options: `"All", "AI", "Web", "Mobile", "IoT", "Data Science", "Cybersecurity", "Cloud", "Blockchain"`.
+- **Teams Grid View**:
+  - Fetch teams via `adminService.getTeams(page, limit)` endpoint.
+  - Display cards with: domain badge, group code badge, team name, active project title, a milestone progress bar calculated by `progress = ranking ? Math.min(100, Math.round(ranking.totalPoints / 10)) : 0`, members count, and status badge.
+- **Students Grid View**:
+  - Fetch students via `adminService.getStudents(page, limit)` endpoint.
+  - Display cards with: 2-character initials avatar in rounded circles, full name, registration number, email, domain tag, active team name, and a visual activity progress bar calculated by `progress = Math.min(100, Math.round((rewardPoints + activityPoints) / 2))`.
+- **Pagination strip**: Appears if total items exceed limit (12 per page). Shows standard "Previous/Next" paging buttons and current page index.
+
+### 3. Team Details Side Panel (`AdminTeamDetailPanel.tsx`)
+- Animate-in from the right with a smooth fade-in backdrop (`bg-gray-900/40 backdrop-blur-sm`).
+- Clicking outside or pressing `Escape` must close the panel.
+- Displays a 4-column overview card block: Rank (`#`), Total Points, Member count, and completion percentage.
+- Render details of the team's project: Project name, status badge, and the detailed problem statement description.
+- Render member roster table: User avatar, name, registration number, ssg domain, total AP score (`rewardPoints + activityPoints`), and list of skill tag chips.
+- Render achievements timeline: Display a list of recent certificates or achievements containing title, points awarded (e.g. `+50 pts`), description details, and formatted date.
+
+### 4. Student Details Side Panel (`AdminStudentDetailPanel.tsx`)
+- Slides in from the right with same transition and backdrop animations.
+- Displays a 3-column stats card block: Total AP score, Reward points, and Activity points.
+- Profile info table: Email address, Department name and code, academic year, and resident details.
+- Team info card: Associated team name and domain badge (if team is registered).
+- Skills checklist: Dynamic vertical rows for each user skill showing name, skill type classification tag, total points, and programmatic rank (e.g., `"Rank #12 of 85"`).
+
+### 5. API Setup (Client & Server)
+- **Server Routes**: Add route entries mapping detail endpoints in `admin.routes.ts`:
+  - `GET /admin/teams/:id` mapping to `adminController.getTeamDetail`
+  - `GET /admin/students/:id` mapping to `adminController.getStudentDetail`
+- **Prisma DB Service**: Modify the prisma include block inside `getTeamDetail` in `server/src/modules/admin/admin.service.ts` to include the `achievements` relation ordered by `date` (desc) and take a limit of 10.
+- **Client Endpoints**: Add API methods inside `admin.service.ts` (client):
+  - `getTeamById: async (id: string) => api.get('/admin/teams/' + id)`
+  - `getStudentById: async (id: string) => api.get('/admin/students/' + id)`
+
+---
+
+## 🎨 UI/UX Design Guidelines
+- **Color Palettes**: Avoid generic colors. Use HSL/Hex variables from standard CSS system.
+- **Animations**: Include micro-animations for card hovers (slight elevation and scale transitions) and slide-over entries (slide from right, blur overlay animation).
+- **Responsive**: Grids must shift from 1 column on mobile to 2 columns on tablets, and 3 columns on desktop.
+
+---
+
+## 🧪 Verification & Acceptance Criteria
+- [ ] Directory renders and loads teams by default.
+- [ ] Switching tabs pulls the correct corresponding data from the API.
+- [ ] Real-time search filters cards instantaneously based on user input.
+- [ ] Slide-overs render the exact detailed records cleanly without overlay conflicts.
+- [ ] Escape key closes any active drawer immediately.
+- [ ] Build compiles successfully via `npm run build` with zero TypeScript compiler errors.

@@ -17,6 +17,10 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+const githubUsernameSchema = z.object({
+  githubUsername: z.string().trim().max(100).nullable().optional(),
+});
+
 // ─── Auth Service ─────────────────────────────────────────────────────────────
 
 export class AuthService {
@@ -112,6 +116,7 @@ export class AuthService {
         organizationId: true,
         teamId: true,
         regNo: true,
+        githubUsername: true,
         year: true,
         department: true,
         deptCode: true,
@@ -149,6 +154,21 @@ export class AuthService {
     }
 
     return { user };
+  }
+
+  static async updateGithubUsername(userId: string, data: unknown) {
+    const parsed = githubUsernameSchema.parse(data);
+    const cleaned = parsed.githubUsername
+      ? parsed.githubUsername.trim().replace(/^https?:\/\/(www\.)?github\.com\//i, '').replace(/\/$/, '')
+      : null;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { githubUsername: cleaned || null },
+      select: { id: true, githubUsername: true },
+    });
+
+    return user;
   }
 }
 

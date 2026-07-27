@@ -119,11 +119,6 @@ export const adminService = {
     return data;
   },
 
-  generateChat: async (payload: { prompt: string; sessionId: string }) => {
-    const { data } = await api.post('/admin/chat/generate', payload);
-    return data;
-  },
-
   searchContext: async (query: string) => {
     const { data } = await api.get(`/admin/chat/search?q=${encodeURIComponent(query)}`);
     return data;
@@ -136,6 +131,16 @@ export const adminService = {
 
   getStudentDetail: async (id: string) => {
     const { data } = await api.get(`/admin/chat/students/${id}`);
+    return data;
+  },
+
+  getTeamById: async (id: string) => {
+    const { data } = await api.get(`/admin/teams/${id}`);
+    return data;
+  },
+
+  getStudentById: async (id: string) => {
+    const { data } = await api.get(`/admin/students/${id}`);
     return data;
   },
 };

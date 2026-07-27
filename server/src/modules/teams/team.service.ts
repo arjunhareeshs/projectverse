@@ -2,6 +2,7 @@ import { prisma } from '../../shared/database';
 import axios from 'axios';
 import { githubService } from '../github/github.service';
 import { logger } from '../../shared/logger';
+import { getIoInstance } from '../../infrastructure/socket';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -846,13 +847,27 @@ export const teamService = {
   },
 
   async sendMessage(organizationId: string, teamId: string, userId: string, message: string) {
-    const team = await prisma.team.findFirst({ where: { id: teamId, organizationId } });
+    const team = await prisma.team.findFirst({
+      where: { id: teamId, organizationId },
+      include: { members: { select: { id: true } } },
+    });
     if (!team) throw new Error('Team not found');
     if (!message?.trim()) throw new Error('Message cannot be empty');
-    return prisma.teamMessage.create({
+    const created = await prisma.teamMessage.create({
       data: { teamId, userId, message: message.trim() },
       include: { user: { select: userSelect } },
     });
+
+    try {
+      const io = getIoInstance();
+      for (const member of team.members) {
+        io.to(`user:${member.id}`).emit('teamMessage', { teamId, message: created });
+      }
+    } catch (e) {
+      logger.error('Socket emission failed for team message:', e);
+    }
+
+    return created;
   },
 
   // ── Tasks (Kanban) ────────────────────────────────────────────
