@@ -213,4 +213,67 @@ export const adminController = {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
     }
   },
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+
+  getFunnel: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.user?.organizationId || '';
+      const funnel = await AdminService.getFunnelAnalytics(orgId);
+      res.json(funnel);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
+  getFormation: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.user?.organizationId || '';
+      const formation = await AdminService.getFormationHealth(orgId);
+      res.json(formation);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
+  getSegmentation: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.user?.organizationId || '';
+      const dimension = (req.query.dimension as any) || 'department';
+      const segmentation = await AdminService.getSegmentationAnalytics(orgId, dimension);
+      res.json(segmentation);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
+  getEarlyWarning: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.user?.organizationId || '';
+      const warningBoard = await AdminService.getEarlyWarningBoard(orgId);
+      res.json(warningBoard);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
+  getCatalogDemand: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.user?.organizationId || '';
+      const demand = await AdminService.getCatalogDemandAnalytics(orgId);
+      res.json(demand);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
+  getRoiReport: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const orgId = req.user?.organizationId || '';
+      const roi = await AdminService.getRoiReport(orgId);
+      res.json(roi);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
 };

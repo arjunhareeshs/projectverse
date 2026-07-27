@@ -338,3 +338,199 @@ Listed so nobody quietly adds a migration. Each is achievable later, but **not i
 
 If a stakeholder requests one of these, treat it as a **separate schema-change proposal**,
 reviewed on its own — never smuggled into a feature PR.
+
+---
+
+# Part 6 — Business-angle improvements (friction & operations)
+
+> **Why this part exists.** Parts 1–5 make the *AI* smarter. This part makes the *product*
+> smoother — the un-glamorous logic that decides whether students actually finish selection
+> without dropping off, and whether an admin can run a 300-student cohort without a spreadsheet.
+> These are mostly **plain product logic**, not AI. Same two constraints still apply: **no schema
+> migration** (everything lives in existing tables / JSON `content` / event `data` / compute-on-read)
+> and **deterministic code decides, the model only narrates**.
+
+## 6.0 What the current flow actually leaves on the table
+
+Grounded in the real code, not hypotheticals:
+
+| Gap today | Where | Business cost |
+|---|---|---|
+| Selection is **stateless & client-driven** (`project.catalog.controller.ts:94`) — a refresh mid-flow loses mentor chat, checklist, shortlist. | Catalog flow | Teams restart the funnel, drop off, or "just pick anything". |
+| Catalog list carries only `childProjects` count — **no scarcity, no fit, no filter-by-my-team**. | `getCatalog:112` | Herd behaviour onto a few statements; late blame. |
+| Capacity rule "**max 4 teams**" is enforced only *at submit* (`selectProject:613`) — the student sees it after investing in the mentor chat. | `:611` | Wasted effort, frustration at the finish line. |
+| `groupRegistered` / `skillsRegistered` / `teamId` completeness exists per-user but is **never surfaced as a cohort funnel**. | `User` fields | Admin can't see who's stuck *before* selection even opens. |
+| `DailyWorkLog.blockers` is captured but **not escalated** anywhere. | `DailyWorkLog:640` | A blocked team stays silently blocked for a week. |
+| Task load per member (`Task.assigneeId`) is never aggregated into a **balance view**. | `Task` | Uneven load → the freeloading dispute D2/B6 tries to fix *after the fact*. |
+
+Each row below closes one of these with existing data.
+
+---
+
+## G. Student — Selection, made smoother (friction, not AI)
+
+### G1. Persist the selection draft (kill the refresh-loses-everything problem)
+- **Value:** the single biggest silent drop-off in the funnel. A team spends 10 min in the mentor
+  chat, refreshes, loses the checklist, and gives up.
+- **Behaviour:** mentor history, `checklist`, `readinessScore`, shortlist, and chosen category
+  survive refresh and device change for the *team*.
+- **Logic:** the flow is already keyed to a team the moment `selectProject` runs. Before that, persist
+  the draft on the **team's future ProjectLog is not available yet** — so store it as a
+  `SELECTION_DRAFT` **event on a lightweight per-team draft log**, *or* (preferred, zero-risk) keep it
+  client-side in Redux + `localStorage` keyed by `teamId`. Only promote to server state if cross-device
+  is a hard requirement.
+- **Persistence:** client-first; if server-side is required, event `data` on the project log created
+  lazily — **no migration**. **Don't:** create a Project row for a draft (pollutes catalog counts).
+
+### G2. Scarcity & availability, shown *before* the mentor chat
+- **Value:** stops herd pile-ups and the "max 4 teams reached" wall at submit time.
+- **Behaviour:** every catalog card shows `slots left (4 − childProjects)`, a
+  `Filling fast / Open / Full` tag, and disables "select" when full.
+- **Logic:** `getCatalog` already includes `_count.childProjects` — derive `slotsLeft` and status in
+  the response. Pre-flight the same `childCount >= 4` check the submit path already does (`:613`) so the
+  wall shows on the card, not after the chat.
+- **Persistence:** none (compute-on-read). **Don't:** duplicate the capacity constant — extract
+  `MAX_TEAMS_PER_STATEMENT = 4` to one shared config used by both card and submit.
+
+### G3. Team-readiness gate with a visible checklist
+- **Value:** removes the "must belong to a team" 401 dead-end (`selectProject:573`) that students hit
+  with no explanation.
+- **Behaviour:** before selection opens, show a checklist — *team formed (≥ min members)*, *skills
+  registered (`skillsRegistered`)*, *group registered (`groupRegistered`)* — with a direct fix link per
+  unchecked item.
+- **Logic:** all three are existing `User`/`Team` booleans + `TeamMember` count vs `Team.maxMembers`.
+  Pure read. Gate the "Start selection" CTA on it.
+- **Persistence:** none. **Don't:** hard-block silently — always say *why* and *how to fix*.
+
+### G4. Sort/filter catalog by *my team's* fit
+- **Value:** turns A1 (fit score) from a per-card afterthought into the **primary sort** — the team
+  sees "best matches for us" first.
+- **Logic:** reuse the A1 `selection.fit.ts` helper; sort `getCatalog` results by fit when a `teamId`
+  is present. Filters already exist for `type/domain/sector` (`:114`) — add `?minFit=` and
+  `?onlyOpen=true`.
+- **Persistence:** none. **Don't:** compute fit N times — batch the team's skill set once per request.
+
+### G5. Consensus lock (captain selects, members confirm)
+- **Value:** prevents the captain unilaterally committing the team to a statement nobody else wanted —
+  a real source of mid-project conflict.
+- **Behaviour:** captain proposes → members get a lightweight thumbs-up/down → lock only on majority.
+- **Logic:** `TeamMessage` + a `SELECTION_VOTE` marker, *or* reuse `TeamInvite`-style status rows
+  conceptually. Simplest zero-migration path: a `SELECTION_VOTE` event on the draft log; tally
+  deterministically.
+- **Persistence:** event `data`. **Don't:** block a solo/2-person team on quorum — scale the threshold
+  to roster size.
+
+---
+
+## H. Student — Project management, made smoother
+
+### H1. One-tap daily log with GitHub prefill
+- **Value:** log compliance is the input *everything* downstream (evaluation, ranking, health) depends
+  on. Friction here starves the whole system.
+- **Behaviour:** the daily-log form pre-fills `workDone` from that day's commit messages and offers a
+  one-tap "confirm". `hoursSpent`/`blockers` optional.
+- **Logic:** `GithubCommit` rows are already synced per repo with `author` + `date`. Match the member's
+  `githubUsername` to the day's commits and draft the prefill. Student edits before save — never
+  auto-submit (Part 4).
+- **Persistence:** writes the existing `DailyWorkLog` row. **Don't:** treat a commit as a log — it's a
+  *draft*, the human confirms.
+
+### H2. Blocker escalation ladder
+- **Value:** closes the "blocked silently for a week" gap. `blockers` is captured and then ignored.
+- **Behaviour:** a non-empty `DailyWorkLog.blockers` unresolved for N days raises an AMBER on the team
+  health pulse (B1) and lands on the admin early-warning board (E4).
+- **Logic:** deterministic: scan recent `DailyWorkLog.blockers`; "unresolved" = same/similar blocker
+  text recurring, or no later log clearing it. Feed the existing B1/E4 classifiers — no new surface.
+- **Persistence:** compute-on-read. **Don't:** notify the admin on the first blocker — that's normal
+  work; escalate on *persistence*, not occurrence.
+
+### H3. Team workload-balance view
+- **Value:** makes uneven load visible *while it's fixable*, not at grading time (complements B6/D2).
+- **Behaviour:** a simple bar per member — open tasks, in-progress, done, overdue — with a "reassign"
+  hint when one member holds most of the open load.
+- **Logic:** aggregate `Task` by `assigneeId` + `status` + `dueDate` for the project. Pure query.
+  The captain sees names; each member sees their own bar highlighted.
+- **Persistence:** none. **Don't:** expose it as a leaderboard — it's a balancing tool, not a ranking.
+
+### H4. Milestone timeline vs today (slippage at a glance)
+- **Value:** the "are we behind?" question answered visually, feeding self-correction.
+- **Logic:** `Milestone.dueDate` + `Task.completedAt` already exist. Render a timeline with a "today"
+  marker and flag milestones whose dependent tasks aren't done. This is the visual layer under the
+  deterministic `percentTimeElapsed vs percentMilestonesDone` you already compute (`projectLog.service.ts:354`).
+- **Persistence:** none. **Reuse:** the exact numbers B1 uses, so the chart and the traffic-light never disagree.
+
+### H5. Streak-driven log nudge (use what's already there)
+- **Value:** `UserStreak` exists but does no behavioural work. A streak-at-risk nudge is the cheapest
+  lever on daily-log compliance (the H1/evaluation input).
+- **Logic:** if `currentStreak > 0` and no `DailyWorkLog` yet today, surface a "keep your N-day streak"
+  prompt via existing `notificationService`. Deterministic; student-facing only.
+- **Persistence:** existing `UserStreak` + `Notification`. **Don't:** spam — one nudge, late in the day.
+
+---
+
+## I. Admin — clear stats to actually run the cohort
+
+All **compute-on-read** from existing tables. This is the "clear all details and stats to look after
+students, groups and teams" the request asks for, expressed as concrete deterministic panels.
+
+### I1. Onboarding funnel (before projects even start)
+- **Value:** the admin's #1 pre-semester question — *who is stuck and where* — with no spreadsheet.
+- **Behaviour:** a funnel: `students → groupRegistered → skillsRegistered → in a team → team at min
+  size → project selected → project approved`, with the drop count and a drill-down list at each stage.
+- **Logic:** every stage is an existing boolean/relation on `User`/`Team`/`Project`
+  (`groupRegistered`, `skillsRegistered`, `teamId`, `TeamMember` count vs `maxMembers`,
+  `Project.status`). Pure aggregation.
+- **Persistence:** none. Cache per E-C5 TTL.
+
+### I2. Team-formation health board
+- **Value:** under-filled and orphaned teams are the quiet failure mode before selection.
+- **Behaviour:** teams below `maxMembers`, teams with pending `TeamInvite`/`JOIN_REQUEST` piling up,
+  students in **no** team, teams with a captain but no members.
+- **Logic:** `Team` + `TeamMember` counts + `TeamInvite.status='pending'` aggregation. All present.
+- **Persistence:** none. **Action hook:** each row offers C6-style draft nudge to the captain — never
+  auto-sent.
+
+### I3. Cohort segmentation analytics
+- **Value:** accreditation and equity questions answered on read — the `User` profile fields are rich
+  and currently unused for reporting.
+- **Behaviour:** slice completion / risk / selection by `department`, `deptCode`, `cluster` (CS vs
+  Non-CS), `year`, `gender`, `resident`, `ssgDomain`. "Non-CS teams lag on GitHub linkage", etc.
+- **Logic:** join existing rankings/health to these `User`/`Team` dimensions. Pure query composition
+  (this is E3 made concrete against your real columns).
+- **Persistence:** none. **Don't:** build per-segment tables — group on read.
+
+### I4. Engagement pulse (log & commit cadence)
+- **Value:** the leading indicator of a cohort in trouble, weeks before grades.
+- **Behaviour:** cohort-wide daily-log submission rate, streak distribution, teams with 0 logs in K
+  days, commit-velocity trend.
+- **Logic:** aggregate `DailyWorkLog` by date + `UserStreak` + `GithubCommit` counts. Feeds E4's
+  early-warning ranking.
+- **Persistence:** none (cache the heavy aggregation with TTL).
+
+### I5. Selection-demand & catalog intelligence (this is E5, grounded)
+- **Value:** rebalance the catalog *this* cycle — "40 teams on 3 statements, 200 statements untouched".
+- **Logic:** aggregate `Project.parentProjectId` → template selection counts (you already carry
+  `childProjects`), cross with `domain`/`sector`/`type`. Surface most/least chosen, near-full
+  (`slotsLeft ≤ 1`), and zero-demand domains. Reuse the A3 overlap logic for "these N statements are
+  near-duplicates".
+- **Persistence:** none. **Action:** admin can retire/merge a dead statement (existing catalog CRUD).
+
+### I6. One roster export
+- **Value:** the artifact registrars actually ask for; reuse E6's renderer.
+- **Logic:** assemble I1–I3 payloads into the existing `render/docPdf.ts` / an Excel export (you already
+  depend on `xlsx` in `admin.service.ts`). **Don't:** add a new export stack.
+
+---
+
+## 6.7 Sequencing these against the existing plan
+
+Slot into the Part 3 phases without disruption — most are cheap, high-visibility wins:
+
+| When | Items | Rides on |
+|---|---|---|
+| **Phase 2 (student value)** | G2 scarcity, G3 readiness gate, H1 log prefill, H4 timeline | Same phase as B1/A1; shares their reads |
+| **Phase 3 (admin co-pilot)** | I1 funnel, I2 formation board, I4 engagement | Same digest/cache work as C-series |
+| **Phase 4/5** | G1 draft persistence, G5 consensus, H2 escalation, I3 segmentation, I5 demand, I6 export | Reuses E4 early-warning + E6 export |
+
+**Highest ROI, do first:** G2 + G3 (selection stops leaking teams) and I1 + I2 (admin stops needing a
+spreadsheet) — all four are pure reads on data you already have, zero AI, zero migration.

@@ -10,6 +10,7 @@ router.use(authGuard);
 
 router.get('/active', projectController.getActiveProjects);
 router.post('/catalog/session/start', catalogController.startCatalogSession);
+router.get('/catalog/readiness', catalogController.getReadiness);
 router.get('/catalog/tree', catalogController.getCatalogTree);
 router.get('/catalog', catalogController.getCatalog);
 router.post('/catalog/validate-proposal', catalogController.validateProposal);

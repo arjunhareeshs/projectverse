@@ -47,8 +47,10 @@ router.get('/:projectId/document', requireProjectAccess, lifecycleController.get
 router.get('/:projectId/document/download', requireProjectAccess, lifecycleController.downloadDocument as any);
 
 // Daily work log endpoints
+router.get('/:projectId/daily-log/draft', requireProjectAccess, lifecycleController.getDailyLogDraft as any);
 router.post('/:projectId/daily-log', requireProjectAccess, validateBody(dailyLogSchema), lifecycleController.upsertDailyLog as any);
 router.get('/:projectId/daily-logs', requireProjectAccess, lifecycleController.getDailyLogs as any);
+router.get('/:projectId/workload', requireProjectAccess, lifecycleController.getWorkload as any);
 
 // 15-day evaluation endpoints
 router.post('/:projectId/evaluation/run', requireRole('ADMIN') as any, lifecycleController.runEvaluation as any);

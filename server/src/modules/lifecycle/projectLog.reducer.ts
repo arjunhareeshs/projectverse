@@ -235,6 +235,37 @@ export function applyEvent(state: ProjectLogState, event: ProjectLogEventPayload
       // Manual note audit event — no state mutation required
       break;
     }
+    case 'SELECTION_LOCKED': {
+      if (event.data.teamId) {
+        next.team.teamId = event.data.teamId as string;
+      }
+      break;
+    }
+    case 'BLOCKER_ESCALATED': {
+      const flagId = (event.data.id as string) || `blocker-${Date.now()}`;
+      const existing = next.flags.find((f) => f.id === flagId);
+      if (existing) {
+        existing.resolved = false;
+        existing.message = (event.data.summary as string) || existing.message;
+      } else {
+        next.flags.push({
+          id: flagId,
+          at: now,
+          type: 'PERSISTENT_BLOCKER',
+          message: (event.data.summary as string) || 'Persistent unresolved blocker',
+          resolved: false,
+          severity: (event.data.severity as number) || 75,
+        });
+      }
+      break;
+    }
+    case 'SELECTION_DRAFT':
+    case 'SELECTION_VOTE':
+    case 'INTERVENTION_LOGGED':
+    case 'DELIVERABLE_DRAFTED': {
+      // Audit-stream events — no direct state mutation required
+      break;
+    }
     default: {
       throw new Error(`Unknown ProjectLogEventType: ${(event as any).type}`);
     }

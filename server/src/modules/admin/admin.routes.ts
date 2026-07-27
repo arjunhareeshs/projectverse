@@ -47,4 +47,12 @@ router.get('/chat/search', adminController.searchContext);
 router.get('/chat/teams/:id', adminController.getTeamDetail);
 router.get('/chat/students/:id', adminController.getStudentDetail);
 
+// Analytics & Cockpit
+router.get('/analytics/funnel', adminController.getFunnel);
+router.get('/analytics/formation', adminController.getFormation);
+router.get('/analytics/segments', adminController.getSegmentation);
+router.get('/analytics/early-warning', adminController.getEarlyWarning);
+router.get('/analytics/catalog-demand', adminController.getCatalogDemand);
+router.get('/analytics/roi', adminController.getRoiReport);
+
 export const adminRoutes = router;

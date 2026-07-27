@@ -63,7 +63,7 @@ export interface ProjectLogState {
   flags: Array<{                   // raised by AI Mentor, cleared when resolved
     id: string;
     at: string;
-    type: 'DELAY' | 'INACTIVE_MEMBER' | 'MISSING_DEPENDENCY' | 'OVERLOAD' | 'TIMELINE_RISK' | 'TECH_DRIFT';
+    type: 'DELAY' | 'INACTIVE_MEMBER' | 'MISSING_DEPENDENCY' | 'OVERLOAD' | 'TIMELINE_RISK' | 'TECH_DRIFT' | 'PERSISTENT_BLOCKER';
     message: string;
     resolved: boolean;
     severity?: number;             // 0-100 score computed deterministically
@@ -89,7 +89,13 @@ export type ProjectLogEventType =
   | 'EVALUATION_ADDED'
   | 'FLAG_RAISED'
   | 'FLAG_RESOLVED'
-  | 'MANUAL_NOTE';
+  | 'MANUAL_NOTE'
+  | 'SELECTION_DRAFT'
+  | 'SELECTION_VOTE'
+  | 'SELECTION_LOCKED'
+  | 'BLOCKER_ESCALATED'
+  | 'INTERVENTION_LOGGED'
+  | 'DELIVERABLE_DRAFTED';
 
 export interface ProjectLogEventPayload {
   type: ProjectLogEventType;

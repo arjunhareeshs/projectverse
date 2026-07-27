@@ -2,6 +2,17 @@ import { prisma } from '../../shared/database';
 import * as XLSX from 'xlsx';
 import bcrypt from 'bcrypt';
 import { RankingService, type TeamRankingResult, type StudentRankingResult } from '../ranking/ranking.service';
+import { TtlCache } from '../../shared/ttlCache';
+import {
+  onboardingFunnel,
+  formationHealth,
+  cohortSegmentation,
+  earlyWarningBoard,
+  catalogDemand,
+  cohortRoiReport,
+} from '../metrics/cohortMetrics';
+
+const analyticsCache = new TtlCache<any>(300000); // 5 min TTL
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -725,5 +736,34 @@ export class AdminService {
       performanceScore: rankResult.score,
       rank: rankResult.rank,
     };
+  }
+
+  // ── Analytics (Compute-on-read with TtlCache) ──────────────────────────────
+
+  static async getFunnelAnalytics(organizationId: string) {
+    return analyticsCache.wrap(`funnel:${organizationId}`, () => onboardingFunnel(organizationId));
+  }
+
+  static async getFormationHealth(organizationId: string) {
+    return analyticsCache.wrap(`formation:${organizationId}`, () => formationHealth(organizationId));
+  }
+
+  static async getSegmentationAnalytics(
+    organizationId: string,
+    dimension: 'department' | 'deptCode' | 'cluster' | 'year' | 'gender' | 'resident' | 'ssgDomain' = 'department'
+  ) {
+    return analyticsCache.wrap(`seg:${organizationId}:${dimension}`, () => cohortSegmentation(organizationId, dimension));
+  }
+
+  static async getEarlyWarningBoard(organizationId: string) {
+    return analyticsCache.wrap(`early-warning:${organizationId}`, () => earlyWarningBoard(organizationId), 120000);
+  }
+
+  static async getCatalogDemandAnalytics(organizationId: string) {
+    return analyticsCache.wrap(`demand:${organizationId}`, () => catalogDemand(organizationId));
+  }
+
+  static async getRoiReport(organizationId: string) {
+    return analyticsCache.wrap(`roi:${organizationId}`, () => cohortRoiReport(organizationId));
   }
 }

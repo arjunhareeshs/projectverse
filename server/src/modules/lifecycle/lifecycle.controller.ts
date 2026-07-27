@@ -9,6 +9,9 @@ import { evaluationEngine } from './engines/evaluation.engine';
 import { mentorEngine } from './engines/mentor.engine';
 import { renderDocPdfBuffer } from './render/docPdf';
 import { intakeSchema, dailyLogSchema, durationCheckSchema, suggestMembersSchema, mentorAskSchema } from './lifecycle.schemas';
+import { draftDailyLog } from './dailyLog.prefill';
+import { detectPersistentBlockers } from '../metrics/blockerEscalation';
+import { teamWorkload } from '../metrics/workload';
 
 /**
  * Access guard for project-scoped lifecycle endpoints (Overview §5).
@@ -212,6 +215,27 @@ export class LifecycleController {
     }
   }
 
+  async getDailyLogDraft(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User ID required' });
+        return;
+      }
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const dateStr = req.query.date as string | undefined;
+      const date = dateStr ? new Date(dateStr) : new Date();
+      const draft = await draftDailyLog(projectId, userId, date);
+      res.status(StatusCodes.OK).json(draft);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
   async upsertDailyLog(req: Request, res: Response): Promise<void> {
     try {
       const projectId = req.params.projectId as string;
@@ -230,6 +254,21 @@ export class LifecycleController {
         return;
       }
       const log = await dailyLogService.upsertDailyLog(projectId, userId, parsed.data);
+
+      // Check for persistent blockers and raise BLOCKER_ESCALATED event if needed (H2)
+      try {
+        const persistent = await detectPersistentBlockers(projectId);
+        for (const pb of persistent) {
+          await projectLogService.appendEvent(projectId, {
+            type: 'BLOCKER_ESCALATED',
+            actorUserId: 'SYSTEM',
+            data: { id: `blocker-${pb.userId}-${pb.firstSeenDate}`, summary: pb.summary, severity: pb.severity },
+          });
+        }
+      } catch (escErr) {
+        // Blocker escalation check is best-effort
+      }
+
       res.status(StatusCodes.OK).json(log);
     } catch (err: any) {
       if (err.message.includes('older than 2 days')) {
@@ -254,6 +293,20 @@ export class LifecycleController {
         userId: userId as string,
       });
       res.status(StatusCodes.OK).json(logs);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async getWorkload(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      if (!(await userCanAccessProject((req as any).user, projectId))) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: 'You do not have access to this project' });
+        return;
+      }
+      const workload = await teamWorkload(projectId);
+      res.status(StatusCodes.OK).json(workload);
     } catch (err: any) {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
     }

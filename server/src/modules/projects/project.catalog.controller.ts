@@ -7,6 +7,9 @@ import { logger } from '../../shared/logger';
 import { projectLogService } from '../lifecycle/projectLog.service';
 import { ProjectCategory } from '../../shared/projectLog.types';
 import { wordOverlapRatio, isTooSimilar } from '../../shared/stringUtils';
+import { MAX_TEAMS_PER_STATEMENT, availability } from './selection.constants';
+import { getTeamSelectionReadiness } from './selection.readiness';
+import { computeFit, DOMAIN_REQUIRED_SKILLS } from '../metrics/selectionFit';
 
 const VALID_CATEGORIES: ProjectCategory[] = ['MINI', 'FINAL_YEAR', 'RESEARCH'];
 function coerceCategory(value: unknown): ProjectCategory | undefined {
@@ -91,6 +94,20 @@ function typeToPrefix(type: string): 'H' | 'S' | 'HS' {
 }
 
 export const catalogController = {
+  async getReadiness(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      if (!user) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+      const readiness = await getTeamSelectionReadiness(user.id);
+      res.json(readiness);
+    } catch (error) {
+      console.error('Error checking selection readiness:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
+    }
+  },
+
   // The selection flow is stateless/client-driven (no server-side session store exists
   // for it), so per 00-OVERVIEW.md/PART-1 this endpoint just validates the category choice;
   // the client carries it forward and passes it again as a required field on
@@ -108,14 +125,19 @@ export const catalogController = {
   },
 
   // Get all catalog items with the number of times they've been selected.
-  // Supports optional ?type=&domain=&sector= filters for the guided flow.
+  // Supports optional ?type=&domain=&sector=&sort=&minFit=&onlyOpen= filters for guided flow.
   async getCatalog(req: Request, res: Response) {
     try {
-      const { type, domain, sector } = req.query as {
+      const { type, domain, sector, sort, minFit, onlyOpen } = req.query as {
         type?: string;
         domain?: string;
         sector?: string;
+        sort?: string;
+        minFit?: string;
+        onlyOpen?: string;
       };
+
+      const user = (req as any).user;
 
       const templates = await prisma.project.findMany({
         where: {
@@ -135,7 +157,52 @@ export const catalogController = {
         },
       });
 
-      res.json(templates);
+      let enriched: any[] = templates.map((t) => ({
+        ...t,
+        ...availability(t._count.childProjects),
+      }));
+
+      if (onlyOpen === 'true') {
+        enriched = enriched.filter((t) => t.slotsLeft > 0);
+      }
+
+      if (user?.teamId) {
+        const teamMembers = await prisma.user.findMany({
+          where: { teamId: user.teamId },
+          select: {
+            id: true,
+            userSkills: { select: { skillName: true } },
+          },
+        });
+        const teamSkills = Array.from(
+          new Set(teamMembers.flatMap((m) => m.userSkills.map((s) => s.skillName)))
+        );
+
+        enriched = enriched.map((t) => {
+          const requiredSkills = DOMAIN_REQUIRED_SKILLS[t.domain || ''] || [];
+          const fit = computeFit({
+            teamSkills,
+            requiredSkills,
+            avgPerformance: 50,
+            weeksAvailable: 12,
+            difficultyTier: Number(t.difficultyLevel || 2),
+          });
+          return { ...t, fit };
+        });
+
+        if (minFit) {
+          const threshold = Number(minFit);
+          if (!isNaN(threshold)) {
+            enriched = enriched.filter((t) => (t.fit?.score ?? 0) >= threshold);
+          }
+        }
+
+        if (sort === 'fit') {
+          enriched.sort((a, b) => (b.fit?.score ?? 0) - (a.fit?.score ?? 0));
+        }
+      }
+
+      res.json(enriched);
     } catch (error) {
       console.error('Error fetching catalog:', error);
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
@@ -610,10 +677,10 @@ export const catalogController = {
 
       // 2. Validate max capacity (3 to 4 teams)
       const childCount = (template as any)._count?.childProjects || 0;
-      if (childCount >= 4) {
+      if (childCount >= MAX_TEAMS_PER_STATEMENT) {
         return res
           .status(StatusCodes.BAD_REQUEST)
-          .json({ message: 'Maximum capacity (4 teams) reached for this project' });
+          .json({ message: `Maximum capacity (${MAX_TEAMS_PER_STATEMENT} teams) reached for this project` });
       }
 
       // 3. Ensure this team hasn't already selected it
