@@ -23,7 +23,12 @@ Admin Question: "${question}"`;
   ];
 }
 
-export function buildAdminAnswerPrompt(question: string, scope: string, loadedData: any): ChatMessage[] {
+export function buildAdminAnswerPrompt(
+  question: string,
+  scope: string,
+  loadedData: any,
+  recentHistory?: Array<{ question: string; answer: string }>,
+): ChatMessage[] {
   const systemPrompt = `You are the Lead Executive AI Analytics Assistant for ProjectVerse.
 Your goal is to provide faculty, department leads, and administrators with clear, high-level, data-driven intelligence regarding teams, students, performance rankings, and project lifecycles.
 
@@ -43,6 +48,14 @@ STRICT GUIDELINES FOR YOUR RESPONSE:
 5. GUIDED INTERPRETATION: If the admin is confused by a metric, says they don't understand, or asks for an explanation, explain the data simply. ALWAYS validate their understanding (e.g., "Does this metric make sense now?") before jumping into raw data tables or heavy action recommendations.
 6. Provide 2-3 concrete, actionable recommendations for the admin based on the data findings, UNLESS you are validating understanding as per rule 5.`;
 
+  const historyMessages: ChatMessage[] = [];
+  if (recentHistory && recentHistory.length > 0) {
+    recentHistory.forEach((turn) => {
+      historyMessages.push({ role: 'user', content: turn.question });
+      historyMessages.push({ role: 'assistant', content: turn.answer });
+    });
+  }
+
   const userPrompt = `Scope: ${scope}
 
 Context Data Loaded:
@@ -52,6 +65,7 @@ Admin Question: "${question}"`;
 
   return [
     { role: 'system', content: systemPrompt },
+    ...historyMessages,
     { role: 'user', content: userPrompt },
   ];
 }

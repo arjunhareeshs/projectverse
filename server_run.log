@@ -601,3 +601,195 @@ Emitted 'error' event on Server instance at:
 }
 
 Node.js v20.19.5
+9:30:19 pm [tsx] change in ./src\modules\lifecycle\projectLog.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:30:31 pm [tsx] change in ./src\modules\lifecycle\projectLog.service.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+9:30:47 pm [tsx] change in ./src\modules\ai\llm.service.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+[INFO] Server running on port 4000
+9:31:32 pm [tsx] change in ./src\modules\lifecycle\prompts\mentor.prompt.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:32:21 pm [tsx] change in ./src\modules\lifecycle\engines\mentor.engine.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+9:32:39 pm [tsx] change in ./src\modules\lifecycle\engines\evaluation.engine.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+[INFO] Server running on port 4000
+9:33:03 pm [tsx] change in ./src\modules\lifecycle\engines\docGenerator.engine.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+[INFO] Server running on port 4000
+9:33:18 pm [tsx] change in ./src\modules\lifecycle\engines\personalization.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:33:47 pm [tsx] change in ./src\modules\lifecycle\prompts\adminAssistant.prompt.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ enable debugging { debug: true }
+[INFO] Server running on port 4000
+9:34:20 pm [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:36:06 pm [tsx] change in ./src\modules\lifecycle\engines\mentor.engine.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+[INFO] Server running on port 4000
+9:36:43 pm [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5
+9:37:02 pm [tsx] change in ./src\modules\admin\adminAi.controller.ts Rerunning...
+◇ injected env (13) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[INFO] Server running on port 4000
+9:37:41 pm [tsx] change in ./src\modules\admin\adminAi.controller.ts Restarting...
+◇ injected env (13) from .env // tip: ⌘ override existing { override: true }
+node:events:502
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at <anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:14:12)
+    at Object.<anonymous> (C:\SSG projects\ProjectVerse\projectverse\server\src\index.ts:16:2)
+    at Module._compile (node:internal/modules/cjs/loader:1521:14)
+    at Object.transformer (C:\SSG projects\ProjectVerse\projectverse\node_modules\tsx\dist\register-BoI6-WNn.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1266:32)
+    at Module._load (node:internal/modules/cjs/loader:1091:12)
+    at cjsLoader (node:internal/modules/esm/translators:298:15)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1944:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}
+
+Node.js v20.19.5

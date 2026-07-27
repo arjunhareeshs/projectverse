@@ -1,11 +1,26 @@
 import { prisma } from '../../../shared/database';
 import { ExecutionDocContent } from '../../../shared/projectLog.types';
+import { findSkillGaps, normalizeSkill } from '../../../shared/skillMatch';
 import { chatJSON, isLlmConfigured } from '../../ai/llm.service';
 import { projectLogService } from '../projectLog.service';
 import { buildDocGeneratorPrompt } from '../prompts/docGenerator.prompt';
 import { personalizationEngine } from './personalization';
 import { renderDocMarkdown } from '../render/docMarkdown';
-import { renderDocPdfBuffer } from '../render/docPdf';
+
+const CURATED_RESOURCES: Record<string, { topic: string; resource: string; url: string }> = {
+  typescript: { topic: 'TypeScript', resource: 'Official TypeScript Handbook', url: 'https://www.typescriptlang.org/docs/handbook/' },
+  javascript: { topic: 'JavaScript', resource: 'MDN Web Docs - JavaScript Guide', url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide' },
+  python: { topic: 'Python', resource: 'Official Python Tutorial', url: 'https://docs.python.org/3/tutorial/' },
+  react: { topic: 'React', resource: 'Official React Documentation & Guides', url: 'https://react.dev/learn' },
+  node: { topic: 'Node.js', resource: 'Node.js Official Documentation & Guides', url: 'https://nodejs.org/en/docs/' },
+  express: { topic: 'Express.js', resource: 'Express Getting Started Guide', url: 'https://expressjs.com/en/starter/installing.html' },
+  postgresql: { topic: 'PostgreSQL', resource: 'PostgreSQL Tutorial & Documentation', url: 'https://www.postgresql.org/docs/' },
+  mongodb: { topic: 'MongoDB', resource: 'MongoDB University & Manual', url: 'https://www.mongodb.com/docs/' },
+  tensorflow: { topic: 'TensorFlow', resource: 'TensorFlow Core Tutorials', url: 'https://www.tensorflow.org/tutorials' },
+  pytorch: { topic: 'PyTorch', resource: 'PyTorch Official Tutorials', url: 'https://pytorch.org/tutorials/' },
+  docker: { topic: 'Docker', resource: 'Docker Getting Started Guide', url: 'https://docs.docker.com/get-started/' },
+  kubernetes: { topic: 'Kubernetes', resource: 'Kubernetes Basics & Tutorials', url: 'https://kubernetes.io/docs/tutorials/' },
+};
 
 export class DocGeneratorEngine {
   async generateDocument(projectId: string, actorUserId: string) {
@@ -29,7 +44,7 @@ export class DocGeneratorEngine {
     } else {
       const prompt = buildDocGeneratorPrompt(planningCtx, variation);
       const fallback = this.getFallbackDocument(planningCtx, variation);
-      docContent = await chatJSON<ExecutionDocContent>(prompt, fallback);
+      docContent = await chatJSON<ExecutionDocContent>(prompt, fallback, { feature: 'docGenerator' });
 
       // Validate work packages percentages
       docContent = this.validateAndNormalizePercentages(docContent, planningCtx.duration.months);
@@ -37,29 +52,33 @@ export class DocGeneratorEngine {
 
     docContent = this.clampMilestoneWeeks(docContent, planningCtx.duration.months);
 
-    // Skills gap analysis
-    const teamSkills = new Set<string>();
+    // 4.2 Shared Skill gap analysis
+    const memberSkillsMap: Record<string, string[]> = {};
     planningCtx.members.forEach((m: any) => {
-      (m.skills || []).forEach((s: string) => teamSkills.add(s.toLowerCase().trim()));
+      memberSkillsMap[m.userId] = m.skills || [];
     });
 
     const requiredSkills = docContent.skillsRequired || [];
-    const missingGaps: Array<{ skill: string; missingFor: string[] }> = [];
+    const missingGaps = findSkillGaps(requiredSkills, memberSkillsMap);
 
-    requiredSkills.forEach((reqSkill) => {
-      const normalizedReq = reqSkill.toLowerCase().trim();
-      const hasSkill = Array.from(teamSkills).some((ts) => ts.includes(normalizedReq) || normalizedReq.includes(ts));
+    // Ensure learningResources contains entries for missing skills (Curated lookup 4.4)
+    missingGaps.forEach((gap) => {
+      const normSkill = normalizeSkill(gap.skill);
+      const curated = CURATED_RESOURCES[normSkill];
 
-      if (!hasSkill) {
-        const missingUserIds = planningCtx.members.map((m: any) => m.userId);
-        missingGaps.push({ skill: reqSkill, missingFor: missingUserIds });
+      const existsInRes = docContent.learningResources?.some((r) =>
+        normalizeSkill(r.topic) === normSkill || r.topic.toLowerCase().includes(gap.skill.toLowerCase()),
+      );
 
-        // Ensure learningResources contains entry for missing skill
-        const existsInRes = docContent.learningResources.some((r) => r.topic.toLowerCase().includes(normalizedReq));
-        if (!existsInRes) {
+      if (!existsInRes) {
+        if (!docContent.learningResources) docContent.learningResources = [];
+
+        if (curated) {
+          docContent.learningResources.push(curated);
+        } else {
           docContent.learningResources.push({
-            topic: reqSkill,
-            resource: `Search official documentation, freeCodeCamp, or NPTEL tutorials for ${reqSkill}`,
+            topic: gap.skill,
+            resource: `Search official documentation, freeCodeCamp, or NPTEL tutorials for ${gap.skill}`,
           });
         }
       }
@@ -130,13 +149,40 @@ export class DocGeneratorEngine {
     return doc;
   }
 
+  // 4.1 Sort, space, and deduplicate milestone completion weeks
   private clampMilestoneWeeks(doc: ExecutionDocContent, months: number): ExecutionDocContent {
     const totalWeeks = Math.max(1, Math.round(months * 4));
-    if (!Array.isArray(doc.milestones)) return doc;
-    doc.milestones = doc.milestones.map((m) => ({
+    if (!Array.isArray(doc.milestones) || doc.milestones.length === 0) return doc;
+
+    // Step 1: Clamp within [1, totalWeeks]
+    let milestones = doc.milestones.map((m) => ({
       ...m,
       completionWeek: Math.min(Math.max(1, Math.round(m.completionWeek) || totalWeeks), totalWeeks),
     }));
+
+    // Step 2: Sort by completion week ascending
+    milestones.sort((a, b) => a.completionWeek - b.completionWeek);
+
+    // Step 3: Check clustering. If max week is in first 40% of duration, space evenly
+    const maxWeek = milestones[milestones.length - 1].completionWeek;
+    if (maxWeek < totalWeeks * 0.4 && milestones.length > 1) {
+      const step = totalWeeks / milestones.length;
+      milestones = milestones.map((m, idx) => ({
+        ...m,
+        completionWeek: Math.min(totalWeeks, Math.max(1, Math.round(step * (idx + 1)))),
+      }));
+    }
+
+    // Step 4: Deduplicate week collisions by nudging forward
+    const usedWeeks = new Set<number>();
+    milestones.forEach((m) => {
+      while (usedWeeks.has(m.completionWeek) && m.completionWeek < totalWeeks) {
+        m.completionWeek++;
+      }
+      usedWeeks.add(m.completionWeek);
+    });
+
+    doc.milestones = milestones;
     return doc;
   }
 
@@ -178,17 +224,17 @@ export class DocGeneratorEngine {
       ],
       risks: [
         'Dependency delays during core integration.',
-        'Skill gaps in domain-specific libraries.',
+        'Scope inflation during initial module testing.',
       ],
       learningResources: [
-        { topic: 'TypeScript / Node.js', resource: 'Official documentation and tutorials' },
-        { topic: 'System Architecture', resource: 'Software Engineering Best Practices guide' },
+        CURATED_RESOURCES.typescript,
+        CURATED_RESOURCES.node,
       ],
       successCriteria: [
-        '100% completion of milestone deliverables.',
-        'All work packages verified through daily logs and GitHub commits.',
+        'All work packages completed with active daily log validation.',
+        'System prototype successfully demonstrates end-to-end functionality.',
       ],
-      uniquenessNotes: variation?.summaryOfSimilarProjects || 'Standard template fallback execution document.',
+      uniquenessNotes: variation?.summaryOfSimilarProjects || 'Deterministic standard engineering blueprint.',
     };
   }
 }

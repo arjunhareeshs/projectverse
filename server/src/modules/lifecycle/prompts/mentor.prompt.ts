@@ -1,8 +1,14 @@
 import { ChatMessage } from '../../ai/llm.service';
 
-export function buildMentorNarrationPrompt(mentorCtx: any, activeFlags: any[]): ChatMessage[] {
+export function buildMentorNarrationPrompt(
+  mentorCtx: any,
+  activeFlags: any[],
+  deltaTrend?: { newFlags: number; resolvedFlags: number; worsened: boolean },
+  candidateNextTasks?: Array<{ userId: string; candidateTasks: string[] }>,
+): ChatMessage[] {
   const systemPrompt = `You are the AI Project Mentor for ProjectVerse. You actively monitor project health and guide team progress.
 Summarize current status in 2-3 concise lines, estimate on-time completion likelihood (ON_TRACK / AT_RISK / LIKELY_LATE), and suggest 2-3 immediate next tasks per member.
+Reflect trend changes (new flags raised or resolved) in your summary. Use the candidate next tasks provided as baseline guidance.
 
 Return ONLY JSON:
 {
@@ -15,10 +21,12 @@ Return ONLY JSON:
 
   const userPrompt = `Project: ${mentorCtx.title}
 Category: ${mentorCtx.category}
-Active Flags: ${JSON.stringify(activeFlags)}
+Active Flags (sorted by severity desc): ${JSON.stringify(activeFlags)}
+Recent Flag Trend: ${JSON.stringify(deltaTrend || { newFlags: 0, resolvedFlags: 0, worsened: false })}
 Work Packages: ${JSON.stringify(mentorCtx.workPackages)}
 Milestones: ${JSON.stringify(mentorCtx.milestones)}
-Team Activity Summary (last 15 days log counts): ${JSON.stringify(mentorCtx.activitySummary)}`;
+Team Activity Summary (last 15 days log counts): ${JSON.stringify(mentorCtx.activitySummary)}
+Member Candidate Task Recommendations: ${JSON.stringify(candidateNextTasks || [])}`;
 
   return [
     { role: 'system', content: systemPrompt },

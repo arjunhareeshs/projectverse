@@ -3,6 +3,10 @@ import {
   ProjectLogState,
   ProjectLogEventPayload,
   ProjectCategory,
+  PlanningContext,
+  EvaluationContext,
+  MentorContext,
+  AdminContext,
 } from '../../shared/projectLog.types';
 import { applyEvent } from './projectLog.reducer';
 
@@ -256,10 +260,14 @@ export class ProjectLogService {
     return { events, nextCursor };
   }
 
+  async getContext(projectId: string, view: 'planning'): Promise<PlanningContext>;
+  async getContext(projectId: string, view: 'evaluation'): Promise<EvaluationContext>;
+  async getContext(projectId: string, view: 'mentor'): Promise<MentorContext>;
+  async getContext(projectId: string, view: 'admin'): Promise<AdminContext>;
   async getContext(
     projectId: string,
     view: 'planning' | 'evaluation' | 'mentor' | 'admin',
-  ): Promise<Record<string, unknown>> {
+  ): Promise<any> {
     let state = await this.getState(projectId);
     if (!state) {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -375,7 +383,11 @@ export class ProjectLogService {
           percentMilestonesDone,
           latestEvaluation: lastEval,
           openFlagCount: openFlags.length,
-          openFlags: openFlags.map((f) => f.type),
+          openFlags: openFlags.map((f) => ({
+            type: f.type,
+            message: f.message,
+            severity: f.severity || 50,
+          })),
           githubRepo: state.github?.repoFullName || null,
         };
       }

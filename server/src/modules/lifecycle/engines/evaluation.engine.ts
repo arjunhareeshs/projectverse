@@ -33,18 +33,43 @@ export class EvaluationEngine {
       logsGroupedByMember[m.userId] = { entryCount: 0, totalHours: 0, logs: [] };
     });
 
+    let lowEffortCount = 0;
+    const memberSelfSim: Record<string, number> = {};
+
     logs.forEach((l) => {
       if (!logsGroupedByMember[l.userId]) {
         logsGroupedByMember[l.userId] = { entryCount: 0, totalHours: 0, logs: [] };
       }
       logsGroupedByMember[l.userId].entryCount++;
       logsGroupedByMember[l.userId].totalHours += l.hoursSpent || 0;
+
+      // Low-effort detector: < 8 words
+      const words = l.workDone.trim().split(/\s+/).filter(Boolean);
+      if (words.length < 8) {
+        lowEffortCount++;
+      }
+
       // Cap log text for prompt efficiency
       logsGroupedByMember[l.userId].logs.push({
         date: l.date,
         workDone: l.workDone.slice(0, 150),
         hours: l.hoursSpent,
       });
+    });
+
+    // 3.1 Self-similarity detector per member (copying own logs day-over-day)
+    evalCtx.team.members.forEach((m: any) => {
+      const mLogs = logs.filter((l) => l.userId === m.userId);
+      let maxSelfSim = 0;
+      if (mLogs.length > 1) {
+        for (let i = 0; i < mLogs.length - 1; i++) {
+          for (let j = i + 1; j < mLogs.length; j++) {
+            const ratio = wordOverlapRatio(mLogs[i].workDone, mLogs[j].workDone);
+            if (ratio > maxSelfSim) maxSelfSim = ratio;
+          }
+        }
+      }
+      memberSelfSim[m.userId] = Math.round(maxSelfSim * 100);
     });
 
     // GitHub evidence if linked
@@ -60,6 +85,7 @@ export class EvaluationEngine {
         },
       },
     });
+
     if (ghRepo) {
       githubCommits = ghRepo.commits.map((c) => ({
         sha: c.sha.substring(0, 7),
@@ -68,6 +94,19 @@ export class EvaluationEngine {
         date: c.date,
       }));
     }
+
+    // 3.2 Commit-Log correlation check
+    const commitDates = new Set(
+      githubCommits.map((c) => new Date(c.date).toISOString().split('T')[0]),
+    );
+    const implRegex = /(implement|build|fix|create|add|develop|code|refactor|write|test|setup)/i;
+    let unverifiedImplDays = 0;
+
+    logs.forEach((l) => {
+      if (implRegex.test(l.workDone) && !commitDates.has(l.date)) {
+        unverifiedImplDays++;
+      }
+    });
 
     // Cross-team text similarity
     const otherLogs = await prisma.dailyWorkLog.findMany({
@@ -117,18 +156,43 @@ export class EvaluationEngine {
         suspiciousPairs,
       );
       const fallback = this.getFallbackReport(targetCycle, periodStart.toISOString(), periodEnd.toISOString(), logsGroupedByMember);
-      reportContent = await chatJSON<EvaluationReportContent>(prompt, fallback);
+      reportContent = await chatJSON<EvaluationReportContent>(prompt, fallback, { feature: 'evaluation' });
     }
 
     // Apply Deterministic Guardrails
+
+    // Member log participation guardrail + Contradiction Guardrail (3.4)
     evalCtx.team.members.forEach((m: any) => {
       const stats = logsGroupedByMember[m.userId];
+      const memberScoreObj = reportContent.memberParticipation?.perMember?.find((pm) => pm.userId === m.userId);
+
       if (!stats || stats.entryCount === 0) {
-        const memberScoreObj = reportContent.memberParticipation?.perMember?.find((pm) => pm.userId === m.userId);
         if (memberScoreObj) {
           memberScoreObj.score = Math.min(memberScoreObj.score, 20);
           memberScoreObj.notes = (memberScoreObj.notes || '') + ' (Forced <=20: 0 daily logs submitted).';
         }
+      }
+
+      // 3.4 Contradiction Guardrail: 0 commits & 0 logs but high technical/scope score
+      const memberCommits = githubCommits.filter((c) =>
+        c.author?.toLowerCase().includes(m.name.toLowerCase()),
+      );
+      if (stats?.entryCount === 0 && memberCommits.length === 0) {
+        if (reportContent.technicalProgress.score > 60) {
+          reportContent.technicalProgress.score = 20;
+          reportContent.technicalProgress.notes += ' (Capped to 20: unsupported by commit/log evidence)';
+        }
+        if (reportContent.scopeAdherence.score > 60) {
+          reportContent.scopeAdherence.score = 20;
+          reportContent.scopeAdherence.notes += ' (Capped to 20: unsupported by commit/log evidence)';
+        }
+      }
+
+      // Self-similarity note
+      if (memberSelfSim[m.userId] > 80) {
+        reportContent.suspiciousBehaviour.push(
+          `Member ${m.name} exhibits high self-similarity (${memberSelfSim[m.userId]}%) across daily logs.`,
+        );
       }
     });
 
@@ -138,6 +202,7 @@ export class EvaluationEngine {
       const name = (wp.name || wp.id || '').toLowerCase();
       return /(backend|frontend|api|software|dev|integration|code|app|module|system)/.test(name);
     });
+
     if (hasGithubLinked && inProgressSoftwarePackages.length > 0 && githubCommits.length === 0) {
       reportContent.missingWork = [
         ...(reportContent.missingWork || []),
@@ -147,21 +212,69 @@ export class EvaluationEngine {
       ];
     }
 
+    if (unverifiedImplDays > 0) {
+      reportContent.technicalProgress.notes += ` (${unverifiedImplDays} daily log claims of code work had zero corresponding GitHub commits).`;
+    }
+
+    // Plagiarism precedence override
     if (maxOverlapFound > 0.85) {
       reportContent.plagiarismRisk = 'HIGH';
-      reportContent.suspiciousBehaviour.push(`High text similarity (>85%) detected with other project work logs.`);
+      reportContent.suspiciousBehaviour.push(`High text similarity (${Math.round(maxOverlapFound * 100)}%) detected with other project work logs.`);
     } else if (maxOverlapFound > 0.7) {
       if (reportContent.plagiarismRisk === 'LOW') reportContent.plagiarismRisk = 'MEDIUM';
     }
 
-    const overallScore = Math.round(
-      (reportContent.scopeAdherence.score +
-        reportContent.technicalProgress.score +
-        reportContent.timelineCompliance.score +
-        reportContent.memberParticipation.score +
-        reportContent.documentationQuality.score +
-        reportContent.authenticityConfidence.score) / 6,
-    );
+    // 3.5 Attach Score Evidence Receipts
+    const totalLogs = logs.length;
+    const totalCommits = githubCommits.length;
+
+    reportContent.scopeAdherence.evidence = { totalLogs, milestoneCount: evalCtx.milestones?.length || 0 };
+    reportContent.technicalProgress.evidence = { totalCommits, unverifiedImplDays };
+    reportContent.timelineCompliance.evidence = { daysElapsed, targetCycle };
+    reportContent.memberParticipation.evidence = { totalLogs, memberCount: evalCtx.team?.members?.length || 1 };
+    reportContent.documentationQuality.evidence = { totalLogs, lowEffortCount };
+    reportContent.authenticityConfidence.evidence = { maxOverlapFound: Math.round(maxOverlapFound * 100), memberSelfSim };
+
+    // 3.3 Category-Weighted Average Score
+    const weightsByCategory: Record<string, Record<string, number>> = {
+      RESEARCH: {
+        technicalProgress: 0.25,
+        authenticityConfidence: 0.25,
+        scopeAdherence: 0.20,
+        documentationQuality: 0.15,
+        memberParticipation: 0.10,
+        timelineCompliance: 0.05,
+      },
+      MINI: {
+        timelineCompliance: 0.25,
+        memberParticipation: 0.25,
+        scopeAdherence: 0.20,
+        technicalProgress: 0.15,
+        documentationQuality: 0.10,
+        authenticityConfidence: 0.05,
+      },
+      FINAL_YEAR: {
+        scopeAdherence: 0.20,
+        technicalProgress: 0.20,
+        timelineCompliance: 0.20,
+        memberParticipation: 0.15,
+        documentationQuality: 0.12,
+        authenticityConfidence: 0.13,
+      },
+    };
+
+    const cat = evalCtx.category || 'FINAL_YEAR';
+    const weights = weightsByCategory[cat] || weightsByCategory.FINAL_YEAR;
+
+    const weightedScore =
+      reportContent.scopeAdherence.score * weights.scopeAdherence +
+      reportContent.technicalProgress.score * weights.technicalProgress +
+      reportContent.timelineCompliance.score * weights.timelineCompliance +
+      reportContent.memberParticipation.score * weights.memberParticipation +
+      reportContent.documentationQuality.score * weights.documentationQuality +
+      reportContent.authenticityConfidence.score * weights.authenticityConfidence;
+
+    const overallScore = Math.round(weightedScore);
 
     // Save or update EvaluationReport
     const reportRecord = await prisma.evaluationReport.upsert({
@@ -218,32 +331,34 @@ export class EvaluationEngine {
   private getFallbackReport(cycle: number, periodStart: string, periodEnd: string, logsGrouped: any): EvaluationReportContent {
     const perMember = Object.keys(logsGrouped).map((uid) => ({
       userId: uid,
-      score: logsGrouped[uid].entryCount > 0 ? 80 : 0,
-      notes: logsGrouped[uid].entryCount > 0 ? `${logsGrouped[uid].entryCount} entries logged.` : 'No entries logged.',
+      score: logsGrouped[uid].entryCount > 0 ? 50 : 0,
+      notes: logsGrouped[uid].entryCount > 0 ? `${logsGrouped[uid].entryCount} entries logged. (UNVERIFIED — AI Unavailable)` : 'No entries logged.',
     }));
 
     return {
       cycle,
       periodStart,
       periodEnd,
-      scopeAdherence: { score: 75, notes: 'Evaluated based on logged progress.' },
-      technicalProgress: { score: 75, notes: 'Progress tracking active.' },
-      timelineCompliance: { score: 80, notes: 'Milestones on schedule.' },
+      scopeAdherence: { score: 0, notes: 'UNVERIFIED — AI evaluation service unavailable.' },
+      technicalProgress: { score: 0, notes: 'UNVERIFIED — AI evaluation service unavailable.' },
+      timelineCompliance: { score: 0, notes: 'UNVERIFIED — AI evaluation service unavailable.' },
       memberParticipation: {
-        score: 75,
-        notes: 'Summary participation calculated from log entry activity.',
+        score: 0,
+        notes: 'UNVERIFIED — Baseline member participation based on raw log counts.',
         perMember,
       },
-      documentationQuality: { score: 70, notes: 'Daily logs submitted.' },
-      authenticityConfidence: { score: 85, notes: 'Authenticity checked via daily timestamps.' },
+      documentationQuality: { score: 0, notes: 'UNVERIFIED — AI evaluation service unavailable.' },
+      authenticityConfidence: { score: 0, notes: 'UNVERIFIED — AI evaluation service unavailable.' },
       plagiarismRisk: 'LOW',
-      missingWork: [],
+      missingWork: ['AI evaluation service was offline during this cycle; subjective scores set to unverified.'],
       suspiciousBehaviour: [],
-      mentorFeedback: `Cycle #${cycle} completed. Continue submitting detailed daily work logs and linking code commits.`,
+      mentorFeedback: `Cycle #${cycle} evaluation run in fallback mode. Continue submitting daily logs and linking commits for the next cycle.`,
       next15DayRecommendations: [
         'Maintain daily log submissions for every team member.',
         'Push code commits regularly to linked GitHub repository.',
       ],
+      isFallback: true,
+      statusNote: 'UNVERIFIED_AI_UNAVAILABLE',
     };
   }
 }

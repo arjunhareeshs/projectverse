@@ -8,11 +8,6 @@ import { AdminService } from './admin.service';
 import { RankingService } from '../ranking/ranking.service';
 
 // ── Fuzzy person-name matching ────────────────────────────────────────────────
-// Admins often ask about a person by name ("team where X is captain") without
-// knowing the exact spelling or the team/project name. Plain substring matching
-// on project/team names (below) misses these entirely. This does a cheap
-// Levenshtein-tolerant token match against every student's full name.
-
 function levenshtein(a: string, b: string): number {
   const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
   for (let i = 0; i <= a.length; i++) dp[i][0] = i;
@@ -25,8 +20,6 @@ function levenshtein(a: string, b: string): number {
   return dp[a.length][b.length];
 }
 
-// Similarity in [0,1] — 1 for identical strings, tolerant of typos/phonetic misspellings
-// proportional to word length (short common words like "syed" alone shouldn't be decisive).
 function tokenSimilarity(a: string, b: string): number {
   const maxLen = Math.max(a.length, b.length);
   if (maxLen === 0) return 0;
@@ -49,13 +42,8 @@ async function findStudentByFuzzyName(question: string) {
   let best: { student: (typeof students)[number]; avgSim: number; maxSim: number } | null = null;
   for (const s of students) {
     const nameTokens = s.fullName.toLowerCase().split(/\s+/).filter((t) => t.length >= 4);
-    // Require a full first+last name (both ≥4 chars) — a single usable token (e.g. "RISHI C") is
-    // too easily confused with an ordinary English word ("risk") in an unrelated question.
     if (nameTokens.length < 2) continue;
 
-    // Average, per name-token, its similarity to whichever question-token matches it best.
-    // Continuous scoring (vs a hard match/no-match threshold) means a strong distinguishing
-    // surname match can correctly outrank a same-first-name-only collision.
     let maxSim = 0;
     const totalSim = nameTokens.reduce((sum, nt) => {
       const bestSim = qTokens.reduce((max, qt) => Math.max(max, tokenSimilarity(nt, qt)), 0);
@@ -67,104 +55,161 @@ async function findStudentByFuzzyName(question: string) {
     if (!best || avgSim > best.avgSim) best = { student: s, avgSim, maxSim };
   }
 
-  // Require both a decent overall match AND at least one strongly-matched token (usually the
-  // surname) — two mediocre partial matches averaging over the bar isn't enough on its own.
   return best && best.avgSim >= 0.6 && best.maxSim >= 0.75 ? best.student : null;
 }
 
+// 5.1 Fuzzy project name matching
+function findProjectByFuzzyName(question: string, projects: any[]) {
+  const qTokens = question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 4);
+  if (qTokens.length === 0) return null;
+
+  let best: { project: any; maxSim: number } | null = null;
+  for (const p of projects) {
+    const pTokens = (p.name || '').toLowerCase().split(/\s+/).filter((t: string) => t.length >= 4);
+    if (pTokens.length === 0) continue;
+
+    let maxSim = 0;
+    pTokens.forEach((pt: string) => {
+      qTokens.forEach((qt: string) => {
+        const sim = tokenSimilarity(pt, qt);
+        if (sim > maxSim) maxSim = sim;
+      });
+    });
+
+    if (maxSim >= 0.75 && (!best || maxSim > best.maxSim)) {
+      best = { project: p, maxSim };
+    }
+  }
+
+  return best ? best.project : null;
+}
+
 // ── Lean prompt context ─────────────────────────────────────────────────────────
-// AdminService.getTeamDetail/getStudentDetail return full Prisma objects (internal IDs,
-// booleans, nested per-member skill arrays, raw ranking sub-fields) meant for the UI —
-// dumping them straight into an LLM prompt wastes tokens on noise the model doesn't need,
-// which both degrades answer quality and risks hitting the provider's per-minute token cap.
 function summarizeTeamForPrompt(team: any) {
-  const activeProject = team.projects?.[0];
+  if (!team) return null;
   return {
+    id: team.id,
     name: team.name,
-    domain: team.domain,
-    groupCode: team.groupCode,
-    performance: {
-      score: team.liveRanking?.score,
-      rank: team.liveRanking?.rank,
-      domainRank: team.liveRanking?.domainRank,
-      domainPercentile: team.liveRanking?.domainPercentile,
-      categories: team.liveRanking?.categories,
-      plagiarismRisk: team.liveRanking?.plagiarismRisk,
-    },
-    activeProject: activeProject
-      ? { name: activeProject.name, description: activeProject.description, status: activeProject.status }
-      : null,
+    memberCount: team.members?.length || 0,
     members: (team.members || []).map((m: any) => ({
       name: m.fullName,
-      regNo: m.regNo,
-      isLead: team.leadId === m.id,
-      performanceScore: m.performanceScore,
-      topSkills: (m.userSkills || []).slice(0, 3).map((s: any) => s.skillName),
+      role: m.teamRole,
+      department: m.department,
     })),
-    achievements: (team.achievements || []).map((a: any) => ({ title: a.title, points: a.points })),
-    domainPeers: (team.domainPeers || []).map((p: any) => ({ name: p.name, score: p.score })),
+    rank: team.rank?.domainRank ? `#${team.rank.domainRank} in ${team.rank.domain}` : 'Unranked',
+    overallScore: team.rank?.overallScore != null ? `${Math.round(team.rank.overallScore * 100)}%` : 'N/A',
+    categories: team.rank?.categories
+      ? {
+          execution: `${Math.round((team.rank.categories.execution || 0) * 100)}%`,
+          productivity: `${Math.round((team.rank.categories.productivity || 0) * 100)}%`,
+          quality: `${Math.round((team.rank.categories.quality || 0) * 100)}%`,
+          collaboration: `${Math.round((team.rank.categories.collaboration || 0) * 100)}%`,
+        }
+      : null,
+    activeProject: team.projects?.[0]
+      ? { id: team.projects[0].id, name: team.projects[0].name, status: team.projects[0].status }
+      : null,
   };
 }
 
 function summarizeStudentForPrompt(student: any) {
+  if (!student) return null;
   return {
-    fullName: student.fullName,
-    regNo: student.regNo,
-    domain: student.ssgDomain || student.team?.domain,
+    id: student.id,
+    name: student.fullName,
+    email: student.email,
     department: student.department,
-    year: student.year,
-    performance: {
-      score: student.performanceScore,
-      rank: student.rank,
-      categories: student.liveRanking?.categories,
-    },
-    team: student.team ? { name: student.team.name, domain: student.team.domain, groupCode: student.team.groupCode } : null,
-    skills: (student.userSkills || []).map((s: any) => ({ skillName: s.skillName, totalPoints: s.totalPoints })),
+    teamName: student.team?.name || 'Unassigned',
+    teamRole: student.teamRole,
+    rank: student.rank?.domainRank ? `#${student.rank.domainRank} in ${student.rank.domain}` : 'Unranked',
+    overallScore: student.rank?.overallScore != null ? `${Math.round(student.rank.overallScore * 100)}%` : 'N/A',
+    categories: student.rank?.categories
+      ? {
+          execution: `${Math.round((student.rank.categories.execution || 0) * 100)}%`,
+          productivity: `${Math.round((student.rank.categories.productivity || 0) * 100)}%`,
+          quality: `${Math.round((student.rank.categories.quality || 0) * 100)}%`,
+          collaboration: `${Math.round((student.rank.categories.collaboration || 0) * 100)}%`,
+        }
+      : null,
+    skills: (student.userSkills || []).map((s: any) => s.skillName),
+    achievementsCount: student.achievements?.length || 0,
   };
 }
 
 export async function askAdminAi(req: Request, res: Response): Promise<void> {
   try {
-    const userId = (req as any).user?.id || 'system-admin';
-    const { question, sessionId = 'default-admin-session', pinnedTeamId, pinnedStudentId } = req.body;
+    const user = (req as any).user;
+    const userId = user?.id || 'admin-system';
 
-    if (!question || typeof question !== 'string') {
+    const { question = '', sessionId, pinnedTeamId, pinnedStudentId } = req.body as {
+      question?: string;
+      sessionId?: string;
+      pinnedTeamId?: string;
+      pinnedStudentId?: string;
+    };
+
+    const trimmedQuestion = question.trim();
+
+    if (!trimmedQuestion) {
       res.status(StatusCodes.BAD_REQUEST).json({ message: 'Question is required' });
       return;
     }
 
-    const persistAndReply = async (
-      answer: string,
+    const currentSessionId = sessionId || `admin-session-${Date.now()}`;
+
+    // 5.4 Load Conversational Memory (last 3 turns for this session)
+    let recentTurnsHistory: Array<{ question: string; answer: string }> = [];
+    if (currentSessionId) {
+      const pastHistory = await prisma.adminChatHistory.findMany({
+        where: { sessionId: currentSessionId },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      });
+      recentTurnsHistory = pastHistory.reverse().map((h) => ({
+        question: h.prompt,
+        answer: h.response,
+      }));
+    }
+
+    async function answerFrom(scope: string, loadedData: any, logContextName: string) {
+      if (!isLlmConfigured()) {
+        return `[Offline Mode] Data loaded for scope "${scope}" (${logContextName}). AI key is not configured for complete executive summary narration.`;
+      }
+      const prompt = buildAdminAnswerPrompt(trimmedQuestion, scope, loadedData, recentTurnsHistory);
+      const fallback = `Summary for scope "${scope}": Data retrieved successfully for ${logContextName}.`;
+      return chat(prompt, fallback, { feature: 'adminAi' });
+    }
+
+    async function persistAndReply(
+      answerText: string,
       scope: string,
       projectsUsed: Array<{ id: string; title: string }>,
-      pinnedContext: { type: 'team' | 'student'; id: string; name: string } | null,
-    ) => {
-      try {
-        await prisma.adminChatHistory.create({ data: { userId, sessionId, prompt: question, response: answer } });
-      } catch (e: any) {
-        console.warn('Could not persist AdminChatHistory:', e.message);
-      }
-      res.status(StatusCodes.OK).json({ answer, scope, projectsUsed, pinnedContext });
-    };
+      pinnedCtx: { type: 'team' | 'student'; id: string; name: string } | null,
+    ) {
+      const record = await AdminService.saveAdminChat(userId, trimmedQuestion, answerText, currentSessionId);
 
-    const answerFrom = async (scope: string, loadedPayloads: Record<string, any>, fallbackName: string) => {
-      if (!isLlmConfigured()) {
-        return `[Admin AI Offline Mode] Loaded real context for ${fallbackName}: ${JSON.stringify(loadedPayloads, null, 2)}`;
-      }
-      const answerPrompt = buildAdminAnswerPrompt(question, scope, loadedPayloads);
-      const fallback = 'Admin AI Assistant is unable to answer at this time. Please inspect project logs directly.';
-      return chat(answerPrompt, fallback);
-    };
+      res.json({
+        id: record.id,
+        sessionId: currentSessionId,
+        question: trimmedQuestion,
+        answer: answerText,
+        scope,
+        projectsUsed,
+        pinnedContext: pinnedCtx,
+        createdAt: record.createdAt,
+      });
+    }
 
-    // ── Pinned context fast-path ────────────────────────────────────────────
-    // The admin clicked a specific team/student card in the chat's context panel —
-    // skip classification entirely and ground the answer in that record's full
-    // real data (ranking, roster, active project, evaluations, GitHub, achievements).
+    // Fast-path: Pinned entity
     if (pinnedTeamId || pinnedStudentId) {
-      let pinnedContext: { type: 'team' | 'student'; id: string; name: string } | null = null;
-      let scope: string;
+      let scope = '';
       const loadedPayloads: Record<string, any> = {};
       const projectsUsed: Array<{ id: string; title: string }> = [];
+      let pinnedContext: { type: 'team' | 'student'; id: string; name: string } | null = null;
 
       if (pinnedTeamId) {
         const team = await AdminService.getTeamDetail(pinnedTeamId);
@@ -182,7 +227,7 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
           try {
             loadedPayloads.projectLog = await projectLogService.getContext(activeProject.id, 'admin');
           } catch {
-            // project has no lifecycle log initialized yet — fine, ranking/roster data still answers most questions
+            // fine
           }
           const evalRep = await prisma.evaluationReport.findFirst({
             where: { projectId: activeProject.id },
@@ -204,7 +249,7 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
             };
           }
         }
-      } else {
+      } else if (pinnedStudentId) {
         const student = await AdminService.getStudentDetail(pinnedStudentId);
         if (!student) {
           res.status(StatusCodes.NOT_FOUND).json({ message: 'Pinned student not found' });
@@ -238,16 +283,20 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
     }));
 
     // Deterministic pre-pass for verbatim project/team name matching
-    const normQ = question.toLowerCase();
-    const matched = projects.filter((p) => normQ.includes(p.name.toLowerCase()) || (p.team?.name && normQ.includes(p.team.name.toLowerCase())));
+    const normQ = trimmedQuestion.toLowerCase();
+    let matched = projects.filter((p) => normQ.includes(p.name.toLowerCase()) || (p.team?.name && normQ.includes(p.team.name.toLowerCase())));
+
+    // 5.1 Fuzzy project-name matching if no verbatim match
+    if (matched.length === 0) {
+      const fuzzyProj = findProjectByFuzzyName(trimmedQuestion, projects);
+      if (fuzzyProj) {
+        matched.push(fuzzyProj);
+      }
+    }
 
     // ── Person-name fast-path ────────────────────────────────────────────────
-    // No project/team name was mentioned verbatim — check if the question is
-    // actually about a specific person (by name, however misspelled), e.g.
-    // "tell me about the team where Syed is the captain". Resolve them to their
-    // team and answer with full real context, same as a pinned lookup.
     if (matched.length === 0) {
-      const person = await findStudentByFuzzyName(question);
+      const person = await findStudentByFuzzyName(trimmedQuestion);
       if (person) {
         const student = await AdminService.getStudentDetail(person.id);
         const loadedPayloads: Record<string, any> = {
@@ -267,7 +316,6 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
             loadedPayloads.team = summarizeTeamForPrompt(team);
             const activeProject = team.projects?.[0];
             if (activeProject) projectsUsed.push({ id: activeProject.id, title: activeProject.name });
-            // The question was framed around the team — ground the reply on the team, with the person's role noted.
             pinnedContext = { type: 'team', id: team.id, name: team.name };
           }
         }
@@ -298,7 +346,7 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
     } else {
       const classifierPrompt = buildAdminClassifierPrompt(question, projectIndex);
       const fallback = { scope: 'cohort', projectIds: [], needsGithub: false, needsEvaluations: false };
-      classification = await chatJSON(classifierPrompt, fallback);
+      classification = await chatJSON(classifierPrompt, fallback, { feature: 'adminClassifier' });
     }
 
     // Load only requested context payloads
@@ -306,7 +354,7 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
     const projectsUsed: Array<{ id: string; title: string }> = [];
 
     if (classification.scope === 'cohort' || classification.projectIds.length === 0) {
-      loadedPayloads.cohortStats = await buildCohortDigest(projects);
+      loadedPayloads.cohortStats = await getCachedCohortDigest(projects);
     } else {
       for (const pId of classification.projectIds.slice(0, 5)) {
         const proj = projects.find((p) => p.id === pId);
@@ -354,12 +402,20 @@ export async function askAdminAi(req: Request, res: Response): Promise<void> {
   }
 }
 
+// 5.3 Cohort Digest Cache with 3-minute TTL
+let cohortDigestCache: { timestamp: number; data: any } | null = null;
+
+async function getCachedCohortDigest(projects: any[]) {
+  const now = Date.now();
+  if (cohortDigestCache && now - cohortDigestCache.timestamp < 3 * 60 * 1000) {
+    return cohortDigestCache.data;
+  }
+  const data = await buildCohortDigest(projects);
+  cohortDigestCache = { timestamp: now, data };
+  return data;
+}
+
 // ── Cohort-wide analytics digest ───────────────────────────────────────────────
-// Broad questions ("which projects have HIGH plagiarism risk", "which teams are
-// at risk", "top performers") need real cross-project analytics, not just counts.
-// This builds a compact, LLM-friendly digest from data that already exists —
-// EvaluationReport risk ratings + the live RankingService scores — instead of
-// silently answering "insufficient data" when the data is actually there.
 async function buildCohortDigest(projects: Array<{ id: string; name: string; category: string | null; team: { name: string | null } | null }>) {
   const totalProjects = projects.length;
   const categoriesCount: Record<string, number> = {};

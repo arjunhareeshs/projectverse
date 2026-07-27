@@ -24,7 +24,14 @@ export class PersonalizationEngine {
         if (!p) return null;
         const titleOverlap = wordOverlapRatio(planningCtx.title, p.name);
         const problemOverlap = wordOverlapRatio(planningCtx.title, p.problemStatement || '');
-        const overlap = Math.max(titleOverlap, problemOverlap);
+
+        // 4.3 Compare WBS package name overlap
+        const candidateWbsText = ((doc.content as any)?.workBreakdown || [])
+          .map((w: any) => w.name || '')
+          .join(' ');
+        const wbsOverlap = candidateWbsText ? wordOverlapRatio(planningCtx.title, candidateWbsText) : 0;
+
+        const overlap = Math.max(titleOverlap, problemOverlap, wbsOverlap);
         return overlap > 0.45 ? { doc, overlap } : null;
       })
       .filter((c): c is { doc: (typeof otherDocs)[number]; overlap: number } => c !== null)
@@ -62,7 +69,7 @@ export class PersonalizationEngine {
       summaryOfSimilarProjects: 'Resembles existing project templates; applied core variation directives.',
     };
 
-    return chatJSON(prompt, fallback);
+    return chatJSON(prompt, fallback, { feature: 'personalization' });
   }
 }
 

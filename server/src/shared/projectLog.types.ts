@@ -35,6 +35,7 @@ export interface ProjectLogState {
     percentage: number;            // all sum to 100
     assignedTo: string[];          // userIds
     status: 'NOT_STARTED' | 'IN_PROGRESS' | 'DONE';
+    dependsOn?: string[];          // package ids this package depends on
   }>;
   milestones: Array<{
     id: string;
@@ -65,6 +66,7 @@ export interface ProjectLogState {
     type: 'DELAY' | 'INACTIVE_MEMBER' | 'MISSING_DEPENDENCY' | 'OVERLOAD' | 'TIMELINE_RISK' | 'TECH_DRIFT';
     message: string;
     resolved: boolean;
+    severity?: number;             // 0-100 score computed deterministically
   }>;
 }
 
@@ -124,6 +126,7 @@ export interface ExecutionDocContent {
     name: string;
     description: string;
     percentage: number;
+    dependsOn?: string[];                             // package ids this depends on
   }>;                                                 // 3–5 packages, sum 100
   skillsRequired: string[];
   milestones: Array<{
@@ -141,23 +144,79 @@ export interface ExecutionDocContent {
   uniquenessNotes?: string;                           // Engine 2 delta description
 }
 
+export interface ScoreDetail {
+  score: number;
+  notes: string;
+  evidence?: Record<string, unknown>;
+}
+
 export interface EvaluationReportContent {
   cycle: number;
   periodStart: string;
   periodEnd: string;
-  scopeAdherence: { score: number; notes: string };        // /100 each
-  technicalProgress: { score: number; notes: string };
-  timelineCompliance: { score: number; notes: string };
-  memberParticipation: {
-    score: number;
-    notes: string;
-    perMember: Array<{ userId: string; score: number; notes: string }>;
+  scopeAdherence: ScoreDetail;        // /100 each
+  technicalProgress: ScoreDetail;
+  timelineCompliance: ScoreDetail;
+  memberParticipation: ScoreDetail & {
+    perMember: Array<{ userId: string; score: number; notes: string; evidence?: Record<string, unknown> }>;
   };
-  documentationQuality: { score: number; notes: string };
-  authenticityConfidence: { score: number; notes: string };
+  documentationQuality: ScoreDetail;
+  authenticityConfidence: ScoreDetail;
   plagiarismRisk: 'LOW' | 'MEDIUM' | 'HIGH';
   missingWork: string[];
   suspiciousBehaviour: string[];
   mentorFeedback: string;
   next15DayRecommendations: string[];
+  isFallback?: boolean;
+  statusNote?: string;
 }
+
+export interface PlanningContext {
+  projectId: string;
+  title: string;
+  category: ProjectCategory;
+  department?: string;
+  duration: ProjectLogState['duration'];
+  members: Array<ProjectLogState['team']['members'][number] & { skills: string[] }>;
+  technologies: string[];
+}
+
+export interface EvaluationContext {
+  projectId: string;
+  title: string;
+  category: ProjectCategory;
+  duration: ProjectLogState['duration'];
+  team: ProjectLogState['team'];
+  workPackages: ProjectLogState['workPackages'];
+  milestones: ProjectLogState['milestones'];
+  executionDocSummary: { version: number; generatedAt: Date } | null;
+  lastEvaluationSummary: ProjectLogState['evaluations'][number] | null;
+}
+
+export interface MentorContext {
+  projectId: string;
+  title: string;
+  category: ProjectCategory;
+  duration: ProjectLogState['duration'];
+  team: ProjectLogState['team'];
+  workPackages: ProjectLogState['workPackages'];
+  milestones: ProjectLogState['milestones'];
+  flags: ProjectLogState['flags'];
+  skills: ProjectLogState['skills'];
+  recentEvaluations: ProjectLogState['evaluations'];
+  activitySummary: { logCountsPerMember: Record<string, number> };
+}
+
+export interface AdminContext {
+  projectId: string;
+  title: string;
+  category: ProjectCategory;
+  teamId: string;
+  percentTimeElapsed: number;
+  percentMilestonesDone: number;
+  latestEvaluation: ProjectLogState['evaluations'][number] | null;
+  openFlagCount: number;
+  openFlags: Array<{ type: string; message: string; severity: number }>;
+  githubRepo: string | null;
+}
+
