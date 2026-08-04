@@ -20,9 +20,10 @@ import { Register } from './pages/Register';
 
 import { Dashboard } from './pages/Dashboard';
 import { AllProjects } from './pages/AllProjects';
-import { ProjectSelectionChat } from './pages/ProjectSelectionChat';
-import { ProjectCatalog } from './pages/ProjectCatalog';
+import { ProjectCatalogPage } from './pages/ProjectCatalogPage';
+import { ProposeProblem } from './pages/ProposeProblem';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { ProjectExecutionTemplatePage } from './pages/ProjectExecutionTemplatePage';
 import { KanbanBoard } from './pages/KanbanBoard';
 import { TimelineGantt } from './pages/TimelineGantt';
 import { TeamPage } from './pages/TeamPage';
@@ -37,16 +38,11 @@ import { SettingsPage } from './pages/SettingsPage';
 import { Profile } from './pages/Profile';
 
 // Admin Pages
-import { UserManagement } from './pages/Admin/UserManagement';
-import { TeamManagement } from './pages/Admin/TeamManagement';
-import { ProjectManagement } from './pages/Admin/ProjectManagement';
-import { DocumentManagement } from './pages/Admin/DocumentManagement';
-import { AdminAnalytics } from './pages/Admin/AdminAnalytics';
 import { AdminUpload } from './pages/Admin/AdminUpload';
-import { AdminDirectory } from './pages/Admin/AdminDirectory';
-import { AdminTeamTrends } from './pages/Admin/AdminTeamTrends';
-import { AdminStudentTrends } from './pages/Admin/AdminStudentTrends';
-import { AdminChat } from './pages/Admin/AdminChat';
+import { AdminTopTeams } from './pages/Admin/AdminTopTeams';
+import { AdminTopStudents } from './pages/Admin/AdminTopStudents';
+import { AdminOverlaps } from './pages/Admin/AdminOverlaps';
+import { AdminStandouts } from './pages/Admin/AdminStandouts';
 
 function App() {
   return (
@@ -72,10 +68,11 @@ function App() {
             <Route element={<MainLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/projects" element={<AllProjects />} />
-              <Route path="/projects/recommend" element={<ProjectSelectionChat />} />
-              <Route path="/projects/propose" element={<Navigate to="/projects/recommend" replace />} />
-              <Route path="/projects/catalog" element={<ProjectCatalog />} />
+              <Route path="/projects/propose" element={<ProposeProblem />} />
+              <Route path="/projects/catalog" element={<ProjectCatalogPage />} />
               <Route path="/projects/:id" element={<ProjectDetailPage />} />
+              <Route path="/projects/:id/execution-doc" element={<ProjectExecutionTemplatePage />} />
+              <Route path="/execution-doc/:id" element={<ProjectExecutionTemplatePage />} />
               <Route path="/kanban" element={<KanbanBoard />} />
               <Route path="/timeline" element={<TimelineGantt />} />
               <Route path="/team" element={<TeamRedirect />} />
@@ -93,18 +90,23 @@ function App() {
 
             {/* Admin Portal Routes — separate layout */}
             <Route element={<AdminLayout />}>
-              <Route path="/admin" element={<Navigate to="/admin/directory" replace />} />
-              <Route path="/admin/directory" element={<AdminDirectory />} />
+              <Route path="/admin" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/top-teams" element={<AdminTopTeams />} />
+              <Route path="/admin/top-students" element={<AdminTopStudents />} />
+              <Route path="/admin/overlaps" element={<AdminOverlaps />} />
+              <Route path="/admin/standouts" element={<AdminStandouts />} />
               <Route path="/admin/upload" element={<AdminUpload />} />
-              <Route path="/admin/team-trends" element={<AdminTeamTrends />} />
-              <Route path="/admin/student-trends" element={<AdminStudentTrends />} />
-              <Route path="/admin/chat" element={<AdminChat />} />
-              <Route path="/admin/ai-assistant" element={<Navigate to="/admin/chat" replace />} />
-              <Route path="/admin/users" element={<UserManagement />} />
-              <Route path="/admin/teams" element={<TeamManagement />} />
-              <Route path="/admin/projects" element={<ProjectManagement />} />
-              <Route path="/admin/documents" element={<DocumentManagement />} />
-              <Route path="/admin/analytics" element={<AdminAnalytics />} />
+              {/* Legacy redirects */}
+              <Route path="/admin/directory" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/chat" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/ai-assistant" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/users" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/teams" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/projects" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/documents" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/analytics" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/team-trends" element={<Navigate to="/admin/top-teams" replace />} />
+              <Route path="/admin/student-trends" element={<Navigate to="/admin/top-students" replace />} />
             </Route>
           </Route>
 

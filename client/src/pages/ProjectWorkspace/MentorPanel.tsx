@@ -12,6 +12,7 @@ import {
 import { MentorStatus } from '../../types/projectLog';
 import { lifecycleService } from '../../services/lifecycle.service';
 import { FlagBadge } from '../../components/lifecycle/FlagBadge';
+import { renderMessageContent } from '../../components/aiResponse';
 
 interface MentorPanelProps {
   projectId: string;
@@ -238,7 +239,7 @@ export const MentorPanel: React.FC<MentorPanelProps> = ({ projectId, onFlagsUpda
                 <div className="flex justify-start">
                   <div className="bg-gray-100 text-gray-800 px-4 py-3 rounded-2xl text-xs max-w-[85%] leading-relaxed">
                     <span className="font-bold block text-[10px] text-indigo-700 mb-1">AI Assistant:</span>
-                    {item.a}
+                    {renderMessageContent(item.a)}
                   </div>
                 </div>
               </div>

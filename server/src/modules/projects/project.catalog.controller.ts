@@ -1,31 +1,62 @@
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
+import { z } from 'zod';
 import { prisma } from '../../shared/database';
-import { chatJSON, ChatMessage } from '../ai/llm.service';
-import { githubService, GithubAnalysisError } from '../github/github.service';
-import { logger } from '../../shared/logger';
-import { projectLogService } from '../lifecycle/projectLog.service';
+import { chatJSON, chatJSONWithMeta, ChatMessage } from '../ai/llm.service';
 import { ProjectCategory } from '../../shared/projectLog.types';
-import { wordOverlapRatio, isTooSimilar } from '../../shared/stringUtils';
-import { MAX_TEAMS_PER_STATEMENT, availability } from './selection.constants';
+import { wordOverlapRatio, jaccardSimilarity } from '../../shared/stringUtils';
+import { MAX_TEAMS_PER_STATEMENT, APPROACH_OVERLAP_THRESHOLD, availability } from './selection.constants';
 import { getTeamSelectionReadiness } from './selection.readiness';
 import { computeFit, DOMAIN_REQUIRED_SKILLS } from '../metrics/selectionFit';
+
+const ApproachCheckSchema = z.object({
+  uniquenessScore: z.number().min(0).max(100),
+  verdict: z.enum(['ACCEPT', 'REJECT']),
+  overlapsWith: z.string().nullable().optional(),
+  reason: z.string(),
+  suggestions: z.array(z.string()).default([]),
+  keywords: z.array(z.string()).default([]),
+});
+
+const ProposalEvaluationSchema = z.object({
+  verdict: z.enum(['ACCEPTED', 'REJECTED', 'NEEDS_IMPROVEMENT']),
+  reasons: z.array(z.string()).default([]),
+  improvementHints: z.array(z.string()).default([]),
+  overallScore: z.number().min(0).max(100),
+  rubrics: z.object({
+    relevance: z.object({ score: z.number(), rationale: z.string() }),
+    clarity: z.object({ score: z.number(), rationale: z.string() }),
+    feasibility: z.object({ score: z.number(), rationale: z.string() }),
+    novelty: z.object({ score: z.number(), rationale: z.string() }),
+    expectedOutcome: z.object({ score: z.number(), rationale: z.string() }),
+    featureCompleteness: z.object({ score: z.number(), rationale: z.string() }),
+    industryImpact: z.object({ score: z.number(), rationale: z.string() }),
+  }),
+  duplicate: z.object({
+    isDuplicate: z.boolean(),
+    similarProjectId: z.string().optional(),
+    similarProjectTitle: z.string().optional(),
+    similarityScore: z.number().optional(),
+  }),
+  extracted: z.object({
+    title: z.string(),
+    soul: z.string(),
+    domain: z.string(),
+    sector: z.string(),
+    type: z.enum(['Software', 'Hardware', 'IoT', 'Hybrid']),
+    difficultyLevel: z.string(),
+    technologies: z.array(z.string()),
+    outcomes: z.array(z.string()),
+    outOfScope: z.string().optional(),
+    skillsGained: z.array(z.string()).optional(),
+    prerequisites: z.array(z.string()).optional(),
+  }),
+});
 
 const VALID_CATEGORIES: ProjectCategory[] = ['MINI', 'FINAL_YEAR', 'RESEARCH'];
 function coerceCategory(value: unknown): ProjectCategory | undefined {
   return VALID_CATEGORIES.includes(value as ProjectCategory) ? (value as ProjectCategory) : undefined;
 }
-
-type ProposalValidation = {
-  valid: boolean;
-  isNovel: boolean;
-  isQualifiable: boolean;
-  correctCategory: boolean;
-  reason: string;
-  normalizedStatement: string;
-  suggestedShortName: string;
-  suggestedDifficulty: string;
-};
 
 // Checklist dimensions the mentor conversation is meant to cover before a
 // team is considered "ready" to proceed to selection.
@@ -88,9 +119,185 @@ async function generateProblemId(prefix: 'H' | 'S' | 'HS') {
 }
 
 function typeToPrefix(type: string): 'H' | 'S' | 'HS' {
-  if (type === 'Hardware') return 'H';
-  if (type === 'Hardware & Software') return 'HS';
+  if (type === 'Hardware' || type === 'IoT') return 'H';
+  if (type === 'Hardware & Software' || type === 'Hybrid' || type === 'Combination') return 'HS';
   return 'S';
+}
+
+type ProposalEvaluation = z.infer<typeof ProposalEvaluationSchema>;
+
+export const MIN_PROPOSAL_LENGTH = 40;
+
+/**
+ * Scores a raw problem-statement proposal across the 7 rubrics, checks it for
+ * duplication against the live catalog, and extracts the catalog-card fields.
+ *
+ * Shared by POST /proposals/evaluate (preview) and POST /proposals (publish) so
+ * the publish path never has to trust a client-supplied verdict — a submitter
+ * could otherwise POST `{ evaluation: { verdict: 'ACCEPTED' } }` and push
+ * arbitrary text into the shared catalog.
+ */
+async function runProposalEvaluation(rawText: string): Promise<ProposalEvaluation> {
+  const allTemplates = await prisma.project.findMany({
+    where: { isTemplate: true, status: 'CATALOG' },
+    select: { id: true, name: true, problemStatement: true, shortName: true },
+  });
+
+  // Rank candidates with Jaccard, NOT wordOverlapRatio. wordOverlapRatio divides
+  // by the smaller word set, so a long detailed proposal scores 1.0 against any
+  // short title whose words it happens to contain — every thorough submission was
+  // being flagged as a duplicate of a 5-word catalog entry.
+  const ranked = allTemplates
+    .map((t) => {
+      const text = `${t.name} ${t.shortName || ''} ${t.problemStatement || ''}`;
+      return { id: t.id, name: t.name, statement: t.problemStatement || '', score: jaccardSimilarity(rawText, text) };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const topDuplicateCandidate = ranked[0] && ranked[0].score > 0.12 ? ranked[0] : null;
+
+  // Only a genuine near-copy is rejected without the model's opinion. Anything
+  // below this is merely "related" and is handed to the LLM to judge in context.
+  const isDuplicate = Boolean(topDuplicateCandidate && topDuplicateCandidate.score > 0.6);
+  const duplicateScore = topDuplicateCandidate ? Math.round(topDuplicateCandidate.score * 100) : 0;
+
+  // Shortlist of nearest catalog entries so the model can reason about overlap.
+  const nearest = ranked
+    .filter((r) => r.score > 0.08)
+    .slice(0, 8)
+    .map((r) => ({ title: r.name, statement: r.statement.slice(0, 300), similarity: Math.round(r.score * 100) }));
+
+  const fallbackResult: ProposalEvaluation = {
+    verdict: isDuplicate ? 'REJECTED' : 'ACCEPTED',
+    reasons: isDuplicate
+      ? [`High similarity to existing catalog project "${topDuplicateCandidate?.name}".`]
+      : ['Proposal meets technical clarity and industry relevance criteria.'],
+    improvementHints: isDuplicate
+      ? ['Focus on a distinct application niche or unique dataset.']
+      : ['Define clear quantitative metrics and specific target users.'],
+    overallScore: isDuplicate ? 45 : 84,
+    rubrics: {
+      relevance: { score: 85, rationale: 'Addresses a clear domain problem statement.' },
+      clarity: { score: 82, rationale: 'Problem statement and scope are clear.' },
+      feasibility: { score: 85, rationale: 'Realistically buildable within project timeline.' },
+      novelty: {
+        score: isDuplicate ? 35 : 80,
+        rationale: isDuplicate
+          ? 'Very similar to an existing catalog statement.'
+          : 'Presents a fresh angle or implementation.',
+      },
+      expectedOutcome: { score: 82, rationale: 'Expected outcomes are defined.' },
+      featureCompleteness: { score: 78, rationale: 'Key features outlined.' },
+      industryImpact: { score: 80, rationale: 'Beneficial for industrial/societal application.' },
+    },
+    duplicate: {
+      isDuplicate,
+      similarProjectId: topDuplicateCandidate?.id,
+      similarProjectTitle: topDuplicateCandidate?.name,
+      similarityScore: duplicateScore,
+    },
+    extracted: {
+      title: rawText.trim().slice(0, 45),
+      soul: rawText.trim().split('.')[0] || rawText.trim().slice(0, 100),
+      domain: 'Computer Science & IT',
+      sector: 'Software Systems',
+      type: 'Software',
+      difficultyLevel: '3',
+      technologies: ['React', 'Node.js', 'PostgreSQL'],
+      outcomes: ['Working prototype', 'Documentation'],
+      outOfScope: 'Massive scale distribution',
+      skillsGained: ['System Design', 'Full-stack Development'],
+      prerequisites: ['Database Systems', 'Software Engineering'],
+    },
+  };
+
+  // The exact response shape MUST be spelled out here. Saying "match the required
+  // schema" without stating it makes the model invent its own wrapper object, Zod
+  // rejects it, and chatJSON silently returns the fallback — which looked like the
+  // evaluator ignoring the LLM entirely.
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content:
+        'You are an expert evaluator for student engineering project proposals. ' +
+        'Score the proposal on 7 rubrics, each 0-100, and extract catalog metadata.\n\n' +
+        'Respond with ONLY a JSON object in EXACTLY this shape — no wrapper key, no extra keys:\n' +
+        '{\n' +
+        '  "verdict": "ACCEPTED" | "REJECTED" | "NEEDS_IMPROVEMENT",\n' +
+        '  "overallScore": number (0-100, the weighted average of the rubric scores),\n' +
+        '  "reasons": string[],\n' +
+        '  "improvementHints": string[],\n' +
+        '  "rubrics": {\n' +
+        '    "relevance":           { "score": number, "rationale": string },\n' +
+        '    "clarity":             { "score": number, "rationale": string },\n' +
+        '    "feasibility":         { "score": number, "rationale": string },\n' +
+        '    "novelty":             { "score": number, "rationale": string },\n' +
+        '    "expectedOutcome":     { "score": number, "rationale": string },\n' +
+        '    "featureCompleteness": { "score": number, "rationale": string },\n' +
+        '    "industryImpact":      { "score": number, "rationale": string }\n' +
+        '  },\n' +
+        '  "duplicate": { "isDuplicate": boolean, "similarProjectTitle": string, "similarityScore": number },\n' +
+        '  "extracted": {\n' +
+        '    "title": string, "soul": string (one-line essence), "domain": string, "sector": string,\n' +
+        '    "type": "Software" | "Hardware" | "IoT" | "Hybrid",\n' +
+        '    "difficultyLevel": string ("1"-"5"),\n' +
+        '    "technologies": string[], "outcomes": string[],\n' +
+        '    "outOfScope": string, "skillsGained": string[], "prerequisites": string[]\n' +
+        '  }\n' +
+        '}\n\n' +
+        'Grading guidance: verdict is ACCEPTED when overallScore >= 70 and the proposal is not a ' +
+        'near-copy of an existing catalog entry. Use NEEDS_IMPROVEMENT for a real but under-specified ' +
+        'idea (50-69). Reserve REJECTED for vague, trivial, or duplicate submissions. ' +
+        'A detailed, well-scoped proposal with a clear industry problem, defined users, a concrete ' +
+        'deliverable and a realistic stack should score highly — do not mark it down for length. ' +
+        'nearestCatalogEntries are provided for duplicate judgement only: sharing a broad domain ' +
+        '(e.g. both are "smart city" projects) is NOT duplication. Set isDuplicate only if the ' +
+        'proposal solves substantially the same problem in substantially the same way.',
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        rawText,
+        nearestCatalogEntries: nearest,
+      }),
+    },
+  ];
+
+  const { data: result, degraded } = await chatJSONWithMeta(messages, fallbackResult, {
+    feature: 'evaluateProposal',
+    schema: ProposalEvaluationSchema,
+    retries: 2,
+  });
+
+  if (degraded) {
+    console.warn(
+      '[evaluateProposal] LLM unavailable or response rejected by schema — returning heuristic fallback scores.',
+    );
+  }
+
+  // A measured near-copy (>0.6 Jaccard) is rejected regardless of the model's
+  // opinion. Below that the model's judgement stands — it can see the nearest
+  // entries and decide whether shared domain vocabulary is actual duplication.
+  if (isDuplicate) {
+    return {
+      ...result,
+      verdict: 'REJECTED',
+      duplicate: fallbackResult.duplicate,
+      reasons: Array.from(new Set([...(result.reasons || []), ...fallbackResult.reasons])),
+    };
+  }
+
+  // Attach the resolved catalog id — the model is never given ids, so it cannot
+  // supply one, and the publish path needs it to record duplicateOfId.
+  return {
+    ...result,
+    duplicate: {
+      ...result.duplicate,
+      similarProjectId: result.duplicate?.isDuplicate ? topDuplicateCandidate?.id : undefined,
+      similarProjectTitle: result.duplicate?.similarProjectTitle || topDuplicateCandidate?.name,
+      similarityScore: result.duplicate?.similarityScore ?? duplicateScore,
+    },
+  };
 }
 
 export const catalogController = {
@@ -148,8 +355,12 @@ export const catalogController = {
           ...(sector ? { sector } : {}),
         },
         include: {
-          _count: {
-            select: { childProjects: true },
+          childProjects: {
+            select: {
+              id: true,
+              differentiationApproach: true,
+              team: { select: { name: true } },
+            },
           },
         },
         orderBy: {
@@ -157,10 +368,17 @@ export const catalogController = {
         },
       });
 
-      let enriched: any[] = templates.map((t) => ({
-        ...t,
-        ...availability(t._count.childProjects),
-      }));
+      let enriched: any[] = templates.map((t) => {
+        const claims = t.childProjects.map((c) => ({
+          teamName: c.team?.name || 'Team',
+          approachSummary: c.differentiationApproach || 'Standard approach',
+        }));
+        return {
+          ...t,
+          claims,
+          ...availability(t.childProjects.length, t.maxTeams),
+        };
+      });
 
       if (onlyOpen === 'true') {
         enriched = enriched.filter((t) => t.slotsLeft > 0);
@@ -209,6 +427,185 @@ export const catalogController = {
     }
   },
 
+  async getCatalogById(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const template = await prisma.project.findUnique({
+        where: { id },
+        include: {
+          childProjects: {
+            select: {
+              id: true,
+              differentiationApproach: true,
+              team: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      if (!template || !template.isTemplate) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Catalog project not found' });
+      }
+
+      const childProjects = ((template as any).childProjects as any[]) || [];
+      const claims = childProjects.map((c: any) => ({
+        teamName: c.team?.name || 'Team',
+        approachSummary: c.differentiationApproach || 'Standard approach',
+      }));
+
+      res.json({
+        ...template,
+        claims,
+        ...availability(childProjects.length, template.maxTeams),
+      });
+    } catch (error) {
+      console.error('Error fetching catalog project details:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
+    }
+  },
+
+  async checkApproachUniqueness(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const { proposedApproach } = req.body as { proposedApproach: string };
+
+      if (!proposedApproach || typeof proposedApproach !== 'string' || proposedApproach.trim().length < 30) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          message: 'Please provide a detailed differentiation approach (at least 30 characters).',
+        });
+      }
+
+      const template = await prisma.project.findUnique({
+        where: { id },
+        include: {
+          childProjects: {
+            select: {
+              id: true,
+              differentiationApproach: true,
+              team: { select: { name: true } },
+            },
+          },
+        },
+      });
+
+      if (!template) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Project not found' });
+      }
+
+      const childProjects = ((template as any).childProjects as any[]) || [];
+      const existingClaims = childProjects
+        .map((c: any) => ({
+          teamName: c.team?.name || 'Another Team',
+          approach: c.differentiationApproach || '',
+        }))
+        .filter((c: any) => Boolean(c.approach));
+
+      if (existingClaims.length === 0) {
+        return res.json({
+          uniquenessScore: 95,
+          verdict: 'ACCEPT',
+          overlapsWith: null,
+          reason: 'You are the first team claiming this project statement! Your approach is unique.',
+          suggestions: ['Ensure your architecture addresses system reliability and edge cases.'],
+          keywords: proposedApproach.toLowerCase().split(/\s+/).slice(0, 5),
+        });
+      }
+
+      // Jaccard, NOT wordOverlapRatio — wordOverlapRatio divides by the smaller
+      // word set, so a long, detailed approach trivially "contains" every word
+      // of a short one and scores as a near-duplicate. This same bug was fixed
+      // for runProposalEvaluation above; the fallback here needs the same fix,
+      // since it also backs the hard enforcement check in selectProject.
+      let maxOverlap = 0;
+      let mostSimilarTeam = '';
+      for (const claim of existingClaims) {
+        const ratio = jaccardSimilarity(proposedApproach, claim.approach);
+        if (ratio > maxOverlap) {
+          maxOverlap = ratio;
+          mostSimilarTeam = claim.teamName;
+        }
+      }
+
+      // uniquenessScore is derived from the SAME threshold selectProject enforces
+      // (APPROACH_OVERLAP_THRESHOLD), so a heuristic ACCEPT here can never be
+      // followed by a surprise 409 at claim time when the LLM is unavailable.
+      const heuristicScore = Math.max(10, Math.min(100, Math.round((1 - maxOverlap) * 100)));
+      const heuristicVerdict: 'ACCEPT' | 'REJECT' =
+        maxOverlap <= APPROACH_OVERLAP_THRESHOLD ? 'ACCEPT' : 'REJECT';
+      const heuristicFallback = {
+        uniquenessScore: heuristicScore,
+        verdict: heuristicVerdict,
+        overlapsWith: maxOverlap > 0.25 ? mostSimilarTeam : null,
+        reason:
+          heuristicVerdict === 'ACCEPT'
+            ? `Your approach shares only ${Math.round(maxOverlap * 100)}% vocabulary overlap with the ` +
+              `nearest existing claim (${mostSimilarTeam || 'the other teams'}), which is well within the ` +
+              `${Math.round(APPROACH_OVERLAP_THRESHOLD * 100)}% similarity limit — it reads as a distinct ` +
+              'technical angle on this problem statement.'
+            : `Your approach overlaps ${Math.round(maxOverlap * 100)}% with ${mostSimilarTeam}'s claim, ` +
+              `above the ${Math.round(APPROACH_OVERLAP_THRESHOLD * 100)}% similarity limit allowed for this ` +
+              'problem statement. Note: this is an automated fallback check (the AI evaluator was ' +
+              'unavailable), so it only compares shared vocabulary, not underlying architecture.',
+        suggestions:
+          heuristicVerdict === 'REJECT'
+            ? [
+                'Swap the tech stack, algorithm, or core architecture pattern you plan to use.',
+                'Target a different user group or use case within the same problem statement.',
+                'Lead with a specific feature or constraint the other team\'s claim does not mention.',
+              ]
+            : [],
+        keywords: proposedApproach.toLowerCase().split(/\s+/).slice(0, 5),
+      };
+
+      const messages: ChatMessage[] = [
+        {
+          role: 'system',
+          content:
+            'You are an AI evaluator checking if a student team\'s proposed technical approach is ' +
+            'meaningfully distinct from other teams already claiming the same problem statement, and ' +
+            'you are writing your verdict directly for the student to read and act on.\n\n' +
+            'Respond ONLY with a JSON object matching this schema: {"uniquenessScore": number (0-100), ' +
+            '"verdict": "ACCEPT"|"REJECT", "overlapsWith": string|null, "reason": string, ' +
+            '"suggestions": string[], "keywords": string[]}.\n\n' +
+            'If uniquenessScore < 55, set verdict to REJECT.\n\n' +
+            'WRITING THE "reason" FIELD — this is read by a student deciding whether to submit, so it ' +
+            'must be clear enough to act on, not a one-line label:\n' +
+            '- 3-5 sentences, plain language, no jargon left unexplained.\n' +
+            '- Name the SPECIFIC overlapping elements if rejecting (e.g. "both use a Flutter app with ' +
+            'BLE sensor polling and a shared Firebase backend"), not just "too similar".\n' +
+            '- Name the SPECIFIC differentiating elements if accepting (e.g. "your use of solar-thermal ' +
+            'storage instead of battery storage, and your focus on postnatal wards specifically, sets ' +
+            'this apart").\n' +
+            '- If overlapsWith is set, explain concretely what is shared with that team\'s approach.\n\n' +
+            'WRITING "suggestions" (only when rejecting): give 2-3 concrete, specific pivots grounded in ' +
+            'this exact problem statement and this exact overlap — not generic advice like "be more ' +
+            'unique". Each suggestion should name an actual technology, user group, or feature the ' +
+            'student could change to.',
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            problemStatement: template.problemStatement,
+            existingApproaches: existingClaims,
+            proposedApproach,
+          }),
+        },
+      ];
+
+      const result = await chatJSON(messages, heuristicFallback, {
+        feature: 'checkApproachUniqueness',
+        schema: ApproachCheckSchema,
+        retries: 2,
+        maxTokens: 900,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error checking approach uniqueness:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
+    }
+  },
+
   // Aggregated { type -> domains -> subdomains } tree used to drive the
   // click-only category/domain/subdomain selection steps.
   async getCatalogTree(_req: Request, res: Response) {
@@ -244,81 +641,21 @@ export const catalogController = {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
     }
   },
-
   // Validate a student-proposed problem statement against the existing
   // catalog for that domain/subdomain before it's persisted.
+  // Preview-only scoring for the proposal composer. Writes nothing — the
+  // publish path (proposeProblemStatement) re-runs the same evaluation.
   async validateProposal(req: Request, res: Response) {
     try {
-      const { type, domain, sector, proposedStatement } = req.body as {
-        type: string;
-        domain: string;
-        sector: string;
-        proposedStatement: string;
-      };
+      const rawText = (req.body.rawText || req.body.proposedStatement || '') as string;
 
-      if (!type || !domain || !proposedStatement) {
-        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Missing required fields' });
+      if (!rawText || typeof rawText !== 'string' || rawText.trim().length < MIN_PROPOSAL_LENGTH) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          message: `Detailed proposal text of at least ${MIN_PROPOSAL_LENGTH} characters is required.`,
+        });
       }
 
-      const existingInDomain = await prisma.project.findMany({
-        where: { isTemplate: true, status: 'CATALOG', domain },
-        select: { problemStatement: true, shortName: true, sector: true, type: true },
-      });
-
-      const exactDuplicate = existingInDomain.some((p) =>
-        isTooSimilar(p.problemStatement || '', proposedStatement),
-      );
-
-      const heuristicFallback: ProposalValidation = {
-        valid: !exactDuplicate,
-        isNovel: !exactDuplicate,
-        isQualifiable: proposedStatement.trim().split(/\s+/).length >= 8,
-        correctCategory: true,
-        reason: exactDuplicate
-          ? 'This looks very similar to an existing problem statement in this domain.'
-          : 'Looks novel for this domain based on a keyword comparison (AI validation unavailable).',
-        normalizedStatement: proposedStatement.trim(),
-        suggestedShortName: proposedStatement.trim().slice(0, 40),
-        suggestedDifficulty: '2',
-      };
-
-      if (exactDuplicate) {
-        // Don't even bother calling the LLM if it's an obvious duplicate.
-        return res.json(heuristicFallback);
-      }
-
-      const messages: ChatMessage[] = [
-        {
-          role: 'system',
-          content:
-            'You are validating a student-proposed project problem statement for a college ' +
-            'project catalog. Respond ONLY with a JSON object matching this shape: ' +
-            '{"valid": boolean, "isNovel": boolean, "isQualifiable": boolean, ' +
-            '"correctCategory": boolean, "reason": string, "normalizedStatement": string, ' +
-            '"suggestedShortName": string, "suggestedDifficulty": string}. ' +
-            'isQualifiable means the statement is a real, scoped, buildable project (not vague, ' +
-            'not trivial, not just a topic name). correctCategory means the statement genuinely ' +
-            'belongs to the given category/domain/subdomain rather than another one. valid is ' +
-            'true only if isNovel, isQualifiable and correctCategory are all true. ' +
-            'suggestedDifficulty is one of "0","1","2","3","4" (0=easiest).',
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            category: type,
-            domain,
-            subdomain: sector,
-            proposedStatement,
-            existingStatementsInDomain: existingInDomain.slice(0, 30).map((p) => ({
-              shortName: p.shortName,
-              subdomain: p.sector,
-              statement: p.problemStatement,
-            })),
-          }),
-        },
-      ];
-
-      const result = await chatJSON<ProposalValidation>(messages, heuristicFallback);
+      const result = await runProposalEvaluation(rawText.trim());
       res.json(result);
     } catch (error) {
       console.error('Error validating proposal:', error);
@@ -326,55 +663,281 @@ export const catalogController = {
     }
   },
 
-  // Persist a validated + user-confirmed proposal straight into the shared
-  // catalog (no approval gate) as a new selectable template.
   async proposeProblemStatement(req: Request, res: Response) {
     try {
       const user = req.user;
-      if (!user || !user.organizationId) {
+      if (!user) {
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
       }
 
-      const { type, domain, sector, statement, shortName, difficultyLevel } = req.body as {
-        type: string;
-        domain: string;
-        sector?: string;
-        statement: string;
-        shortName?: string;
-        difficultyLevel?: string;
-      };
+      const { rawText, statement } = req.body;
+      const proposalText = (rawText || statement || '').trim();
 
-      if (!type || !domain || !statement) {
-        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Missing required fields' });
+      if (!proposalText || proposalText.length < MIN_PROPOSAL_LENGTH) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          message: `Detailed proposal text of at least ${MIN_PROPOSAL_LENGTH} characters is required.`,
+        });
       }
 
-      const prefix = typeToPrefix(type);
-      const problemId = await generateProblemId(prefix);
-      const finalShortName = (shortName || statement).trim().slice(0, 60);
+      // Re-score server-side. The client's `evaluation` is a preview only and is
+      // deliberately ignored — trusting it would let a submitter forge an
+      // ACCEPTED verdict and publish arbitrary text into the shared catalog.
+      const evaluation = await runProposalEvaluation(proposalText);
 
-      const created = await prisma.project.create({
+      if (evaluation.verdict !== 'ACCEPTED') {
+        // Keep the rejection on record so repeat/duplicate submissions are auditable.
+        await prisma.problemStatementProposal.create({
+          data: {
+            submitterId: user.id,
+            rawText: proposalText,
+            scores: evaluation.rubrics,
+            verdict: evaluation.verdict,
+            reasons: evaluation.reasons,
+            improvementHints: evaluation.improvementHints,
+            duplicateOfId: evaluation.duplicate?.similarProjectId || null,
+            extracted: evaluation.extracted,
+          },
+        });
+
+        return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({
+          message:
+            evaluation.verdict === 'REJECTED'
+              ? 'This proposal did not meet the catalog acceptance criteria.'
+              : 'This proposal needs improvement before it can be added to the catalog.',
+          evaluation,
+        });
+      }
+
+      const extracted = evaluation.extracted;
+
+      const prefix = typeToPrefix(extracted.type || 'Software');
+      const problemId = await generateProblemId(prefix);
+
+      if (!user.organizationId) {
+        return res
+          .status(StatusCodes.BAD_REQUEST)
+          .json({ message: 'You must belong to an organization to propose a problem statement.' });
+      }
+
+      // Publish the catalog entry and its audit row together so a failure can't
+      // leave a template with no proposal record behind it.
+      const { publishedProject, proposalRow } = await prisma.$transaction(async (tx) => {
+      const publishedProject = await tx.project.create({
         data: {
-          organizationId: user.organizationId,
-          name: finalShortName,
-          problemStatement: statement.trim(),
-          domain,
-          sector: sector || null,
-          difficultyLevel: difficultyLevel || '2',
-          type,
+          organizationId: user.organizationId as string,
+          name: extracted.title || proposalText.slice(0, 50),
+          shortName: extracted.title || proposalText.slice(0, 30),
+          soul: extracted.soul || proposalText.slice(0, 120),
+          problemStatement: proposalText,
+          description: proposalText,
+          domain: extracted.domain || 'Engineering',
+          sector: extracted.sector || 'General',
+          type: extracted.type || 'Software',
+          difficultyLevel: String(extracted.difficultyLevel || '3'),
+          technologies: extracted.technologies || [],
+          deliverables: extracted.outcomes || [],
+          outOfScope: extracted.outOfScope || null,
+          skillsGained: extracted.skillsGained || [],
+          prerequisites: extracted.prerequisites || [],
           problemId,
-          shortName: finalShortName,
           status: 'CATALOG',
           isTemplate: true,
-        },
-        include: {
-          _count: { select: { childProjects: true } },
+          maxTeams: 1, // Restricted to single team slot for proposed statements
         },
       });
 
-      res.status(StatusCodes.CREATED).json(created);
+      const proposalRow = await tx.problemStatementProposal.create({
+        data: {
+          submitterId: user.id,
+          rawText: proposalText,
+          scores: evaluation.rubrics,
+          verdict: evaluation.verdict,
+          reasons: evaluation.reasons,
+          improvementHints: evaluation.improvementHints,
+          duplicateOfId: evaluation.duplicate?.similarProjectId || null,
+          extracted,
+          publishedProjectId: publishedProject.id,
+        },
+      });
+
+        return { publishedProject, proposalRow };
+      });
+
+      res.status(StatusCodes.CREATED).json({
+        success: true,
+        proposalId: proposalRow.id,
+        publishedProject,
+      });
     } catch (error) {
       console.error('Error proposing problem statement:', error);
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
+    }
+  },
+
+  async selectProject(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+
+      let teamId = user.teamId;
+      if (!teamId) {
+        if (!user.organizationId) {
+          return res.status(StatusCodes.BAD_REQUEST).json({ message: 'User organization ID is required to create a team' });
+        }
+        const teamName = user.fullName ? `${user.fullName}'s Team` : 'Project Team';
+        const newTeam = await prisma.team.create({
+          data: {
+            name: teamName,
+            organizationId: user.organizationId,
+            leadId: user.id,
+            members: { connect: { id: user.id } },
+            teamMembers: { create: { userId: user.id, roleLabel: 'Captain' } },
+          },
+        });
+        teamId = newTeam.id;
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { teamId },
+        });
+        user.teamId = teamId;
+      }
+
+      const { id } = req.params;
+      const { differentiationApproach, repoLink, category, teamMembers = [] } = req.body as {
+        differentiationApproach?: string;
+        repoLink?: string;
+        category?: string;
+        teamMembers?: string[];
+      };
+
+      if (!differentiationApproach || differentiationApproach.trim().length < 30) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          message: 'A unique differentiation approach (at least 30 characters) is required to claim a project.',
+        });
+      }
+
+      const targetId = req.params.id as string;
+      // Cheap existence check up front so we can 404 before opening a transaction.
+      // The real overlap/capacity checks are re-run inside the transaction below —
+      // this early read is advisory only and MUST NOT be trusted for the gate,
+      // since a concurrent claim can land between this read and the transaction.
+      const templateExists = await prisma.project.findUnique({
+        where: { id: targetId },
+        select: { id: true, isTemplate: true },
+      });
+
+      if (!templateExists || !templateExists.isTemplate) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Catalog project not found' });
+      }
+
+      const projectCategory = coerceCategory(category);
+
+      // Capacity, overlap, and creation all happen inside one transaction, gated
+      // by a Postgres advisory lock keyed on the template id. Without the lock,
+      // two teams submitting within the same window both read the same
+      // pre-claim snapshot, both pass the overlap/capacity check against it, and
+      // both commit — landing two near-duplicate or over-capacity claims. The
+      // lock forces concurrent claims against the same problem statement to
+      // serialize, so the second team's transaction re-reads the FIRST team's
+      // just-committed claim before deciding.
+      const newProject = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${targetId}))`;
+
+        const template = await tx.project.findUnique({
+          where: { id: targetId },
+          include: {
+            _count: { select: { childProjects: true } },
+            childProjects: {
+              select: { differentiationApproach: true, team: { select: { name: true } } },
+            },
+          },
+        });
+
+        if (!template || !template.isTemplate) {
+          throw new Error('Catalog project not found');
+        }
+
+        const count = (template as any)._count?.childProjects || 0;
+        const maxCap = template.maxTeams ?? MAX_TEAMS_PER_STATEMENT;
+        if (count >= maxCap) {
+          throw new Error(`Maximum capacity (${maxCap} teams) reached for this project statement`);
+        }
+
+        // Same metric and threshold as checkApproachUniqueness's heuristic
+        // fallback (APPROACH_OVERLAP_THRESHOLD) — a team told "unique" by the
+        // preview can never be surprise-rejected here, and vice versa.
+        for (const child of ((template as any).childProjects || [])) {
+          if (child.differentiationApproach) {
+            const overlap = jaccardSimilarity(differentiationApproach, child.differentiationApproach);
+            if (overlap > APPROACH_OVERLAP_THRESHOLD) {
+              throw new Error(
+                `Your approach is too similar to an existing team claim (${child.team?.name || 'another team'}). Please provide a more distinct technical angle.`,
+              );
+            }
+          }
+        }
+
+        const alreadySelected = await tx.project.findFirst({
+          where: { parentProjectId: template.id, teamId },
+        });
+
+        if (alreadySelected) {
+          throw new Error('Your team has already selected this project');
+        }
+
+        const created = await tx.project.create({
+          data: {
+            organizationId: template.organizationId,
+            teamId,
+            parentProjectId: template.id,
+            name: template.name,
+            description: template.description,
+            domain: template.domain,
+            sector: template.sector,
+            difficultyLevel: template.difficultyLevel,
+            type: template.type,
+            problemStatement: template.problemStatement,
+            backgroundContext: template.backgroundContext,
+            targetUsers: template.targetUsers,
+            expectedOutcome: template.expectedOutcome,
+            technologies: template.technologies,
+            requirements: template.requirements,
+            differentiationApproach,
+            differentiationKeywords: differentiationApproach.toLowerCase().split(/\s+/).slice(0, 8),
+            repoLink: repoLink || undefined,
+            category: projectCategory,
+            status: 'pending_approval',
+          },
+        });
+
+        const projectMembers = [
+          { projectId: created.id, userId: user.id, role: 'ADMIN' as const },
+          ...teamMembers.slice(0, 3).map((memberId: string) => ({
+            projectId: created.id,
+            userId: memberId,
+            role: 'STUDENT' as const,
+          })),
+        ];
+
+        await tx.projectMember.createMany({ data: projectMembers });
+
+        return created;
+      });
+
+      res.status(StatusCodes.CREATED).json(newProject);
+    } catch (error: any) {
+      console.error('Error selecting project:', error);
+      const message = error.message || 'Internal server error';
+      if (
+        message.includes('Maximum capacity') ||
+        message.includes('already selected') ||
+        message.includes('too similar')
+      ) {
+        return res.status(StatusCodes.CONFLICT).json({ message });
+      }
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message });
     }
   },
 
@@ -633,185 +1196,4 @@ export const catalogController = {
     }
   },
 
-  // Team selects a template to instantiate as their own project
-  async selectProject(req: Request, res: Response) {
-    try {
-      const user = req.user;
-      if (!user || !user.teamId) {
-        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Must belong to a team' });
-      }
-
-      const { id } = req.params;
-      const { teamMembers = [], repoLink, plan, category } = req.body as {
-        teamMembers?: string[];
-        repoLink?: string;
-        plan?: ExtractedPlan;
-        category?: string;
-      };
-      // Category chosen in the first step of the selection flow (Mini / Final
-      // Year / Research). The flow is client-driven, so it arrives here on select.
-      const projectCategory = coerceCategory(category);
-
-      if (repoLink) {
-        try {
-          githubService.parseRepoUrl(repoLink);
-        } catch (err) {
-          const message = err instanceof GithubAnalysisError ? err.message : 'Invalid GitHub repository link';
-          return res.status(StatusCodes.BAD_REQUEST).json({ message });
-        }
-      }
-
-      // 1. Validate the template exists
-      const template = await prisma.project.findUnique({
-        where: { id: id as string },
-        include: {
-          _count: {
-            select: { childProjects: true },
-          },
-        },
-      });
-
-      if (!template || !template.isTemplate) {
-        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Catalog project not found' });
-      }
-
-      // 2. Validate max capacity (3 to 4 teams)
-      const childCount = (template as any)._count?.childProjects || 0;
-      if (childCount >= MAX_TEAMS_PER_STATEMENT) {
-        return res
-          .status(StatusCodes.BAD_REQUEST)
-          .json({ message: `Maximum capacity (${MAX_TEAMS_PER_STATEMENT} teams) reached for this project` });
-      }
-
-      // 3. Ensure this team hasn't already selected it
-      const alreadySelected = await prisma.project.findFirst({
-        where: {
-          parentProjectId: template.id,
-          teamId: user.teamId,
-        },
-      });
-
-      if (alreadySelected) {
-        return res
-          .status(StatusCodes.CONFLICT)
-          .json({ message: 'Your team has already selected this project' });
-      }
-
-      // 4. Instantiate the project for this team, folding in the mentor's
-      // extracted plan (target users, MoSCoW scope, risks, metrics) when the
-      // team completed the readiness report before selecting.
-      const moscowText = plan?.moscow
-        ? [
-            plan.moscow.must?.length ? `Must-have: ${plan.moscow.must.join('; ')}` : '',
-            plan.moscow.should?.length ? `Should-have: ${plan.moscow.should.join('; ')}` : '',
-            plan.moscow.could?.length ? `Could-have: ${plan.moscow.could.join('; ')}` : '',
-            plan.moscow.wont?.length ? `Won't-have: ${plan.moscow.wont.join('; ')}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n')
-        : undefined;
-
-      const newProject = await prisma.project.create({
-        data: {
-          organizationId: template.organizationId,
-          teamId: user.teamId,
-          parentProjectId: template.id,
-          name: template.name,
-          description: template.description,
-          domain: template.domain,
-          difficultyLevel: template.difficultyLevel,
-          type: template.type,
-          problemStatement: template.problemStatement,
-          objective: plan?.targetUsers ? `Target users: ${plan.targetUsers}` : template.objective,
-          expectedOutcome: plan?.successMetrics?.length
-            ? `Success metrics: ${plan.successMetrics.join('; ')}`
-            : template.expectedOutcome,
-          technologies: plan?.techStack?.length ? plan.techStack : template.technologies,
-          requirements: moscowText,
-          innovation: plan?.uniqueValue || undefined,
-          repoLink: repoLink || undefined,
-          category: projectCategory,
-          status: 'pending_approval',
-        },
-      });
-
-      // 5. Add team members (leader + selected members)
-      const projectMembers = [
-        { projectId: newProject.id, userId: user.id, role: 'ADMIN' as const },
-        ...teamMembers.slice(0, 3).map((memberId: string) => ({
-          projectId: newProject.id,
-          userId: memberId,
-          role: 'STUDENT' as const,
-        })),
-      ];
-
-      await prisma.projectMember.createMany({
-        data: projectMembers,
-      });
-
-      // 6. Bootstrap canonical ProjectLog lifecycle state
-      try {
-        await projectLogService.initLog(newProject.id, {
-          title: newProject.name,
-          category: (newProject.category as ProjectCategory) || 'FINAL_YEAR',
-          teamId: user.teamId,
-          durationMonths: 6,
-        });
-
-        if (newProject.technologies && newProject.technologies.length > 0) {
-          await projectLogService.appendEvent(newProject.id, {
-            type: 'TECHNOLOGIES_SET',
-            actorUserId: user.id,
-            data: { technologies: newProject.technologies },
-          });
-        }
-      } catch (logErr: any) {
-        logger.error('Failed to initialize ProjectLog state on project selection', {
-          projectId: newProject.id,
-          message: logErr?.message,
-        });
-      }
-
-      if (newProject.repoLink) {
-        githubService.analyzeAndLinkProject(newProject.id, newProject.repoLink).catch((err) => {
-          logger.error('Background GitHub analysis failed on project selection', {
-            projectId: newProject.id,
-            message: err?.message,
-          });
-        });
-      }
-
-      // 6. Initialize the canonical AI-lifecycle Project Log (Overview §3.3).
-      // Best-effort: a failure here must never break project selection.
-      try {
-        await projectLogService.initLog(newProject.id, {
-          title: newProject.name,
-          category: (newProject.category as ProjectCategory) || undefined,
-          teamId: newProject.teamId || undefined,
-        });
-        await projectLogService.appendEvent(newProject.id, {
-          type: 'PROJECT_CREATED',
-          actorUserId: user.id,
-          data: { title: newProject.name, category: newProject.category },
-        });
-        if (newProject.repoLink) {
-          await projectLogService.appendEvent(newProject.id, {
-            type: 'GITHUB_LINKED',
-            actorUserId: user.id,
-            data: { repoFullName: newProject.repoLink },
-          });
-        }
-      } catch (logErr) {
-        logger.error('Failed to initialize ProjectLog on selection', {
-          projectId: newProject.id,
-          message: (logErr as any)?.message,
-        });
-      }
-
-      res.status(StatusCodes.CREATED).json(newProject);
-    } catch (error) {
-      console.error('Error selecting project:', error);
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
-    }
-  },
 };

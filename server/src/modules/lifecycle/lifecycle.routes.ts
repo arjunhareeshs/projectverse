@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authGuard } from '../../middleware/authGuard';
 import { requireRole } from '../../middleware/requireRole';
+import { upload } from '../../infrastructure/storage/multer';
 import { validateBody, requireProjectAccess } from './lifecycle.middleware';
 import {
   intakeSchema,
@@ -22,6 +23,9 @@ const router = Router();
 
 router.use(authGuard);
 
+// Asset upload endpoint for daily log screenshots and evidence
+router.post('/upload-asset', upload.single('image'), lifecycleController.uploadAsset as any);
+
 // Intake endpoints
 router.post('/:projectId/intake', requireProjectAccess, validateBody(intakeSchema), lifecycleController.handleIntake as any);
 router.post('/:projectId/intake/duration-check', validateBody(durationCheckSchema), lifecycleController.checkDuration as any);
@@ -41,10 +45,12 @@ router.post('/:projectId/notes', requireProjectAccess, validateBody(manualNoteSc
 router.post('/:projectId/members/add', requireProjectAccess, validateBody(memberAddSchema), lifecycleController.addMember as any);
 router.delete('/:projectId/members/:userId', requireProjectAccess, lifecycleController.removeMember as any);
 
-// Execution Document endpoints
+// Execution Document & Phase Reward endpoints
 router.post('/:projectId/document/generate', requireProjectAccess, lifecycleController.generateDocument as any);
 router.get('/:projectId/document', requireProjectAccess, lifecycleController.getDocument as any);
+router.put('/:projectId/document', requireProjectAccess, lifecycleController.saveDocument as any);
 router.get('/:projectId/document/download', requireProjectAccess, lifecycleController.downloadDocument as any);
+router.post('/:projectId/claim-phase-reward', requireProjectAccess, lifecycleController.claimPhaseReward as any);
 
 // Daily work log endpoints
 router.get('/:projectId/daily-log/draft', requireProjectAccess, lifecycleController.getDailyLogDraft as any);

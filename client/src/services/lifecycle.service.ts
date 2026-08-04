@@ -73,6 +73,14 @@ export const lifecycleService = {
     }
   },
 
+  saveDocument: async (
+    projectId: string,
+    doc: ExecutionDocContent
+  ): Promise<{ doc: ExecutionDocContent; version: number; message: string }> => {
+    const res = await api.put(`/lifecycle/${projectId}/document`, { doc });
+    return res.data;
+  },
+
   downloadDocument: async (projectId: string, format: 'md' | 'pdf') => {
     const response = await api.get(`/lifecycle/${projectId}/document/download`, {
       params: { format },
@@ -147,6 +155,29 @@ export const lifecycleService = {
 
   askMentor: async (projectId: string, question: string): Promise<{ answer: string; available?: boolean }> => {
     const res = await api.post(`/lifecycle/${projectId}/mentor/ask`, { question });
+    return res.data;
+  },
+
+  uploadAsset: async (file: File): Promise<{ success: boolean; url: string; fileName: string }> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await api.post('/lifecycle/upload-asset', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
+  claimPhaseReward: async (
+    projectId: string,
+    phaseId: string,
+    phaseName: string,
+    points: number
+  ): Promise<{ success: boolean; pointsAwarded: number; newTotalPoints: number; message: string }> => {
+    const res = await api.post(`/lifecycle/${projectId}/claim-phase-reward`, {
+      phaseId,
+      phaseName,
+      points,
+    });
     return res.data;
   },
 };

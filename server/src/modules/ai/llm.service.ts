@@ -8,6 +8,9 @@ export interface LlmOptions<T = any> {
   retries?: number;
   schema?: z.ZodType<T>;
   feature?: string;
+  /** Max completion tokens. Raise this for responses that must carry a
+   *  detailed, student-readable explanation rather than a terse verdict. */
+  maxTokens?: number;
 }
 
 export interface LlmResult<T> {
@@ -40,6 +43,7 @@ async function callGroq(
           model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
           messages,
           temperature,
+          max_tokens: options?.maxTokens ?? 1024,
           ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
         },
         {

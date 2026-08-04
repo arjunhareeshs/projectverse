@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
   FileText,
   Calendar,
+  Users,
   MessageSquare,
   ShieldCheck,
   Bot,
@@ -13,11 +14,8 @@ import {
 } from 'lucide-react';
 import { useAppSelector } from '../app/hooks';
 import { ProjectReviewerPanel } from '../components/projects/ProjectReviewerPanel';
-import { DocumentTab } from './ProjectWorkspace/DocumentTab';
+import { ProjectExecutionTemplate } from '../components/projects/ProjectExecutionTemplate';
 import { DailyLogTab } from './ProjectWorkspace/DailyLogTab';
-import { ChatTab } from './ProjectWorkspace/ChatTab';
-import { EvaluationsTab } from './ProjectWorkspace/EvaluationsTab';
-import { MentorPanel } from './ProjectWorkspace/MentorPanel';
 import { IntakeWizard } from '../components/lifecycle/IntakeWizard';
 import { lifecycleService } from '../services/lifecycle.service';
 import { teamService } from '../services/team.service';
@@ -30,9 +28,9 @@ export const ProjectDetailPage: React.FC = () => {
   const user = useAppSelector((state) => state.auth.user);
   const switcherRef = useRef<HTMLDivElement>(null);
 
-  const initialTabParam = searchParams.get('tab') as 'document' | 'log' | 'chat' | 'evaluations' | 'mentor' | null;
-  const [activeTab, setActiveTabState] = useState<'document' | 'log' | 'chat' | 'evaluations' | 'mentor'>(
-    initialTabParam || 'document'
+  const initialTabParam = searchParams.get('tab') as 'log' | 'team-features' | 'execution-plan' | null;
+  const [activeTab, setActiveTabState] = useState<'log' | 'team-features' | 'execution-plan'>(
+    initialTabParam || 'log'
   );
   const [logState, setLogState] = useState<ProjectLogState | null>(null);
   const [unresolvedFlagsCount, setUnresolvedFlagsCount] = useState(0);
@@ -44,7 +42,7 @@ export const ProjectDetailPage: React.FC = () => {
 
   const projectId = id || '1';
 
-  const setActiveTab = (tab: 'document' | 'log' | 'chat' | 'evaluations' | 'mentor') => {
+  const setActiveTab = (tab: 'log' | 'team-features' | 'execution-plan') => {
     setActiveTabState(tab);
     setSearchParams({ tab }, { replace: true });
   };
@@ -94,111 +92,93 @@ export const ProjectDetailPage: React.FC = () => {
   }, []);
 
   const tabs = [
-    { id: 'document', label: 'Execution Document', icon: FileText },
     { id: 'log', label: 'Daily Log', icon: Calendar },
-    { id: 'chat', label: 'Team Chat', icon: MessageSquare },
-    { id: 'evaluations', label: '15-Day Evaluations', icon: ShieldCheck },
-    {
-      id: 'mentor',
-      label: 'AI Assistant',
-      icon: Bot,
-      badge: unresolvedFlagsCount > 0 ? unresolvedFlagsCount : undefined,
-    },
+    { id: 'team-features', label: 'Team & Features Allocation', icon: Users },
+    { id: 'execution-plan', label: 'Phase Execution Plan & Reviews', icon: FileText },
   ];
 
   return (
     <div className="p-6 max-w-7xl mx-auto w-full space-y-6">
       {/* Workspace Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200 pb-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/60 pb-5">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-700 uppercase tracking-wide">
-              {logState?.category || 'MINI'} PROJECT
+          <div className="flex items-center gap-2.5 mb-2">
+            <span className="text-[11px] font-extrabold px-3 py-0.5 rounded-full bg-[#EEF2FF] text-[#4338CA] tracking-wide uppercase">
+              {logState?.category
+                ? logState.category.endsWith('_PROJECT')
+                  ? logState.category
+                  : `${logState.category}_PROJECT`
+                : 'FINAL_YEAR_PROJECT'}
             </span>
-            {logState?.duration?.months && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-600">
-                {logState.duration.months} Months Duration
-              </span>
-            )}
+            <span className="text-[11px] font-semibold text-gray-500">
+              {logState?.duration?.months ? `${logState.duration.months} Months Duration` : '6 Months Duration'}
+            </span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {logState?.title || `Project Lifecycle Workspace (${projectId})`}
+          <h1 className="text-2xl font-black text-[#0F172A] tracking-tight">
+            {logState?.title || 'Wind Powered Child Warming System'}
           </h1>
-          <p className="text-xs text-gray-500 mt-1">
-            Track daily logs, execution baseline, 15-day AI reviews, and continuous mentorship.
+          <p className="text-xs text-[#64748B] font-normal mt-1">
+            Track daily work logs, team allocation, and phase execution reviews for this project.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {teamProjects.length > 1 && (
-            <div className="relative" ref={switcherRef}>
-              <button
-                onClick={() => setSwitcherOpen((v) => !v)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition"
-              >
-                <Layers className="w-3.5 h-3.5" /> Switch Project
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              {switcherOpen && (
-                <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 max-h-80 overflow-y-auto">
-                  {teamProjects.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setSwitcherOpen(false);
-                        navigate(`/projects/${p.id}`);
-                      }}
-                      className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50"
-                    >
-                      <span className="truncate">
-                        <span className="font-semibold text-gray-900 block truncate">{p.name}</span>
-                        {p.domain && <span className="text-gray-400">{p.domain}</span>}
-                      </span>
-                      {p.id === projectId && <Check className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="relative" ref={switcherRef}>
+            <button
+              onClick={() => setSwitcherOpen((v) => !v)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200/90 text-[#0F172A] text-xs font-bold rounded-2xl hover:bg-gray-50 transition shadow-2xs"
+            >
+              <Layers className="w-3.5 h-3.5 text-gray-600" /> Switch Project
+              <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+            </button>
+            {switcherOpen && (
+              <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 max-h-80 overflow-y-auto">
+                {teamProjects.map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setSwitcherOpen(false);
+                      navigate(`/projects/${p.id}`);
+                    }}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50"
+                  >
+                    <span className="truncate">
+                      <span className="font-semibold text-gray-900 block truncate">{p.name}</span>
+                      {p.domain && <span className="text-gray-400">{p.domain}</span>}
+                    </span>
+                    {p.id === projectId && <Check className="w-3.5 h-3.5 text-[#4F46E5] shrink-0" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <button
             onClick={() => navigate('/projects')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200/90 text-[#0F172A] text-xs font-bold rounded-2xl hover:bg-gray-50 transition shadow-2xs"
           >
             All Projects
-          </button>
-          <button
-            onClick={() => setShowWizard(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition shadow-2xs"
-          >
-            <Sparkles className="w-3.5 h-3.5" /> Setup Intake & Doc
           </button>
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-none gap-2">
+      {/* Tabs Navigation */}
+      <div className="flex border-b border-gray-200/80 gap-8 overflow-x-auto pt-1">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
-
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-3 border-b-2 text-xs font-bold transition-all whitespace-nowrap ${
+              className={`flex items-center gap-2 px-0.5 py-3 border-b-2 text-xs font-bold transition-all whitespace-nowrap ${
                 isActive
-                  ? 'border-indigo-600 text-indigo-600 bg-indigo-50/40 rounded-t-xl'
-                  : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
+                  ? 'border-[#4F46E5] text-[#4F46E5]'
+                  : 'border-transparent text-[#64748B] hover:text-gray-900'
               }`}
             >
               <Icon className="w-4 h-4" />
               <span>{tab.label}</span>
-              {tab.badge !== undefined && (
-                <span className="w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-extrabold flex items-center justify-center">
-                  {tab.badge}
-                </span>
-              )}
             </button>
           );
         })}
@@ -206,21 +186,21 @@ export const ProjectDetailPage: React.FC = () => {
 
       {/* Main Workspace Content Area */}
       <div className="pt-2">
-        {activeTab === 'document' && (
-          <DocumentTab
+        {activeTab === 'log' && <DailyLogTab projectId={projectId} />}
+        {activeTab === 'team-features' && (
+          <ProjectExecutionTemplate
             projectId={projectId}
             logState={logState}
-            onLaunchWizard={() => setShowWizard(true)}
-            initialFallback={justGeneratedFallback}
+            initialTab="team-features"
+            onBack={() => navigate('/projects')}
           />
         )}
-        {activeTab === 'log' && <DailyLogTab projectId={projectId} />}
-        {activeTab === 'chat' && <ChatTab teamId={teamId || undefined} />}
-        {activeTab === 'evaluations' && <EvaluationsTab projectId={projectId} />}
-        {activeTab === 'mentor' && (
-          <MentorPanel
+        {activeTab === 'execution-plan' && (
+          <ProjectExecutionTemplate
             projectId={projectId}
-            onFlagsUpdate={(count) => setUnresolvedFlagsCount(count)}
+            logState={logState}
+            initialTab="execution-plan"
+            onBack={() => navigate('/projects')}
           />
         )}
       </div>
@@ -241,7 +221,7 @@ export const ProjectDetailPage: React.FC = () => {
             setShowWizard(false);
             setJustGeneratedFallback(!!fallback);
             fetchLogState();
-            setActiveTab('document');
+            navigate(`/projects/${projectId}/execution-doc`);
           }}
           onClose={() => setShowWizard(false)}
         />

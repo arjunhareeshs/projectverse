@@ -52,6 +52,19 @@ export class DailyLogService {
       },
     });
 
+    // Award +20 reward points and +10 activity points to user in DB on daily log submission
+    try {
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          rewardPoints: { increment: 20 },
+          activityPoints: { increment: 10 },
+        },
+      });
+    } catch (ptsErr) {
+      console.error('Failed to increment user points for daily log:', ptsErr);
+    }
+
     return {
       id: record.id,
       projectId: record.projectId,

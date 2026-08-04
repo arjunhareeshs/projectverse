@@ -45,135 +45,43 @@ export const PAST_CONVERSATIONS: Conversation[] = [
 
 export const WELCOME_MESSAGE = `Hello! I'm your AI project management assistant, powered by ProjectVerse AI. I have full context on your active projects, team capacity, and upcoming deadlines.\n\nHow can I help you today?`;
 
-// Simulated AI responses for demo purposes
-export function getAiResponse(userMessage: string): string {
-  const lower = userMessage.toLowerCase();
-  if (lower.includes('status report') || lower.includes('report')) {
-    return `## 📊 Project Status Report — Customer Relationship Portal
-
-**Week of ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}**
-
-**Overall Status:** 🟡 On Track (68% complete)
-
-### Key Highlights
-- ✅ Design System update shipped to staging last Tuesday
-- ✅ Authentication flow fully tested with 0 regressions
-- 🔄 Dashboard layout in active development (David Developer assigned)
-- ⏳ API Integration scoped for this sprint
-
-### Risks
-- The API Integration task is on the critical path. If it slips past Friday, it will delay UAT by approximately 1 week.
-
-### Next Steps
-1. Complete dashboard layout by Thursday
-2. Begin API integration spike this week
-3. Schedule stakeholder demo for end of sprint
-
-*Ready to send this to your client?*`;
-  }
-
-  if (lower.includes('blocker') || lower.includes('risk')) {
-    return `## ⚠️ Current Blockers & Risks
-
-I've analyzed all active projects. Here's what needs your attention:
-
-**Inventory Management System** (At Risk 🔴)
-- **Blocker:** Vendor API integration is blocked pending credential delivery from Meridian Logistics IT team.
-- **Suggested action:** Escalate to your PM contact. Offer a staging environment workaround.
-
-**Customer Relationship Portal** (On Track ✅)
-- **Minor risk:** API Integration task has no assignee yet.
-- **Suggested action:** Assign this to David Developer or Elena Engineer immediately.
-
-**Patient Portal Modernization** (On Track ✅)
-- **No immediate blockers**, but the HIPAA compliance audit is in-progress and needs to be resolved before any production deployment.
-
-Would you like me to draft an escalation email for the vendor blocker?`;
-  }
-
-  if (lower.includes('sprint') || lower.includes('plan')) {
-    return `## 📅 Sprint Planning — Inventory Management System
-
-Here's a suggested 2-week sprint plan:
-
-**Sprint Goal:** Unblock vendor API integration and deliver warehouse UI skeleton
-
-**Sprint Backlog**
-
-| # | Task | Assignee | Points |
-|---|------|----------|--------|
-| 1 | Vendor API credential follow-up | PM | 1 |
-| 2 | Mock vendor API with stub data | David D. | 3 |
-| 3 | Warehouse list UI component | Elena E. | 5 |
-| 4 | Vendor sync job scaffolding | David D. | 8 |
-| 5 | Database schema refinement | David D. | 3 |
-
-**Total:** 20 story points
-**Capacity:** 18–22 points (2 devs × 2 weeks)
-
-Shall I add these to the Kanban board?`;
-  }
-
-  if (lower.includes('email') || lower.includes('client')) {
-    return `## 📧 Client Update Email
-
-**To:** ABC Retail Ltd. — Project Stakeholders
-**Subject:** Customer Relationship Portal — Week ${Math.ceil(new Date().getDate() / 7)} Update
-
----
-
-Dear Team,
-
-I hope this message finds you well. Here is a brief summary of progress on the Customer Relationship Portal this week.
-
-**Progress Summary**
-We have completed 68% of the total project scope and remain on track against our September 15 target. The authentication system has been fully implemented and tested, and the core design system update is now live on staging.
-
-**Current Focus**
-Our team is now focused on the dashboard layout and API integration components, which are the remaining critical path items for the next milestone.
-
-**No Issues to Report**
-There are no blockers or scope changes to report at this time. We remain confident in the delivery timeline.
-
-Feel free to reach out if you have any questions. We look forward to sharing a stakeholder demo at the end of this sprint.
-
-Best regards,
-[Your Name]
-
----
-
-*Would you like me to adjust the tone or add any additional details?*`;
-  }
-
-  return `I'm your AI project management assistant. I can help you with:
-
-- 📊 **Generating status reports** for any project
-- ⚠️ **Identifying and escalating blockers** across your portfolio
-- 📅 **Sprint planning** and task prioritization
-- 📧 **Drafting client communications**
-- 💡 **Budget and resource optimization insights**
-- 🔍 **Risk analysis and mitigation strategies**
-
-What would you like to work on today?`;
-}
-
-// Helper to parse inline bold markdown formatting reliably (no ** text view)
+// Helper to parse inline bold and code markdown formatting reliably
 export function parseInlineFormatting(text: string): React.ReactNode {
-  const regex = /\*\*(.*?)\*\*/g;
+  if (!text) return text;
+  const regex = /(\*\*.*?\*\*|`.*?`)/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match;
   let keyIdx = 0;
+
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push(text.substring(lastIndex, match.index));
     }
-    parts.push(<strong key={keyIdx++} className="font-extrabold text-gray-900">{match[1]}</strong>);
+    const token = match[0];
+    if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(
+        <strong key={keyIdx++} className="font-extrabold text-gray-900">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      parts.push(
+        <code
+          key={keyIdx++}
+          className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono text-[11px] font-bold border border-indigo-100/80 mx-0.5 inline-block"
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    }
     lastIndex = regex.lastIndex;
   }
+
   if (lastIndex < text.length) {
     parts.push(text.substring(lastIndex));
   }
+
   return <>{parts.length > 0 ? parts : text}</>;
 }
 
@@ -601,36 +509,149 @@ export function renderMessageContent(content: string): React.ReactNode {
     content.includes('[INFO]') ||
     content.includes('[WARNING]') ||
     content.includes('[ERROR]') ||
-    content.startsWith('[') && content.includes(']')
+    (content.startsWith('[') && content.includes(']'))
   ) {
     return <ShellConsoleWidget content={content} />;
   }
 
-  // Fallback: Standard line-by-line rendering with dynamic inline bold markdown parsing
-  const lines = content.split('\n');
-  return (
-    <div className="space-y-1.5 text-left text-xs font-semibold text-gray-700">
-      {lines.map((line, i) => {
-        if (line.startsWith('## ')) {
-          return <h2 key={i} className="text-sm font-black text-gray-900 mt-3 mb-1.5 uppercase tracking-wide">{line.replace('## ', '')}</h2>;
-        }
-        if (line.startsWith('### ')) {
-          return <h3 key={i} className="text-xs font-black text-gray-800 mt-2.5 mb-1 uppercase tracking-wide">{line.replace('### ', '')}</h3>;
-        }
-        if (line.startsWith('- ')) {
-          return <li key={i} className="ml-4 text-xs text-gray-600 list-disc font-medium leading-relaxed">{parseInlineFormatting(line.replace('- ', ''))}</li>;
-        }
-        if (line.match(/^\d+\./)) {
-          return <li key={i} className="ml-4 text-xs text-gray-600 list-decimal font-medium leading-relaxed">{parseInlineFormatting(line.replace(/^\d+\.\s/, ''))}</li>;
-        }
-        if (line === '---') {
-          return <hr key={i} className="border-gray-200 my-2" />;
-        }
-        if (line.trim() === '') {
-          return <br key={i} />;
-        }
-        return <p key={i} className="text-xs text-gray-600 leading-relaxed font-medium">{parseInlineFormatting(line)}</p>;
-      })}
-    </div>
-  );
+  // Fallback: Smart Block Parser for Headings, Tables, Lists, and Inline Markdown
+  const rawLines = content.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < rawLines.length) {
+    const line = rawLines[i];
+    const trimmed = line.trim();
+
+    // 1. Check for Table block (consecutive lines starting with |)
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      const tableLines: string[] = [];
+      while (i < rawLines.length && rawLines[i].trim().startsWith('|') && rawLines[i].trim().endsWith('|')) {
+        tableLines.push(rawLines[i].trim());
+        i++;
+      }
+
+      if (tableLines.length > 0) {
+        // Parse headers and rows
+        const headers = tableLines[0]
+          .split('|')
+          .map((c) => c.trim())
+          .filter((c) => c !== '');
+        
+        // Filter out separator lines (e.g. | --- | --- |)
+        const dataLines = tableLines.slice(1).filter((l) => !l.includes('---'));
+        const rows = dataLines.map((l) =>
+          l
+            .split('|')
+            .map((c) => c.trim())
+            .filter((c) => c !== '')
+        );
+
+        blocks.push(
+          <div key={`table-${i}`} className="my-3 overflow-x-auto rounded-xl border border-indigo-100 shadow-2xs bg-white">
+            <table className="w-full text-left text-xs border-collapse">
+              {headers.length > 0 && (
+                <thead className="bg-indigo-50/70 border-b border-indigo-100">
+                  <tr>
+                    {headers.map((h, hIdx) => (
+                      <th
+                        key={hIdx}
+                        className="px-3.5 py-2 font-extrabold text-indigo-950 uppercase tracking-wider text-[10px]"
+                      >
+                        {parseInlineFormatting(h)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+              )}
+              <tbody className="divide-y divide-gray-100">
+                {rows.map((row, rIdx) => (
+                  <tr key={rIdx} className={rIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} className="px-3.5 py-2 text-xs font-medium text-gray-700">
+                        {parseInlineFormatting(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+        continue;
+      }
+    }
+
+    // 2. Headings (Markdown # or UPPERCASE headers)
+    const isHeading =
+      trimmed.startsWith('# ') ||
+      trimmed.startsWith('## ') ||
+      trimmed.startsWith('### ') ||
+      (trimmed.length > 2 &&
+        trimmed.length < 60 &&
+        trimmed === trimmed.toUpperCase() &&
+        /^[A-Z0-9\s&_:\-]+$/.test(trimmed));
+
+    if (isHeading) {
+      const headingText = trimmed.replace(/^#+\s*/, '');
+      blocks.push(
+        <h3
+          key={`h-${i}`}
+          className="text-xs font-black text-indigo-950 uppercase tracking-wider mt-3.5 mb-1.5 border-b border-indigo-100/60 pb-1 flex items-center gap-1.5"
+        >
+          {headingText}
+        </h3>
+      );
+      i++;
+      continue;
+    }
+
+    // 3. Bullet points
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      const bulletText = trimmed.slice(2);
+      blocks.push(
+        <li key={`b-${i}`} className="ml-4 text-xs text-gray-600 list-disc font-medium leading-relaxed my-0.5">
+          {parseInlineFormatting(bulletText)}
+        </li>
+      );
+      i++;
+      continue;
+    }
+
+    // 4. Numbered list items
+    if (/^\d+\./.test(trimmed)) {
+      const numText = trimmed.replace(/^\d+\.\s*/, '');
+      blocks.push(
+        <li key={`n-${i}`} className="ml-4 text-xs text-gray-600 list-decimal font-medium leading-relaxed my-0.5">
+          {parseInlineFormatting(numText)}
+        </li>
+      );
+      i++;
+      continue;
+    }
+
+    // 5. Horizontal rule
+    if (trimmed === '---') {
+      blocks.push(<hr key={`hr-${i}`} className="border-gray-200 my-2.5" />);
+      i++;
+      continue;
+    }
+
+    // 6. Empty line
+    if (trimmed === '') {
+      blocks.push(<div key={`space-${i}`} className="h-1" />);
+      i++;
+      continue;
+    }
+
+    // 7. Regular paragraph
+    blocks.push(
+      <p key={`p-${i}`} className="text-xs text-gray-600 leading-relaxed font-medium my-0.5">
+        {parseInlineFormatting(line)}
+      </p>
+    );
+    i++;
+  }
+
+  return <div className="space-y-0.5 text-left text-xs font-semibold text-gray-700">{blocks}</div>;
 }

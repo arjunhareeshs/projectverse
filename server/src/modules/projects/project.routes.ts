@@ -13,6 +13,8 @@ router.post('/catalog/session/start', catalogController.startCatalogSession);
 router.get('/catalog/readiness', catalogController.getReadiness);
 router.get('/catalog/tree', catalogController.getCatalogTree);
 router.get('/catalog', catalogController.getCatalog);
+router.get('/catalog/:id', catalogController.getCatalogById);
+router.post('/catalog/:id/check-approach', catalogController.checkApproachUniqueness);
 router.post('/catalog/validate-proposal', catalogController.validateProposal);
 router.post('/catalog/propose', catalogController.proposeProblemStatement);
 router.post('/catalog/mentor', catalogController.mentor);

@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../../shared/database';
 import { projectLogService } from './projectLog.service';
 import { dailyLogService } from './dailyLog.service';
@@ -8,6 +10,7 @@ import { docGeneratorEngine } from './engines/docGenerator.engine';
 import { evaluationEngine } from './engines/evaluation.engine';
 import { mentorEngine } from './engines/mentor.engine';
 import { renderDocPdfBuffer } from './render/docPdf';
+import { renderDocMarkdown } from './render/docMarkdown';
 import { intakeSchema, dailyLogSchema, durationCheckSchema, suggestMembersSchema, mentorAskSchema } from './lifecycle.schemas';
 import { draftDailyLog } from './dailyLog.prefill';
 import { detectPersistentBlockers } from '../metrics/blockerEscalation';
@@ -175,6 +178,49 @@ export class LifecycleController {
         doc: doc.content,
         allVersions,
         generatedAt: doc.createdAt,
+      });
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async saveDocument(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const { doc: newDocContent } = req.body;
+
+      if (!newDocContent || typeof newDocContent !== 'object') {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid document content provided' });
+        return;
+      }
+
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Project not found' });
+        return;
+      }
+
+      const currentDoc = await prisma.executionDocument.findFirst({
+        where: { projectId },
+        orderBy: { version: 'desc' },
+      });
+
+      const nextVersion = (currentDoc?.version || 0) + 1;
+      const markdown = renderDocMarkdown(newDocContent as any, project.name);
+
+      const savedDoc = await prisma.executionDocument.create({
+        data: {
+          projectId,
+          version: nextVersion,
+          content: newDocContent,
+          markdown,
+        },
+      });
+
+      res.status(StatusCodes.OK).json({
+        version: savedDoc.version,
+        doc: savedDoc.content,
+        message: 'Execution document updated successfully',
       });
     } catch (err: any) {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
@@ -507,6 +553,73 @@ export class LifecycleController {
       res.status(StatusCodes.OK).json({ success: true, state: result });
     } catch (err: any) {
       res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async uploadAsset(req: Request, res: Response): Promise<void> {
+    try {
+      const file = req.file;
+      if (!file) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'No image file uploaded' });
+        return;
+      }
+
+      const assetsDir = path.join(__dirname, '../../../uploads/assets');
+      if (!fs.existsSync(assetsDir)) {
+        fs.mkdirSync(assetsDir, { recursive: true });
+      }
+
+      const uniqueName = `asset-${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
+      const filePath = path.join(assetsDir, uniqueName);
+      fs.writeFileSync(filePath, file.buffer);
+
+      const url = `/uploads/assets/${uniqueName}`;
+      res.status(StatusCodes.CREATED).json({ success: true, url, fileName: file.originalname });
+    } catch (err: any) {
+      console.error('Asset upload error:', err);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async claimPhaseReward(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const { phaseId, phaseName, points } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!userId) {
+        res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User ID required' });
+        return;
+      }
+
+      const ptsToAward = Number(points) || 250;
+
+      // Update reward points in DB for user
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { rewardPoints: { increment: ptsToAward } },
+      });
+
+      // Record project log event
+      try {
+        await projectLogService.appendEvent(projectId, {
+          type: 'MANUAL_NOTE',
+          actorUserId: userId,
+          data: { note: `Claimed Phase Review Reward (${phaseName || phaseId}): +${ptsToAward} pts awarded to DB.` },
+        });
+      } catch (logErr) {
+        // Event append best-effort
+      }
+
+      res.status(StatusCodes.OK).json({
+        success: true,
+        pointsAwarded: ptsToAward,
+        newTotalPoints: updatedUser.rewardPoints,
+        message: `Successfully claimed +${ptsToAward} reward points for ${phaseName || 'Phase Review'}! Points saved to DB.`,
+      });
+    } catch (err: any) {
+      console.error('Claim phase reward error:', err);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
     }
   }
 }

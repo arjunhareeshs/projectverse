@@ -446,8 +446,10 @@ export const teamController = {
   async searchCandidates(req: Request, res: Response) {
     try {
       const user = req.user;
-      if (!user || !user.organizationId)
+      if (!user)
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      if (!user.organizationId)
+        return res.json([]);
       const q = (req.query['q'] as string) || '';
       const candidates = await teamService.searchCandidates(user.organizationId, q, user.teamId);
       res.json(candidates);

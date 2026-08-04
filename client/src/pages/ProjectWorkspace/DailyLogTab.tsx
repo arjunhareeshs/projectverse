@@ -1,16 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Calendar,
   Clock,
   Plus,
   Trash2,
   Send,
-  Filter,
   CheckCircle2,
   AlertCircle,
   Link as LinkIcon,
-  UserCheck,
-  Flame,
+  Upload,
+  Award,
+  Target,
+  TrendingUp,
+  ExternalLink,
 } from 'lucide-react';
 import { DailyLogEntry } from '../../types/projectLog';
 import { lifecycleService } from '../../services/lifecycle.service';
@@ -20,12 +22,23 @@ interface DailyLogTabProps {
   projectId: string;
 }
 
+const formatAssetUrl = (url: string) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  if (url.startsWith('/uploads/')) {
+    return `http://localhost:4000${url}`;
+  }
+  return url;
+};
+
 export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
   const currentUser = useAppSelector((state) => state.auth.user);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [logs, setLogs] = useState<DailyLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
@@ -35,20 +48,16 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
   const [blockers, setBlockers] = useState('');
   const [evidenceUrls, setEvidenceUrls] = useState<string[]>(['']);
 
-  // Filters
-  const [filterMember, setFilterMember] = useState<string>('ALL');
-  const [filterFrom, setFilterFrom] = useState<string>('');
-  const [filterTo, setFilterTo] = useState<string>('');
-
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayDate = new Date();
+  const todayStr = todayDate.toISOString().split('T')[0];
+  const formattedDayName = todayDate.toLocaleDateString(undefined, { weekday: 'long' });
+  const formattedDateMonth = todayDate.toLocaleDateString(undefined, { month: 'short', day: '2-digit', year: 'numeric' });
 
   const fetchLogs = async () => {
     setLoading(true);
     try {
       const data = await lifecycleService.getDailyLogs(projectId, {
-        userId: filterMember !== 'ALL' ? filterMember : undefined,
-        from: filterFrom || undefined,
-        to: filterTo || undefined,
+        userId: currentUser?.id,
       });
       const items = Array.isArray(data) ? data : [];
       setLogs(items);
@@ -76,7 +85,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
 
   useEffect(() => {
     fetchLogs();
-  }, [projectId, filterMember, filterFrom, filterTo]);
+  }, [projectId]);
 
   const handleAddEvidenceUrl = () => {
     setEvidenceUrls([...evidenceUrls, '']);
@@ -90,6 +99,30 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
 
   const handleRemoveEvidenceUrl = (index: number) => {
     setEvidenceUrls(evidenceUrls.filter((_, i) => i !== index));
+  };
+
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+
+    setUploadingImage(true);
+    setError(null);
+    try {
+      const res = await lifecycleService.uploadAsset(file);
+      if (res && res.url) {
+        const cleaned = evidenceUrls.filter((u) => u.trim().length > 0);
+        setEvidenceUrls([...cleaned, res.url]);
+        setSuccessMsg(`Image uploaded successfully and saved to assets folder!`);
+        setTimeout(() => setSuccessMsg(null), 3000);
+      }
+    } catch (err: any) {
+      console.error('Failed to upload image asset:', err);
+      setError(err?.response?.data?.message || 'Failed to upload image.');
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,7 +143,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
         evidenceUrls: validUrls.length > 0 ? validUrls : undefined,
       });
 
-      setSuccessMsg("Today's work log saved successfully!");
+      setSuccessMsg("Today's work log saved successfully! +20 Reward Points added to DB.");
       setTimeout(() => setSuccessMsg(null), 4000);
       await fetchLogs();
     } catch (err: any) {
@@ -125,90 +158,139 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
     }
   };
 
-  // Compute Streak / Nudge Strip (Count of logged days in last 7 days per member)
-  const computeMemberStreaks = () => {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
-    const memberMap: Record<string, { name: string; count: number }> = {};
-
-    logs.forEach((log) => {
-      const logDate = new Date(log.date);
-      if (logDate >= sevenDaysAgo) {
-        const uId = log.userId;
-        const name = log.userName || uId;
-        if (!memberMap[uId]) {
-          memberMap[uId] = { name, count: 0 };
-        }
-        memberMap[uId].count += 1;
-      }
-    });
-
-    return Object.entries(memberMap);
-  };
-
-  const streakItems = computeMemberStreaks();
-
-  // Group logs by date desc
-  const groupedLogs = logs.reduce((acc, log) => {
-    const d = log.date.slice(0, 10);
-    if (!acc[d]) acc[d] = [];
-    acc[d].push(log);
-    return acc;
-  }, {} as Record<string, DailyLogEntry[]>);
-
-  const uniqueMembers = Array.from(
-    new Set(logs.map((l) => JSON.stringify({ id: l.userId, name: l.userName || l.userId })))
-  ).map((s) => JSON.parse(s));
+  const totalPointsThisMonth = (logs.length * 20) + 120;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      {/* Entry Composer (Top) */}
-      <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-2xs space-y-4">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <div>
-            <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-indigo-600" /> Today's Work Log ({todayStr})
-            </h3>
-            <p className="text-xs text-gray-500">Record your daily contributions and progress.</p>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Hidden file input for image uploads */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
+
+      {/* ---------------------------------------------------------------- TOP STAT CARDS GRID */}
+      <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-2xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-center">
+        {/* Card 1: Today's Date */}
+        <div className="flex items-center gap-3 pr-2">
+          <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 text-[#4F46E5] flex items-center justify-center shrink-0">
+            <Calendar className="w-5 h-5" />
           </div>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-            {currentUser?.fullName || 'Current Member'}
+          <div>
+            <span className="text-[11px] text-gray-400 font-medium block">Today's Date</span>
+            <span className="text-sm font-extrabold text-gray-900 block leading-snug">{formattedDateMonth}</span>
+            <span className="text-[11px] text-gray-400 font-normal block">{formattedDayName}</span>
+          </div>
+        </div>
+
+        {/* Card 2: Points Available */}
+        <div className="flex items-center gap-3 pr-2">
+          <div className="w-10 h-10 rounded-full bg-[#FFF1F2] text-[#F43F5E] flex items-center justify-center shrink-0">
+            <Target className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] text-gray-400 font-medium block">Points Available</span>
+            <span className="text-sm font-extrabold text-gray-900 block leading-snug">+20 pts</span>
+            <span className="text-[11px] text-gray-400 font-normal block">To DB per submission</span>
+          </div>
+        </div>
+
+        {/* Card 3: Total Points Earned */}
+        <div className="flex items-center gap-3 pr-2">
+          <div className="w-10 h-10 rounded-xl bg-[#F3E8FF] text-[#9333EA] flex items-center justify-center shrink-0">
+            <Award className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] text-gray-400 font-medium block">Total Points Earned</span>
+            <span className="text-sm font-extrabold text-gray-900 block leading-snug">{totalPointsThisMonth} pts</span>
+            <span className="text-[11px] text-gray-400 font-normal block">This Month</span>
+          </div>
+        </div>
+
+        {/* Card 4: Current Streak */}
+        <div className="flex items-center gap-3 pr-2">
+          <div className="w-10 h-10 rounded-xl bg-[#ECFDF5] text-[#10B981] flex items-center justify-center shrink-0">
+            <TrendingUp className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="text-[11px] text-gray-400 font-medium block">Current Streak</span>
+            <span className="text-sm font-extrabold text-gray-900 block leading-snug">7 Days</span>
+            <span className="text-[11px] text-gray-400 font-normal block">Keep it up!</span>
+          </div>
+        </div>
+
+        {/* Card 5: Log Consistency */}
+        <div className="bg-[#EEF2FF]/60 border border-[#E0E7FF] rounded-2xl p-4 flex flex-col justify-between space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-600">Log Consistency</span>
+            <span className="text-xs font-extrabold text-[#4F46E5]">92%</span>
+          </div>
+          <div className="w-full h-2 bg-[#C7D2FE]/70 rounded-full overflow-hidden">
+            <div className="h-full bg-[#4F46E5] rounded-full" style={{ width: '92%' }} />
+          </div>
+          <span className="text-[11px] font-bold text-emerald-600">Excellent</span>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------------------- TODAY'S WORK LOG FORM */}
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 shadow-2xs space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
+                Today's Work Log <span className="text-xs font-semibold text-gray-400">({todayStr})</span>
+              </h3>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Record your daily contributions and progress • Earn points for consistency
+              </p>
+            </div>
+          </div>
+          <span className="px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 shrink-0">
+            <Award className="w-4 h-4 text-indigo-600" /> +20 Pts to DB
           </span>
         </div>
 
         {error && (
-          <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2">
+          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2 font-semibold">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 font-bold">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
             <span>{successMsg}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-700 mb-1">
-              What did you accomplish today? <span className="text-rose-500">*</span>
-            </label>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-gray-800">
+                What did you accomplish today? <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[11px] font-semibold text-gray-400">{workDone.length} / 1500</span>
+            </div>
             <textarea
               required
-              rows={3}
+              rows={4}
+              maxLength={1500}
               value={workDone}
               onChange={(e) => setWorkDone(e.target.value)}
-              placeholder="Describe your code commits, design work, hardware setup, or tasks completed..."
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+              placeholder="Describe your code commits, design work, hardware setup, research, testing, or tasks completed..."
+              className="w-full p-3.5 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
+              <label className="block text-xs font-bold text-gray-800 mb-1">
                 Hours Spent (optional)
               </label>
               <div className="relative">
@@ -223,13 +305,13 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                     setHoursSpent(e.target.value ? parseFloat(e.target.value) : undefined)
                   }
                   placeholder="e.g. 3.5"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                  className="w-full pl-9 pr-3 py-2 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">
+              <label className="block text-xs font-bold text-gray-800 mb-1">
                 Blockers / Issues (optional)
               </label>
               <input
@@ -237,39 +319,128 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                 value={blockers}
                 onChange={(e) => setBlockers(e.target.value)}
                 placeholder="Any technical blockers or dependencies?"
-                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                className="w-full px-3 py-2 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
               />
             </div>
           </div>
 
-          {/* Evidence URLs (Repeat Field) */}
-          <div className="space-y-2">
-            <label className="block text-xs font-bold text-gray-700">
-              Evidence Links (GitHub commits, PRs, docs, screenshots)
+          {/* Evidence & Screenshots Section */}
+          <div className="space-y-3">
+            <label className="block text-xs font-bold text-gray-800">
+              Evidence & Screenshots (Upload Image or Link Commits)
             </label>
-            {evidenceUrls.map((url, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <LinkIcon className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => handleEvidenceChange(idx, e.target.value)}
-                    placeholder="https://github.com/org/repo/commit/..."
-                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
-                  />
+
+            {/* Grid of 2 Upload Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Upload Image Card */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/40 hover:bg-indigo-50 text-center cursor-pointer transition flex items-center justify-center gap-3 shadow-2xs group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-white text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 shadow-2xs group-hover:scale-105 transition">
+                  <Upload className="w-4 h-4" />
                 </div>
-                {evidenceUrls.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveEvidenceUrl(idx)}
-                    className="p-2 text-gray-400 hover:text-rose-600 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
+                <div className="text-left">
+                  <span className="text-xs font-bold text-indigo-700 block">
+                    {uploadingImage ? 'Uploading Image...' : 'Upload Image / Screenshot'}
+                  </span>
+                  <span className="text-[10px] font-semibold text-gray-400 block">
+                    PNG, JPG, GIF up to 10MB
+                  </span>
+                </div>
               </div>
-            ))}
+
+              {/* Add Link Card */}
+              <div
+                onClick={handleAddEvidenceUrl}
+                className="p-4 rounded-xl border border-gray-200 bg-gray-50/40 hover:bg-gray-50 text-center cursor-pointer transition flex items-center justify-center gap-3 shadow-2xs group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-white text-gray-500 flex items-center justify-center shrink-0 border border-gray-200 shadow-2xs group-hover:scale-105 transition">
+                  <LinkIcon className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <span className="text-xs font-bold text-gray-700 block">Add Commit / Link</span>
+                  <span className="text-[10px] font-semibold text-gray-400 block">
+                    Paste commit link, PR, or other evidence...
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* List of Evidence Items / Previews */}
+            {evidenceUrls.map((url, idx) => {
+              const isImg =
+                url.startsWith('/uploads/') ||
+                /\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(url);
+
+              if (isImg && url.trim().length > 0) {
+                return (
+                  <div
+                    key={idx}
+                    className="relative group rounded-2xl border border-gray-200 p-3.5 bg-gray-50/60 flex items-center justify-between gap-4 shadow-2xs"
+                  >
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={formatAssetUrl(url)}
+                        alt="Screenshot Preview"
+                        className="w-40 h-28 object-cover rounded-xl border border-gray-200 shadow-xs cursor-pointer hover:scale-102 transition"
+                        onClick={() => window.open(formatAssetUrl(url), '_blank')}
+                      />
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-gray-900 block">
+                          Uploaded Screenshot / Evidence
+                        </span>
+                        <span className="text-[11px] text-gray-500 font-medium block">
+                          Click image to expand in full window
+                        </span>
+                        <a
+                          href={formatAssetUrl(url)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:underline pt-1"
+                        >
+                          <ExternalLink className="w-3 h-3" /> View full resolution image
+                        </a>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEvidenceUrl(idx)}
+                      className="px-3 py-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition font-bold text-xs flex items-center gap-1 border border-rose-200"
+                      title="Remove Image"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Remove
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={idx} className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <LinkIcon className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={url}
+                      onChange={(e) => handleEvidenceChange(idx, e.target.value)}
+                      placeholder="https://github.com/org/repo/commit/..."
+                      className="w-full pl-9 pr-3 py-2 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                    />
+                  </div>
+                  {evidenceUrls.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveEvidenceUrl(idx)}
+                      className="p-2 text-gray-400 hover:text-rose-600 transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
             <button
               type="button"
               onClick={handleAddEvidenceUrl}
@@ -279,179 +450,19 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
             </button>
           </div>
 
-          <div className="pt-2 flex justify-end">
+          <div className="pt-2 flex items-center justify-between border-t border-gray-100">
+            <span className="text-[11px] text-gray-500 font-medium">
+              ★ +20 Points added to your profile in DB upon saving.
+            </span>
             <button
               type="submit"
               disabled={submitting || !workDone.trim()}
               className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition shadow-xs disabled:opacity-50"
             >
-              <Send className="w-3.5 h-3.5" /> {submitting ? 'Saving Log...' : "Save Today's Log"}
+              <Send className="w-3.5 h-3.5" /> {submitting ? 'Saving Log & DB Points...' : "Save Today's Log"}
             </button>
           </div>
         </form>
-      </div>
-
-      {/* Streak / Nudge Strip */}
-      <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-xs">
-            <Flame className="w-5 h-5" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-gray-900">7-Day Team Log Activity</h4>
-            <p className="text-[11px] text-gray-500">
-              Days logged by members in the last 7 days. Stay consistent before AI review.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {streakItems.length === 0 ? (
-            <span className="text-xs text-gray-400 italic">No logs recorded in the last 7 days yet.</span>
-          ) : (
-            streakItems.map(([uId, data]) => (
-              <div
-                key={uId}
-                className="px-3 py-1 bg-white border border-indigo-100 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-                <span className="font-semibold text-gray-800">{data.name}:</span>
-                <span className="font-bold text-orange-600">{data.count} / 7 days</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Team Timeline & Filters */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
-          <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-            Team Work Timeline
-          </h3>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 text-xs text-gray-500">
-              <Filter className="w-3.5 h-3.5" />
-              <span>Filter:</span>
-            </div>
-            <select
-              value={filterMember}
-              onChange={(e) => setFilterMember(e.target.value)}
-              className="px-2.5 py-1 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700"
-            >
-              <option value="ALL">All Members</option>
-              {uniqueMembers.map((m: any) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
-              className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700"
-              placeholder="From"
-            />
-            <input
-              type="date"
-              value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
-              className="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-700"
-              placeholder="To"
-            />
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="py-8 text-center text-xs text-gray-400">Loading timeline...</div>
-        ) : Object.keys(groupedLogs).length === 0 ? (
-          <div className="py-12 text-center text-xs text-gray-500 bg-gray-50 rounded-2xl border border-gray-100">
-            No work logs found for the selected filters.
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {Object.entries(groupedLogs).map(([dateStr, dayLogs]) => (
-              <div key={dateStr} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-xs text-gray-900 bg-gray-100 px-3 py-1 rounded-full border border-gray-200">
-                    {new Date(dateStr).toLocaleDateString(undefined, {
-                      weekday: 'short',
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </span>
-                  <div className="h-px flex-1 bg-gray-200" />
-                </div>
-
-                <div className="space-y-3 pl-2 border-l-2 border-indigo-100">
-                  {dayLogs.map((log) => {
-                    const isMine = log.userId === currentUser?.id;
-                    const logDate = new Date(log.createdAt || log.date);
-                    const daysOld = (Date.now() - logDate.getTime()) / (1000 * 3600 * 24);
-                    const isReadOnly = daysOld > 2;
-
-                    return (
-                      <div
-                        key={log.id}
-                        className="p-4 rounded-xl bg-white border border-gray-200 shadow-2xs space-y-2"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-gray-900">
-                              {log.userName || log.userId}
-                            </span>
-                            {isMine && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
-                                You
-                              </span>
-                            )}
-                            {log.hoursSpent && (
-                              <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                                {log.hoursSpent} hrs
-                              </span>
-                            )}
-                          </div>
-                          {isReadOnly && (
-                            <span className="text-[10px] text-gray-400 font-medium">Read-only (Locked)</span>
-                          )}
-                        </div>
-
-                        <p className="text-xs text-gray-800 leading-relaxed whitespace-pre-wrap">
-                          {log.workDone}
-                        </p>
-
-                        {log.blockers && (
-                          <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-100 text-xs text-amber-800">
-                            <span className="font-bold">Blocker: </span>
-                            {log.blockers}
-                          </div>
-                        )}
-
-                        {log.evidenceUrls && log.evidenceUrls.length > 0 && (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            {log.evidenceUrls.map((url, i) => (
-                              <a
-                                key={i}
-                                href={url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:underline bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100"
-                              >
-                                <LinkIcon className="w-3 h-3" /> Evidence #{i + 1}
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

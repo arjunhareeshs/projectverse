@@ -10,9 +10,9 @@ export const ProtectedRoute: React.FC = () => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // If user is ADMIN and attempting to access non-admin paths, redirect to admin upload portal
+  // If user is ADMIN and attempting to access non-admin paths, redirect to top teams portal
   if (user?.role === 'ADMIN' && !location.pathname.startsWith('/admin')) {
-    return <Navigate to="/admin/upload" replace />;
+    return <Navigate to="/admin/top-teams" replace />;
   }
 
   // If user is STUDENT and attempting to access admin routes, redirect to student dashboard

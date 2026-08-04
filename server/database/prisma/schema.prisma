@@ -68,6 +68,10 @@ model User {
   adminChats      AdminChatHistory[] @relation("AdminChatUser")
   projectReviews  ProjectReview[]
   dailyWorkLogs   DailyWorkLog[]
+  proposals       ProblemStatementProposal[]
+  reviewedOverlapFlags ProjectOverlapFlag[] @relation("OverlapFlagReviewer")
+  reviewedStandouts   StandoutProject[]    @relation("StandoutReviewer")
+  reviewedOpportunities OpportunityRecommendation[] @relation("OpportunityReviewer")
 }
 
 model Organization {
@@ -183,6 +187,37 @@ model Project {
   status              String          @default("planned")
   isTemplate          Boolean         @default(false)
   parentProjectId     String?
+  maxTeams            Int             @default(3)
+
+  // Industry-grade problem metadata (extended catalog fields)
+  soul                    String?     // one-line essence
+  backgroundContext       String?
+  targetUsers             String?
+  useCases                Json?       // string[]
+  constraints             String?
+  outOfScope              String?     // explicitly what NOT to build
+  expectedMetrics         Json?       // { name, target, unit }[]
+  deliverables            Json?       // string[]
+  courseOutcomes          String[]    @default([]) // ['CO1', 'CO2']
+  programOutcomes         String[]    @default([]) // ['PO1', 'PO5']
+  skillsGained            String[]    @default([]) // ['Embedded C', 'REST API design', 'PCB routing']
+  prerequisites           String[]    @default([]) // skills + prior coursework
+  phases                  Json?       // [{ label: "Review 1", week: 4, expected: "..." }]
+  hardwareComponents      String[]    @default([]) // ['DHT22', 'ESP32', 'Relay 5V']
+  budgetEstimateInr       Int?
+  budgetNotes             String?
+  standards               String[]    @default([]) // ['MQTT', 'BLE']
+  expectedImpact          String?
+  sdgAlignment            Int[]       @default([]) // SDG goal numbers
+  publicationPotential    String?
+  referenceLinks          String[]    @default([])
+  similarProducts         String[]    @default([]) // existing products to differentiate against
+  suggestedDurationWeeks  Int?
+  typeSpecific            Json?       // Tier-3 block (software scale/load, hardware BOM, IoT payload/frequency)
+
+  // Differentiation system (each team must bring a unique angle)
+  differentiationApproach String?     // team's unique angle, 30+ chars
+  differentiationKeywords String[]    @default([]) // extracted tags for similarity check
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   organization        Organization    @relation(fields: [organizationId], references: [id])
@@ -205,6 +240,30 @@ model Project {
   dailyWorkLogs   DailyWorkLog[]
   executionDocuments ExecutionDocument[]
   evaluationReports EvaluationReport[]
+  duplicateProposals ProblemStatementProposal[] @relation("ProposalDuplicate")
+  publishedProposals ProblemStatementProposal[] @relation("ProposalPublished")
+  overlapMembers     ProjectOverlapMember[]
+  standout           StandoutProject?
+  opportunityRecommendation OpportunityRecommendation?
+}
+
+model ProblemStatementProposal {
+  id                 String   @id @default(cuid())
+  submitterId        String
+  rawText            String
+  scores             Json?
+  verdict            String   // ACCEPTED | REJECTED | PENDING_ADMIN
+  reasons            String[] @default([])
+  improvementHints   String[] @default([])
+  duplicateOfId      String?
+  extracted          Json?
+  publishedProjectId String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  submitter        User     @relation(fields: [submitterId], references: [id])
+  duplicateOf      Project? @relation("ProposalDuplicate", fields: [duplicateOfId], references: [id])
+  publishedProject Project? @relation("ProposalPublished", fields: [publishedProjectId], references: [id])
 }
 
 model ProjectMember {
@@ -670,3 +729,99 @@ model EvaluationReport {
   @@unique([projectId, cycle])
 }
 
+// ─── Insights Models ─────────────────────────────────────────────────────────
+
+model ProjectOverlapFlag {
+  id                  String                 @id @default(cuid())
+  clusterHash         String                 @unique
+  domain              String?
+  severity            String                 // 'PARTIAL_OVERLAP' | 'SUBSTANTIAL_OVERLAP' | 'NEAR_DUPLICATE'
+  similarityScore     Float
+  confidence          Int
+  overlappingFeatures String[]
+  sharedTechnologies  String[]
+  keyDifferences      String[]
+  rationale           String
+  recommendedAction   String
+  isFallback          Boolean                @default(false)
+  status              String                 @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED' | 'SUPPRESSED'
+  reviewedById        String?
+  reviewedBy          User?                  @relation("OverlapFlagReviewer", fields: [reviewedById], references: [id])
+  reviewNote          String?
+  members             ProjectOverlapMember[]
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([status])
+  @@index([domain, status])
+}
+
+model ProjectOverlapMember {
+  id          String             @id @default(cuid())
+  flagId      String
+  flag        ProjectOverlapFlag @relation(fields: [flagId], references: [id], onDelete: Cascade)
+  projectId   String
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId      String?
+  contentHash String
+  createdAt   DateTime           @default(now())
+
+  @@unique([flagId, projectId])
+  @@index([projectId])
+}
+
+model StandoutProject {
+  id                 String   @id @default(cuid())
+  projectId          String   @unique
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId             String?
+  verdict            String   // 'NOT_YET' | 'PROMISING' | 'STARTUP_WORTHY'
+  confidence         Int
+  evidenceScore      Float
+  cyclesEvaluated    Int
+  avgScore           Float
+  minScore           Float
+  trendDelta         Float
+  lastCycleSeen      Int
+  oneLinePitch       String
+  marketProblem      String
+  differentiator     String
+  defensibility      String
+  targetMarket       String
+  evidenceHighlights String[]
+  risks              String[]
+  nextSteps          String[]
+  isFallback         Boolean  @default(false)
+  status             String   @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED'
+  reviewedById       String?
+  reviewedBy         User?    @relation("StandoutReviewer", fields: [reviewedById], references: [id])
+  reviewNote         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([verdict, status])
+}
+
+model OpportunityRecommendation {
+  id                 String   @id @default(cuid())
+  projectId          String   @unique
+  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId             String?
+  opportunityScore   Float    // 0-100 composite readiness score (static, cached)
+  cyclesEvaluated    Int
+  lastCycleSeen      Int
+  hackathonFit       Int      // 0-100 sub-score
+  presentationFit    Int      // 0-100 sub-score
+  incubationFit      Int      // 0-100 sub-score
+  recommendations    Json     // Array<{ type, name, url, why, deadline?, matchReason }>
+  isFallback         Boolean  @default(false)
+  status             String   @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED'
+  reviewedById       String?
+  reviewedBy         User?    @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
+  reviewNote         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([status])
+  @@index([opportunityScore])
+}

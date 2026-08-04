@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Download, FileText, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
+import { Download, FileText, RefreshCw, Sparkles, AlertCircle, Layout } from 'lucide-react';
 import { ExecutionDocContent, ProjectLogState } from '../../types/projectLog';
 import { lifecycleService } from '../../services/lifecycle.service';
 import { SkillGapCard } from '../../components/lifecycle/SkillGapCard';
+import { ProjectExecutionTemplate } from '../../components/projects/ProjectExecutionTemplate';
 
 interface DocumentTabProps {
   projectId: string;
@@ -22,6 +23,7 @@ export const DocumentTab: React.FC<DocumentTabProps> = ({
   const [allVersions, setAllVersions] = useState<number[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<'template' | 'document'>('template');
   const [downloading, setDownloading] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [showConfirmRegen, setShowConfirmRegen] = useState(false);
@@ -109,6 +111,28 @@ export const DocumentTab: React.FC<DocumentTabProps> = ({
     );
   }
 
+  // If in template view mode or viewing interactive execution document & reward template
+  if (viewMode === 'template') {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-end gap-2 mb-2">
+          <button
+            onClick={() => setViewMode('document')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs"
+          >
+            <FileText className="w-3.5 h-3.5" /> View Structured Document
+          </button>
+        </div>
+        <ProjectExecutionTemplate
+          projectId={projectId}
+          logState={logState}
+          initialDoc={doc}
+          onSaved={() => fetchDoc(selectedVersion)}
+        />
+      </div>
+    );
+  }
+
   if (!doc) {
     return (
       <div className="py-16 px-6 max-w-md mx-auto text-center border-2 border-dashed border-gray-200 rounded-2xl bg-gray-50/50 space-y-4">
@@ -155,6 +179,12 @@ export const DocumentTab: React.FC<DocumentTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setViewMode('template')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-xl hover:bg-indigo-100 transition shadow-2xs"
+          >
+            <Layout className="w-3.5 h-3.5" /> Interactive Reward Template
+          </button>
           {allVersions.length > 1 && (
             <select
               value={selectedVersion ?? allVersions[0]}

@@ -17,6 +17,7 @@ import { adminRoutes } from './modules/admin/admin.routes';
 import { internalRoutes } from './modules/internal/internal.routes';
 import { githubRoutes } from './modules/github/github.routes';
 import { lifecycleRoutes } from './modules/lifecycle/lifecycle.routes';
+import { proposalRoutes } from './modules/projects/proposals.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
@@ -49,6 +50,7 @@ export function createApp() {
   app.use('/api', healthRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/projects', projectRoutes);
+  app.use('/api/proposals', proposalRoutes);
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/teams', teamRoutes);
   app.use('/api/tasks', taskRoutes);

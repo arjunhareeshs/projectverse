@@ -2,428 +2,774 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { api } from '../services/api';
 import { useAppSelector } from '../app/hooks';
 import {
-  BookOpen,
-  Users,
-  CheckCircle,
-  AlertTriangle,
+  Search,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  CheckCircle2,
+  Radio,
+  Ban,
+  MoreVertical,
+  FileText,
+  LayoutGrid,
+  List,
+  Wind,
+  Trash2,
+  Sprout,
+  Activity,
+  Droplets,
   Layers,
-  X,
-  Target,
-  Code,
-  Lightbulb,
-  ArrowRight,
-  Server,
-  Cpu,
-  Link,
+  ChevronDown,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { TeamMemberSelect } from '../components/projects/TeamMemberSelect';
+import { teamService } from '../services/team.service';
 
-interface CatalogProject {
+export interface MyProjectItem {
   id: string;
   name: string;
-  problemStatement: string;
-  objective: string;
-  expectedOutcome: string;
-  domain: string;
-  sector: string | null;
-  type: string;
-  technologies: string[];
-  _count: {
-    childProjects: number;
-  };
+  categoryTag?: string; // 'FINAL YEAR' | 'MINI' | 'RESEARCH'
+  domain?: string;
+  subdomain?: string;
+  teamName?: string;
+  memberCount?: number;
+  teamAvatars?: Array<{ initials: string; bg: string }>;
+  moreMembersCount?: number;
+  status: 'In Progress' | 'Review' | 'Completed' | 'On Hold';
+  progressPercent: number;
+  lastUpdated: string;
+  iconType?: 'wind' | 'trash' | 'sprout' | 'activity' | 'droplets' | 'default';
+  iconBg?: string;
+  iconColor?: string;
 }
 
-const SECTOR_PAGE_SIZE = 6;
+const MOCK_MY_PROJECTS: MyProjectItem[] = [
+  {
+    id: 'proj-1',
+    name: 'Wind Powered Child Warming System',
+    categoryTag: 'FINAL YEAR',
+    domain: 'Smart Cities',
+    subdomain: 'Renewable Energy',
+    teamName: 'Team Alpha',
+    memberCount: 5,
+    teamAvatars: [
+      { initials: 'SA', bg: 'bg-indigo-600' },
+      { initials: 'AR', bg: 'bg-blue-600' },
+      { initials: 'KM', bg: 'bg-sky-600' },
+    ],
+    moreMembersCount: 2,
+    status: 'In Progress',
+    progressPercent: 68,
+    lastUpdated: 'Aug 3, 2025 10:30 AM',
+    iconType: 'wind',
+    iconBg: 'bg-purple-100',
+    iconColor: 'text-purple-600',
+  },
+  {
+    id: 'proj-2',
+    name: 'Smart Waste Management System',
+    categoryTag: 'FINAL YEAR',
+    domain: 'Smart Cities',
+    subdomain: 'Waste Management',
+    teamName: 'Team Beta',
+    memberCount: 4,
+    teamAvatars: [
+      { initials: 'VS', bg: 'bg-rose-500' },
+      { initials: 'PR', bg: 'bg-amber-500' },
+      { initials: 'AK', bg: 'bg-purple-600' },
+    ],
+    moreMembersCount: 1,
+    status: 'In Progress',
+    progressPercent: 45,
+    lastUpdated: 'Aug 3, 2025 09:15 AM',
+    iconType: 'trash',
+    iconBg: 'bg-emerald-100',
+    iconColor: 'text-emerald-600',
+  },
+  {
+    id: 'proj-3',
+    name: 'AI Based Crop Disease Detection',
+    categoryTag: 'FINAL YEAR',
+    domain: 'Agriculture',
+    subdomain: 'AI/ML',
+    teamName: 'Team Gamma',
+    memberCount: 5,
+    teamAvatars: [
+      { initials: 'SK', bg: 'bg-amber-600' },
+      { initials: 'MJ', bg: 'bg-emerald-600' },
+      { initials: 'RG', bg: 'bg-orange-500' },
+    ],
+    moreMembersCount: 2,
+    status: 'Review',
+    progressPercent: 75,
+    lastUpdated: 'Aug 2, 2025 04:45 PM',
+    iconType: 'sprout',
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-600',
+  },
+  {
+    id: 'proj-4',
+    name: 'Health Monitoring Wearable Device',
+    categoryTag: 'FINAL YEAR',
+    domain: 'Healthcare',
+    subdomain: 'IoT',
+    teamName: 'Team Delta',
+    memberCount: 4,
+    teamAvatars: [
+      { initials: 'NA', bg: 'bg-rose-600' },
+      { initials: 'KP', bg: 'bg-red-500' },
+      { initials: 'AM', bg: 'bg-amber-600' },
+    ],
+    moreMembersCount: 1,
+    status: 'On Hold',
+    progressPercent: 20,
+    lastUpdated: 'Aug 1, 2025 11:20 AM',
+    iconType: 'activity',
+    iconBg: 'bg-rose-100',
+    iconColor: 'text-rose-600',
+  },
+  {
+    id: 'proj-5',
+    name: 'Smart Water Quality Monitoring',
+    categoryTag: 'FINAL YEAR',
+    domain: 'Environment',
+    subdomain: 'IoT',
+    teamName: 'Team Epsilon',
+    memberCount: 5,
+    teamAvatars: [
+      { initials: 'SV', bg: 'bg-blue-600' },
+      { initials: 'RK', bg: 'bg-indigo-600' },
+      { initials: 'DP', bg: 'bg-sky-500' },
+    ],
+    moreMembersCount: 2,
+    status: 'Completed',
+    progressPercent: 100,
+    lastUpdated: 'Jul 30, 2025 03:10 PM',
+    iconType: 'droplets',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+  },
+];
 
 export const AllProjects: React.FC = () => {
-  const [projects, setProjects] = useState<CatalogProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeType, setActiveType] = useState<string>('Software');
-  const [selectedProject, setSelectedProject] = useState<any | null>(null);
-  const [teamMembers, setTeamMembers] = useState<string[]>([]);
-  const [selecting, setSelecting] = useState(false);
-  const [selectError, setSelectError] = useState<string | null>(null);
-  const [expandedSectors, setExpandedSectors] = useState<Set<string>>(new Set());
+  const [projectsList, setProjectsList] = useState<MyProjectItem[]>(MOCK_MY_PROJECTS);
+  const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
-  const token = useAppSelector((s) => s.auth.token);
+  // Filter & Search states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [sortOption, setSortOption] = useState<string>('recently_updated');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
+
   const user = useAppSelector((s) => s.auth.user);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchCatalog = async () => {
-      try {
-        const res = await api.get('/projects/catalog');
-        setProjects(Array.isArray(res.data) ? res.data : []);
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'Failed to load catalog');
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (token) fetchCatalog();
-  }, [token]);
-
-  const handleSelect = async (projectId: string) => {
-    if (!user?.teamId) {
-      alert('You must be part of a team to select a project.');
-      return;
-    }
-    setSelecting(true);
-    setSelectError(null);
+  const fetchUserProjects = async () => {
     try {
-      const res = await api.post(`/projects/catalog/${projectId}/select`, {
-        teamMembers,
-      });
-      const newProjId = res.data?.id || res.data?.projectId || projectId;
-      window.dispatchEvent(new CustomEvent('pv:refresh', { detail: { type: 'project-selected' } }));
-      navigate(`/projects/${newProjId}`);
-    } catch (err: any) {
-      setSelectError(err.response?.data?.message || 'Failed to select project');
+      setLoading(true);
+
+      let rawProjects: any[] = [];
+      if (user?.teamId) {
+        try {
+          const teamProjs = await teamService.getTeamProjects(user.teamId);
+          if (Array.isArray(teamProjs) && teamProjs.length > 0) {
+            rawProjects = teamProjs;
+          }
+        } catch (e) {
+          console.log('Failed to fetch team projects:', e);
+        }
+      }
+
+      if (rawProjects.length === 0) {
+        try {
+          const activeRes = await api.get('/projects/active');
+          if (Array.isArray(activeRes.data) && activeRes.data.length > 0) {
+            rawProjects = activeRes.data;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      if (rawProjects.length > 0) {
+        const mapped: MyProjectItem[] = rawProjects.map((p: any, idx: number) => {
+          const statuses: Array<'In Progress' | 'Review' | 'Completed' | 'On Hold'> = [
+            'In Progress',
+            'Review',
+            'Completed',
+            'On Hold',
+          ];
+          const icons: Array<'wind' | 'trash' | 'sprout' | 'activity' | 'droplets'> = [
+            'wind',
+            'trash',
+            'sprout',
+            'activity',
+            'droplets',
+          ];
+          const iconBgs = ['bg-purple-100', 'bg-emerald-100', 'bg-amber-100', 'bg-rose-100', 'bg-blue-100'];
+          const iconColors = [
+            'text-purple-600',
+            'text-emerald-600',
+            'text-amber-600',
+            'text-rose-600',
+            'text-blue-600',
+          ];
+
+          const statusVal = p.status
+            ? p.status === 'COMPLETED'
+              ? 'Completed'
+              : p.status === 'ON_HOLD'
+              ? 'On Hold'
+              : p.status === 'REVIEW'
+              ? 'Review'
+              : 'In Progress'
+            : statuses[idx % statuses.length];
+
+          const iconVal = icons[idx % icons.length];
+          const membersList = p.team?.members || p.members || [];
+
+          return {
+            id: p.id,
+            name: p.name || p.title || p.shortName || 'Project ' + (idx + 1),
+            categoryTag: p.category || (p.type ? String(p.type).toUpperCase() : 'FINAL YEAR'),
+            domain: p.domain || 'Smart Cities',
+            subdomain: p.sector || p.subdomain || 'General',
+            teamName: p.team?.name || 'My Team',
+            memberCount: membersList.length || 4,
+            teamAvatars:
+              membersList.length > 0
+                ? membersList.slice(0, 3).map((m: any, i: number) => ({
+                    initials: ((m.name || m.fullName || `Member ${i + 1}`).split(' ').map((n: string) => n[0]).join('').slice(0, 2) || 'M').toUpperCase(),
+                    bg: ['bg-indigo-600', 'bg-blue-600', 'bg-sky-600', 'bg-purple-600'][i % 4],
+                  }))
+                : [
+                    { initials: 'SA', bg: 'bg-indigo-600' },
+                    { initials: 'AR', bg: 'bg-blue-600' },
+                    { initials: 'KM', bg: 'bg-sky-600' },
+                  ],
+            moreMembersCount: Math.max(0, (membersList.length || 4) - 3),
+            status: statusVal,
+            progressPercent: p.progress !== undefined ? p.progress : statusVal === 'Completed' ? 100 : Math.floor(30 + ((idx * 23) % 65)),
+            lastUpdated: p.updatedAt
+              ? new Date(p.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+              : 'Aug 3, 2025 10:30 AM',
+            iconType: iconVal,
+            iconBg: iconBgs[idx % iconBgs.length],
+            iconColor: iconColors[idx % iconColors.length],
+          };
+        });
+
+        setProjectsList(mapped);
+      }
+    } catch (err) {
+      console.error('Error fetching user projects:', err);
     } finally {
-      setSelecting(false);
+      setLoading(false);
     }
   };
 
-  const categorizedProjects = useMemo(() => {
-    const map: Record<string, Record<string, Record<string, CatalogProject[]>>> = {
-      Software: {},
-      Hardware: {},
-      Combination: {},
-    };
+  useEffect(() => {
+    fetchUserProjects();
+  }, []);
 
-    projects.forEach((p) => {
-      const typeRaw = (p.type || 'Software').toLowerCase();
-      let typeKey = 'Software';
-      if (
-        typeRaw.includes('combo') ||
-        typeRaw.includes('combination') ||
-        (typeRaw.includes('hard') && typeRaw.includes('soft'))
-      ) {
-        typeKey = 'Combination';
-      } else if (typeRaw.includes('hard')) {
-        typeKey = 'Hardware';
+  // Filtered list calculation
+  const filteredProjects = useMemo(() => {
+    return projectsList.filter((p) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = p.name.toLowerCase().includes(q);
+        const matchesDomain = (p.domain || '').toLowerCase().includes(q);
+        const matchesSubdomain = (p.subdomain || '').toLowerCase().includes(q);
+        if (!matchesName && !matchesDomain && !matchesSubdomain) return false;
       }
-
-      const domainKey = p.domain || 'Uncategorized';
-      const sectorKey = p.sector || 'General';
-      if (!map[typeKey][domainKey]) {
-        map[typeKey][domainKey] = {};
+      if (statusFilter !== 'all') {
+        if (p.status.toLowerCase().replace(/\s+/g, '_') !== statusFilter.toLowerCase().replace(/\s+/g, '_')) {
+          return false;
+        }
       }
-      if (!map[typeKey][domainKey][sectorKey]) {
-        map[typeKey][domainKey][sectorKey] = [];
-      }
-      map[typeKey][domainKey][sectorKey].push(p);
+      return true;
     });
+  }, [projectsList, searchQuery, statusFilter]);
 
-    return map;
-  }, [projects]);
+  // Statistics metric calculations
+  const totalCount = projectsList.length;
+  const activeCount = projectsList.filter((p) => p.status === 'In Progress').length;
+  const completedCount = projectsList.filter((p) => p.status === 'Completed').length;
+  const onHoldCount = projectsList.filter((p) => p.status === 'On Hold').length;
 
-  if (loading) {
-    return (
-      <div className="p-8 max-w-7xl mx-auto w-full flex items-center justify-center min-h-[50vh]">
-        <div className="flex flex-col items-center gap-4 text-gray-400">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-medium animate-pulse">Loading Problem Statements...</p>
-        </div>
-      </div>
-    );
-  }
+  // Pagination calculation
+  const totalPages = Math.ceil(filteredProjects.length / pageSize) || 1;
+  const paginatedProjects = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredProjects.slice(start, start + pageSize);
+  }, [filteredProjects, currentPage, pageSize]);
 
-  const activeDomains = categorizedProjects[activeType] || {};
+  // Render project icon helper
+  const renderProjectIcon = (type?: string) => {
+    switch (type) {
+      case 'wind':
+        return <Wind className="w-5 h-5" />;
+      case 'trash':
+        return <Trash2 className="w-5 h-5" />;
+      case 'sprout':
+        return <Sprout className="w-5 h-5" />;
+      case 'activity':
+        return <Activity className="w-5 h-5" />;
+      case 'droplets':
+        return <Droplets className="w-5 h-5" />;
+      default:
+        return <Layers className="w-5 h-5" />;
+    }
+  };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto w-full relative">
-      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="min-h-screen bg-slate-50/50 p-6 md:p-8 font-sans space-y-6 max-w-7xl mx-auto">
+      {/* ---------------------------------------------------------------- TOP HEADER BAR */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <Layers className="w-8 h-8 text-primary" />
-            All Problem Statements
-          </h1>
-          <p className="text-gray-500 mt-2">
-            Browse problem statements organized by category and domain.
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">My Projects</h1>
+          <p className="text-xs text-slate-500 mt-1 font-medium">
+            All the projects you are part of. Track progress and manage execution.
           </p>
         </div>
+
         <button
-          onClick={() => navigate('/projects/recommend')}
-          className="bg-primary text-white px-6 py-2.5 rounded-xl font-semibold shadow-sm hover:shadow-md hover:bg-primary/90 transition-all flex items-center gap-2"
+          onClick={() => navigate('/projects/propose')}
+          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition"
         >
-          <Lightbulb className="w-5 h-5" />
+          <Plus className="h-4 w-4" />
           New Project
         </button>
       </div>
 
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5" /> {error}
-        </div>
-      )}
-
-      {/* Type Tabs */}
-      <div className="flex bg-gray-100/80 p-1.5 rounded-xl gap-2 mb-8 max-w-2xl border border-gray-200">
-        {[
-          { id: 'Software', label: 'Software', icon: Code },
-          { id: 'Hardware', label: 'Hardware', icon: Cpu },
-          { id: 'Combination', label: 'Hardware + Software', icon: Link },
-        ].map((type) => {
-          const Icon = type.icon;
-          return (
-            <button
-              key={type.id}
-              onClick={() => setActiveType(type.id)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg font-semibold text-sm transition-all duration-200 ${
-                activeType === type.id
-                  ? 'bg-white text-primary shadow-sm ring-1 ring-gray-900/5'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
-              }`}
-            >
-              <Icon className="w-4 h-4" /> {type.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Domain Groups */}
-      {Object.keys(activeDomains).length === 0 ? (
-        <div className="text-center py-20 bg-white border border-dashed border-gray-300 rounded-xl">
-          <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500 font-medium">No problem statements found in this category.</p>
-        </div>
-      ) : (
-        <div className="space-y-12">
-          {Object.entries(activeDomains).map(([domain, sectors]) => {
-            const domainTotal = Object.values(sectors).reduce((sum, arr) => sum + arr.length, 0);
-            return (
-              <div key={domain}>
-                <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-3 pb-2 border-b border-gray-200/60">
-                  <span className="bg-primary/10 text-primary p-2 rounded-lg">
-                    <Lightbulb className="w-5 h-5" />
-                  </span>
-                  {domain}
-                  <span className="bg-gray-100 text-gray-500 text-xs px-2.5 py-1 rounded-full font-semibold ml-2">
-                    {domainTotal} items
-                  </span>
-                </h2>
-
-                <div className="space-y-8">
-                  {Object.entries(sectors).map(([sector, items]) => {
-                    const sectorKey = `${activeType}::${domain}::${sector}`;
-                    const isExpanded = expandedSectors.has(sectorKey);
-                    const visibleItems = isExpanded ? items : items.slice(0, SECTOR_PAGE_SIZE);
-                    return (
-                    <div key={sector}>
-                      <h3 className="text-sm font-semibold text-gray-500 mb-4 flex items-center gap-2">
-                        {sector}
-                        <span className="bg-gray-50 text-gray-400 text-[10px] px-2 py-0.5 rounded-full font-semibold">
-                          {items.length}
-                        </span>
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {visibleItems.map((p) => {
-                          const isFull = p._count?.childProjects >= 4;
-                          return (
-                            <div
-                              key={p.id}
-                              onClick={() => setSelectedProject(p)}
-                              className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col cursor-pointer hover:shadow-md hover:border-primary/40 transition-all group"
-                            >
-                              <div className="flex justify-between items-start mb-4">
-                                <span className="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider">
-                                  {p.type || 'Software'}
-                                </span>
-                                <span
-                                  className={`text-[10px] font-bold px-2 py-1 rounded-md flex items-center gap-1.5 ${isFull ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-green-50 text-green-600 border border-green-100'}`}
-                                >
-                                  <Users className="w-3 h-3" /> {p._count?.childProjects || 0} / 4 Teams
-                                </span>
-                              </div>
-                              <h3 className="text-lg font-bold text-gray-900 mb-3 leading-snug group-hover:text-primary transition-colors">
-                                {p.name}
-                              </h3>
-                              <p className="text-sm text-gray-600 line-clamp-3 mb-5 flex-grow">
-                                {p.problemStatement}
-                              </p>
-
-                              <div className="flex flex-wrap gap-1.5 mb-5 mt-auto">
-                                {(p.technologies || []).slice(0, 3).map((tech) => (
-                                  <span
-                                    key={tech}
-                                    className="bg-indigo-50/50 text-indigo-600 text-[10px] font-medium px-2 py-1 rounded border border-indigo-100"
-                                  >
-                                    {tech}
-                                  </span>
-                                ))}
-                                {(p.technologies?.length || 0) > 3 && (
-                                  <span className="bg-gray-50 text-gray-500 text-[10px] font-medium px-2 py-1 rounded border border-gray-200">
-                                    +{(p.technologies?.length || 0) - 3} more
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="text-sm font-semibold text-primary flex items-center gap-1 group-hover:gap-2 transition-all">
-                                View Details <ArrowRight className="w-4 h-4" />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {items.length > SECTOR_PAGE_SIZE && (
-                        <button
-                          onClick={() =>
-                            setExpandedSectors((prev) => {
-                              const next = new Set(prev);
-                              if (isExpanded) next.delete(sectorKey);
-                              else next.add(sectorKey);
-                              return next;
-                            })
-                          }
-                          className="mt-4 text-xs font-semibold text-primary hover:underline"
-                        >
-                          {isExpanded ? 'Show less' : `Show all ${items.length}`}
-                        </button>
-                      )}
-                    </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Deep View Modal */}
-      {selectedProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            {/* Header */}
-            <div className="px-8 py-6 border-b border-gray-100 flex items-start justify-between bg-gray-50/50">
-              <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="bg-primary/10 text-primary text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide">
-                    {selectedProject.domain}
-                  </span>
-                  <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wide">
-                    {selectedProject.type || 'Software'}
-                  </span>
-                  <span
-                    className={`text-xs font-bold px-2.5 py-1 rounded-md flex items-center gap-1.5 ${selectedProject._count?.childProjects >= 4 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}
-                  >
-                    <Users className="w-3.5 h-3.5" /> {selectedProject._count?.childProjects || 0} /
-                    4 Teams Selected
-                  </span>
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 leading-tight">
-                  {selectedProject.name}
-                </h2>
-              </div>
-              <button
-                onClick={() => {
-                  setSelectedProject(null);
-                  setSelectError(null);
-                }}
-                className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-8 overflow-y-auto">
-              {selectError && (
-                <div className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5" /> {selectError}
-                </div>
-              )}
-
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <Target className="w-5 h-5 text-indigo-500" /> Problem Statement
-                  </h3>
-                  <div className="bg-indigo-50/30 border border-indigo-100 rounded-xl p-5 text-gray-700 leading-relaxed">
-                    {selectedProject.problemStatement}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-3">Objective</h3>
-                    <div className="text-gray-600 leading-relaxed bg-gray-50 border border-gray-100 p-5 rounded-xl h-full">
-                      {selectedProject.objective || 'No specific objective provided.'}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-3">Expected Outcome</h3>
-                    <div className="text-gray-600 leading-relaxed bg-gray-50 border border-gray-100 p-5 rounded-xl h-full">
-                      {selectedProject.expectedOutcome || 'No expected outcome provided.'}
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
-                    <Code className="w-5 h-5 text-blue-500" /> Recommended Technologies
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {(selectedProject.technologies || []).map((tech: string) => (
-                      <span
-                        key={tech}
-                        className="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg border border-blue-100 font-medium text-sm"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                    {!selectedProject.technologies?.length && (
-                      <span className="text-gray-500 italic text-sm">
-                        No specific technologies recommended.
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-gray-100">
-                  <TeamMemberSelect selectedIds={teamMembers} onChange={setTeamMembers} />
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-8 py-5 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 shrink-0">
-              <button
-                onClick={() => {
-                  setSelectedProject(null);
-                  setSelectError(null);
-                  setTeamMembers([]);
-                }}
-                className="px-6 py-2.5 rounded-xl font-semibold text-gray-600 hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleSelect(selectedProject.id)}
-                disabled={selecting || selectedProject._count?.childProjects >= 4}
-                className={`px-8 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-all shadow-sm ${
-                  selectedProject._count?.childProjects >= 4
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-primary text-white hover:bg-primary/90 hover:shadow-md'
-                }`}
-              >
-                {selecting ? (
-                  'Selecting...'
-                ) : selectedProject._count?.childProjects >= 4 ? (
-                  'Capacity Reached'
-                ) : (
-                  <>
-                    <CheckCircle className="w-5 h-5" /> Select for My Team
-                  </>
-                )}
-              </button>
-            </div>
+      {/* ---------------------------------------------------------------- TOP METRIC STAT CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Total Projects */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Radio className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-semibold block">Total Projects</span>
+            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
+              {totalCount}
+            </span>
+            <span className="text-[11px] text-slate-500 font-medium">All projects</span>
           </div>
         </div>
+
+        {/* Active Projects */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-semibold block">Active Projects</span>
+            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
+              {activeCount}
+            </span>
+            <span className="text-[11px] text-slate-500 font-medium">In progress</span>
+          </div>
+        </div>
+
+        {/* Completed Projects */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-semibold block">Completed Projects</span>
+            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
+              {completedCount}
+            </span>
+            <span className="text-[11px] text-slate-500 font-medium">Successfully completed</span>
+          </div>
+        </div>
+
+        {/* On Hold */}
+        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+            <Ban className="w-6 h-6" />
+          </div>
+          <div>
+            <span className="text-xs text-slate-400 font-semibold block">On Hold</span>
+            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
+              {onHoldCount}
+            </span>
+            <span className="text-[11px] text-slate-500 font-medium">Temporarily paused</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------------------- FILTER & CONTROLS STRIP */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+        {/* Search */}
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search projects..."
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition"
+          />
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition"
+          >
+            <Filter className="w-3.5 h-3.5 text-slate-400" /> Filter
+          </button>
+
+          {/* Status Dropdown */}
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+          >
+            <option value="all">All Status</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Review">Review</option>
+            <option value="Completed">Completed</option>
+            <option value="On Hold">On Hold</option>
+          </select>
+
+          {/* Sort Dropdown */}
+          <select
+            value={sortOption}
+            onChange={(e) => setSortOption(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+          >
+            <option value="recently_updated">Sort: Recently Updated</option>
+            <option value="name">Sort: Name</option>
+            <option value="progress">Sort: Progress</option>
+          </select>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200/80">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 rounded-lg transition ${
+                viewMode === 'grid' ? 'bg-white text-blue-600 shadow-2xs font-bold' : 'text-slate-400 hover:text-slate-600'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg transition ${
+                viewMode === 'list' ? 'bg-white text-blue-600 shadow-2xs font-bold' : 'text-slate-400 hover:text-slate-600'
+              }`}
+              title="List View"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------------------------------------------------------------- DATA TABLE LIST VIEW */}
+      {viewMode === 'list' ? (
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200/90 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                  <th className="py-3 px-5">Project Details</th>
+                  <th className="py-3 px-4 text-center">Team</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-center">Progress</th>
+                  <th className="py-3 px-4">Last Updated</th>
+                  <th className="py-3 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedProjects.map((p) => (
+                  <tr
+                    key={p.id}
+                    onClick={() => navigate(`/projects/${p.id}`)}
+                    className="hover:bg-slate-50/80 transition group cursor-pointer"
+                  >
+                    {/* 1. Project Details */}
+                    <td className="py-4 px-5">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className={`w-10 h-10 rounded-2xl ${p.iconBg || 'bg-blue-100'} ${
+                            p.iconColor || 'text-blue-600'
+                          } flex items-center justify-center shrink-0 shadow-2xs mt-0.5`}
+                        >
+                          {renderProjectIcon(p.iconType)}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-900 text-sm group-hover:text-indigo-600 transition">
+                              {p.name}
+                            </span>
+                            {p.categoryTag && (
+                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wide">
+                                {p.categoryTag}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 space-x-1 font-medium">
+                            <span>{p.domain || 'Smart Cities'}</span>
+                            <span>•</span>
+                            <span>{p.subdomain || 'General'}</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 font-medium">
+                            <span>{p.teamName || 'Team'}</span>
+                            <span> • </span>
+                            <span>{p.memberCount || 4} Members</span>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* 2. Team Avatar Stack */}
+                    <td className="py-4 px-4 align-middle">
+                      <div className="flex items-center justify-center -space-x-2 overflow-hidden">
+                        {(p.teamAvatars || []).map((av, idx) => (
+                          <div
+                            key={idx}
+                            className={`w-7 h-7 rounded-full ${av.bg} text-white font-bold text-[10px] flex items-center justify-center border-2 border-white ring-1 ring-slate-100 shadow-2xs`}
+                          >
+                            {av.initials}
+                          </div>
+                        ))}
+                        {(p.moreMembersCount || 0) > 0 && (
+                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px] flex items-center justify-center border-2 border-white ring-1 ring-slate-200">
+                            +{p.moreMembersCount}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 3. Status Badge */}
+                    <td className="py-4 px-4 text-center align-middle">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          p.status === 'In Progress'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
+                            : p.status === 'Review'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200/80'
+                            : p.status === 'Completed'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200/80'
+                        }`}
+                      >
+                        {p.status}
+                      </span>
+                    </td>
+
+                    {/* 4. Progress */}
+                    <td className="py-4 px-4 align-middle">
+                      <div className="flex items-center gap-2 justify-center">
+                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
+                          <div
+                            className="h-full bg-blue-600 rounded-full transition-all"
+                            style={{ width: `${p.progressPercent}%` }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-slate-700 w-8 text-right">
+                          {p.progressPercent}%
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 5. Last Updated */}
+                    <td className="py-4 px-4 text-xs font-semibold text-slate-600 align-middle">
+                      {p.lastUpdated}
+                    </td>
+
+                    {/* 6. Actions */}
+                    <td className="py-4 px-5 text-right align-middle">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/projects/${p.id}`);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-2xs"
+                        >
+                          Daily Log & Workspace
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/projects/${p.id}/execution-doc`);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition shadow-2xs"
+                        >
+                          <FileText className="w-3.5 h-3.5" /> Execution Doc
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* GRID VIEW OPTION */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {paginatedProjects.map((p) => (
+            <div
+              key={p.id}
+              onClick={() => navigate(`/projects/${p.id}`)}
+              className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs hover:border-indigo-400 hover:shadow-md transition flex flex-col justify-between cursor-pointer group"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div
+                    className={`w-10 h-10 rounded-2xl ${p.iconBg || 'bg-blue-100'} ${
+                      p.iconColor || 'text-blue-600'
+                    } flex items-center justify-center shrink-0`}
+                  >
+                    {renderProjectIcon(p.iconType)}
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                      p.status === 'In Progress'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : p.status === 'Review'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : p.status === 'Completed'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-rose-50 text-rose-700 border border-rose-200'
+                    }`}
+                  >
+                    {p.status}
+                  </span>
+                </div>
+
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base group-hover:text-indigo-600 transition">
+                    {p.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {p.domain} • {p.subdomain}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+                  <span>{p.teamName} ({p.memberCount} Members)</span>
+                  <div className="flex items-center -space-x-1.5">
+                    {(p.teamAvatars || []).map((av, idx) => (
+                      <div
+                        key={idx}
+                        className={`w-6 h-6 rounded-full ${av.bg} text-white font-bold text-[9px] flex items-center justify-center border border-white`}
+                      >
+                        {av.initials}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] font-bold text-slate-700">
+                    <span>Progress</span>
+                    <span>{p.progressPercent}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full"
+                      style={{ width: `${p.progressPercent}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/projects/${p.id}`);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
+                >
+                  Daily Log & Workspace
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/projects/${p.id}/execution-doc`);
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
+                >
+                  <FileText className="w-3.5 h-3.5" /> Execution Doc
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
+
+      {/* ---------------------------------------------------------------- FOOTER PAGINATION */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200/80">
+        <div className="text-xs text-slate-500 font-medium">
+          Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredProjects.length)} of {filteredProjects.length} projects
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 transition shadow-2xs"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            {[...Array(totalPages)].map((_, idx) => {
+              const pageNum = idx + 1;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`h-8 w-8 rounded-xl text-xs font-bold transition ${
+                    currentPage === pageNum
+                      ? 'bg-blue-600 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+
+            <button
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 transition shadow-2xs"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="relative">
+            <select className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 outline-none cursor-pointer">
+              <option value="5">5 / page</option>
+              <option value="10">10 / page</option>
+              <option value="20">20 / page</option>
+            </select>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

@@ -117,6 +117,23 @@ export interface DailyLogEntry {
   updatedAt: string;
 }
 
+export interface FeatureAllocationItem {
+  id: string;
+  name: string;
+  description: string;
+  importance: 'High' | 'Medium' | 'Low';
+  points: number;
+}
+
+export interface TeamShareAllocationItem {
+  userId: string;
+  name: string;
+  role: string;
+  sharePercent: number;
+  rewardPoints: number;
+  isLead?: boolean;
+}
+
 export interface ExecutionDocContent {
   overview: {
     background: string;
@@ -139,6 +156,8 @@ export interface ExecutionDocContent {
     name: string;
     expectedOutput: string;
     completionWeek: number;
+    rewardPoints?: number;
+    deliverables?: string[];
   }>;
   risks: string[];
   learningResources: Array<{
@@ -148,6 +167,15 @@ export interface ExecutionDocContent {
   }>;
   successCriteria: string[];
   uniquenessNotes?: string;                           // Engine 2 delta description
+  features?: FeatureAllocationItem[];
+  teamShare?: TeamShareAllocationItem[];
+  targetUsers?: string;
+  keyFeatures?: string[];
+  modules?: string[];
+  resources?: string[];
+  notes?: string;
+  status?: string;
+  lastUpdated?: string;
 }
 
 export interface ScoreDetail {

@@ -1,16 +1,14 @@
 import { api } from './api';
 
-// ─── Admin Service ────────────────────────────────────────────────────────────
+// ─── Admin & Insights Service ──────────────────────────────────────────────────
 
 export const adminService = {
-
-  // Stats
+  // Stats & Ingest
   getStats: async () => {
     const { data } = await api.get('/admin/stats');
     return data;
   },
 
-  // Students
   getStudents: async (page = 1, limit = 50) => {
     const { data } = await api.get(`/admin/students?page=${page}&limit=${limit}`);
     return data;
@@ -37,7 +35,6 @@ export const adminService = {
     return data;
   },
 
-  // Teams
   getTeams: async (page = 1, limit = 50) => {
     const { data } = await api.get(`/admin/teams?page=${page}&limit=${limit}`);
     return data;
@@ -64,7 +61,6 @@ export const adminService = {
     return data;
   },
 
-  // Achievements
   getAchievements: async (page = 1, limit = 50) => {
     const { data } = await api.get(`/admin/achievements?page=${page}&limit=${limit}`);
     return data;
@@ -92,55 +88,129 @@ export const adminService = {
     return data;
   },
 
-  // Trends
-  getTeamTrends: async () => {
-    const { data } = await api.get('/admin/trends/teams');
+  // ── Insights Endpoints ──────────────────────────────────────────────────────
+
+  getTopTeams: async (limit = 5) => {
+    const { data } = await api.get(`/admin/top-teams?limit=${limit}`);
     return data;
   },
 
-  getStudentTrends: async () => {
-    const { data } = await api.get('/admin/trends/students');
+  getTopStudents: async (limit = 5) => {
+    const { data } = await api.get(`/admin/top-students?limit=${limit}`);
     return data;
   },
 
-  // Chat
-  getChatSessions: async () => {
-    const { data } = await api.get('/admin/chat/sessions');
+  getOverlaps: async (params?: { status?: string; domain?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.domain) query.append('domain', params.domain);
+    if (params?.page) query.append('page', String(params.page));
+    if (params?.pageSize) query.append('pageSize', String(params.pageSize));
+    const { data } = await api.get(`/admin/overlaps?${query.toString()}`);
     return data;
   },
 
-  getChatHistory: async () => {
-    const { data } = await api.get('/admin/chat/history');
+  getOverlapById: async (id: string) => {
+    const { data } = await api.get(`/admin/overlaps/${id}`);
     return data;
   },
 
-  saveChat: async (payload: { prompt: string; response: string; sessionId: string }) => {
-    const { data } = await api.post('/admin/chat', payload);
+  updateOverlapStatus: async (id: string, payload: { status: string; reviewNote?: string }) => {
+    const { data } = await api.patch(`/admin/overlaps/${id}`, payload);
     return data;
   },
 
-  searchContext: async (query: string) => {
-    const { data } = await api.get(`/admin/chat/search?q=${encodeURIComponent(query)}`);
+  getStandouts: async (params?: { status?: string; verdict?: string; page?: number; pageSize?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.verdict) query.append('verdict', params.verdict);
+    if (params?.page) query.append('page', String(params.page));
+    if (params?.pageSize) query.append('pageSize', String(params.pageSize));
+    const { data } = await api.get(`/admin/standouts?${query.toString()}`);
     return data;
   },
 
-  getTeamDetail: async (id: string) => {
-    const { data } = await api.get(`/admin/chat/teams/${id}`);
+  getStandoutById: async (id: string) => {
+    const { data } = await api.get(`/admin/standouts/${id}`);
     return data;
   },
 
-  getStudentDetail: async (id: string) => {
-    const { data } = await api.get(`/admin/chat/students/${id}`);
+  updateStandoutStatus: async (id: string, payload: { status: string; reviewNote?: string }) => {
+    const { data } = await api.patch(`/admin/standouts/${id}`, payload);
     return data;
   },
 
-  getTeamById: async (id: string) => {
-    const { data } = await api.get(`/admin/teams/${id}`);
+  recomputeInsights: async (scope?: 'overlap' | 'standout' | 'all') => {
+    const { data } = await api.post('/admin/insights/recompute', { scope });
     return data;
   },
 
-  getStudentById: async (id: string) => {
-    const { data } = await api.get(`/admin/students/${id}`);
+  getInsightsStatus: async () => {
+    const { data } = await api.get('/admin/insights/status');
+    return data;
+  },
+
+  // ── Aliased helpers used by new admin pages ──────────────────────────────────
+
+  /** Returns { [domain]: TeamRanking[] } grouped by domain */
+  getTopTeamsByDomain: async (limit = 5): Promise<Record<string, any[]>> => {
+    const { data } = await api.get(`/admin/top-teams?limit=${limit}`);
+    // API returns grouped object directly or an array — normalise both
+    if (Array.isArray(data)) {
+      const grouped: Record<string, any[]> = {};
+      for (const t of data) {
+        const d = t.domain || 'Unassigned';
+        if (!grouped[d]) grouped[d] = [];
+        grouped[d].push(t);
+      }
+      return grouped;
+    }
+    return data;
+  },
+
+  /** Returns { [domain]: StudentRanking[] } grouped by domain */
+  getTopStudentsByDomain: async (limit = 5): Promise<Record<string, any[]>> => {
+    const { data } = await api.get(`/admin/top-students?limit=${limit}`);
+    if (Array.isArray(data)) {
+      const grouped: Record<string, any[]> = {};
+      for (const s of data) {
+        const d = s.domain || s.ssgDomain || 'Unassigned';
+        if (!grouped[d]) grouped[d] = [];
+        grouped[d].push(s);
+      }
+      return grouped;
+    }
+    return data;
+  },
+
+  /** Returns OverlapFlag[] */
+  getOverlapFlags: async (params?: { status?: string; domain?: string }): Promise<any[]> => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.domain) query.append('domain', params.domain);
+    const { data } = await api.get(`/admin/overlaps?${query.toString()}`);
+    return Array.isArray(data) ? data : data?.items ?? [];
+  },
+
+  /** PATCH a single overlap flag */
+  updateOverlapFlag: async (id: string, payload: { status: string; reviewNote?: string }) => {
+    const { data } = await api.patch(`/admin/overlaps/${id}`, payload);
+    return data;
+  },
+
+  /** Returns StandoutProject[] */
+  getStandoutProjects: async (params?: { status?: string; verdict?: string }): Promise<any[]> => {
+    const query = new URLSearchParams();
+    if (params?.status) query.append('status', params.status);
+    if (params?.verdict) query.append('verdict', params.verdict);
+    const { data } = await api.get(`/admin/standouts?${query.toString()}`);
+    return Array.isArray(data) ? data : data?.items ?? [];
+  },
+
+  /** PATCH a single standout project */
+  updateStandoutProject: async (id: string, payload: { status: string; reviewNote?: string }) => {
+    const { data } = await api.patch(`/admin/standouts/${id}`, payload);
     return data;
   },
 };
+

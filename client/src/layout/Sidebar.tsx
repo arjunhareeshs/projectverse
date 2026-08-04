@@ -16,6 +16,7 @@ import {
   Calendar,
   BookOpen,
   Rocket,
+  Lightbulb,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
@@ -91,12 +92,11 @@ export const Sidebar: React.FC = () => {
       items: [
         {
           icon: Rocket,
-          label: 'My Project',
-          to: activeProjectId ? `/projects/${activeProjectId}` : '/projects/recommend',
-          badge: activeProjectId ? 'Active' : undefined,
-          badgeColor: 'bg-emerald-500/10 text-emerald-600',
+          label: 'My Projects',
+          to: '/projects',
         },
-        { icon: FolderOpen, label: 'All Projects', to: '/projects' },
+        { icon: FolderOpen, label: 'All Projects', to: '/projects/catalog' },
+        { icon: Lightbulb, label: 'Propose Idea', to: '/projects/propose' },
         { icon: Kanban, label: 'Kanban Board', to: '/kanban' },
         { icon: GanttChart, label: 'Timeline & Gantt', to: '/timeline' },
         { icon: Users, label: 'Team', to: user?.teamId ? `/teams/${user.teamId}` : '/teams' },

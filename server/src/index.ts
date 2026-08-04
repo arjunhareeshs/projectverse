@@ -4,12 +4,14 @@ import { env } from './config/env';
 import { bootstrapSocket } from './infrastructure/socket';
 import { logger } from './shared/logger';
 import { startEvaluationScheduler } from './modules/lifecycle/evaluation.scheduler';
+import { startInsightsScheduler } from './modules/insights/insights.scheduler';
 
 const app = createApp();
 const httpServer = createServer(app);
 
 bootstrapSocket(httpServer);
 startEvaluationScheduler();
+startInsightsScheduler();
 
 httpServer.listen(env.SERVER_PORT, () => {
   logger.info(`Server running on port ${env.SERVER_PORT}`);
