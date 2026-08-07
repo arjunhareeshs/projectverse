@@ -4,13 +4,10 @@ import {
   FileText,
   Calendar,
   Users,
-  MessageSquare,
-  ShieldCheck,
-  Bot,
-  Sparkles,
   Layers,
   ChevronDown,
   Check,
+  Folder,
 } from 'lucide-react';
 import { useAppSelector } from '../app/hooks';
 import { ProjectReviewerPanel } from '../components/projects/ProjectReviewerPanel';
@@ -98,37 +95,22 @@ export const ProjectDetailPage: React.FC = () => {
   ];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto w-full space-y-6">
+    <div className="p-6 max-w-7xl mx-auto w-full space-y-6 bg-[#FAFAFC] min-h-screen">
       {/* Workspace Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-200/60 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
-          <div className="flex items-center gap-2.5 mb-2">
-            <span className="text-[11px] font-extrabold px-3 py-0.5 rounded-full bg-[#EEF2FF] text-[#4338CA] tracking-wide uppercase">
-              {logState?.category
-                ? logState.category.endsWith('_PROJECT')
-                  ? logState.category
-                  : `${logState.category}_PROJECT`
-                : 'FINAL_YEAR_PROJECT'}
-            </span>
-            <span className="text-[11px] font-semibold text-gray-500">
-              {logState?.duration?.months ? `${logState.duration.months} Months Duration` : '6 Months Duration'}
-            </span>
-          </div>
-          <h1 className="text-2xl font-black text-[#0F172A] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
             {logState?.title || 'Wind Powered Child Warming System'}
           </h1>
-          <p className="text-xs text-[#64748B] font-normal mt-1">
-            Track daily work logs, team allocation, and phase execution reviews for this project.
-          </p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
           <div className="relative" ref={switcherRef}>
             <button
               onClick={() => setSwitcherOpen((v) => !v)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200/90 text-[#0F172A] text-xs font-bold rounded-2xl hover:bg-gray-50 transition shadow-2xs"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200/90 text-[#0F172A] text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs"
             >
-              <Layers className="w-3.5 h-3.5 text-gray-600" /> Switch Project
+              <Layers className="w-4 h-4 text-gray-600" /> Switch Project
               <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
             </button>
             {switcherOpen && (
@@ -155,15 +137,15 @@ export const ProjectDetailPage: React.FC = () => {
 
           <button
             onClick={() => navigate('/projects')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-gray-200/90 text-[#0F172A] text-xs font-bold rounded-2xl hover:bg-gray-50 transition shadow-2xs"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl transition shadow-xs"
           >
-            All Projects
+            <Folder className="w-4 h-4" /> All Projects
           </button>
         </div>
       </div>
 
-      {/* Tabs Navigation */}
-      <div className="flex border-b border-gray-200/80 gap-8 overflow-x-auto pt-1">
+      {/* Tabs Navigation Container */}
+      <div className="bg-white border border-gray-200/80 rounded-2xl p-2 shadow-2xs flex items-center gap-2 overflow-x-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -171,13 +153,13 @@ export const ProjectDetailPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-0.5 py-3 border-b-2 text-xs font-bold transition-all whitespace-nowrap ${
+              className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                 isActive
-                  ? 'border-[#4F46E5] text-[#4F46E5]'
-                  : 'border-transparent text-[#64748B] hover:text-gray-900'
+                  ? 'bg-[#EEF2FF] text-[#4F46E5] shadow-2xs'
+                  : 'text-[#64748B] hover:text-gray-900 hover:bg-gray-50'
               }`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className={`w-4 h-4 ${isActive ? 'text-[#4F46E5]' : 'text-gray-500'}`} />
               <span>{tab.label}</span>
             </button>
           );
@@ -229,3 +211,4 @@ export const ProjectDetailPage: React.FC = () => {
     </div>
   );
 };
+

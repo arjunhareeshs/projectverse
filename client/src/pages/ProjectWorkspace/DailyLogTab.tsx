@@ -175,7 +175,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
       <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-2xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-center">
         {/* Card 1: Today's Date */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-100 text-[#4F46E5] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[#F3F0FF] text-[#4F46E5] flex items-center justify-center shrink-0">
             <Calendar className="w-5 h-5" />
           </div>
           <div>
@@ -187,7 +187,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
 
         {/* Card 2: Points Available */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-full bg-[#FFF1F2] text-[#F43F5E] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-[#FFE4E6] text-[#F43F5E] flex items-center justify-center shrink-0">
             <Target className="w-5 h-5" />
           </div>
           <div>
@@ -211,7 +211,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
 
         {/* Card 4: Current Streak */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-xl bg-[#ECFDF5] text-[#10B981] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[#D1FAE5] text-[#10B981] flex items-center justify-center shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
@@ -222,7 +222,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
         </div>
 
         {/* Card 5: Log Consistency */}
-        <div className="bg-[#EEF2FF]/60 border border-[#E0E7FF] rounded-2xl p-4 flex flex-col justify-between space-y-1.5">
+        <div className="bg-[#F0F4FF] border border-[#E0E7FF] rounded-2xl p-4 flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-600">Log Consistency</span>
             <span className="text-xs font-extrabold text-[#4F46E5]">92%</span>
@@ -230,7 +230,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
           <div className="w-full h-2 bg-[#C7D2FE]/70 rounded-full overflow-hidden">
             <div className="h-full bg-[#4F46E5] rounded-full" style={{ width: '92%' }} />
           </div>
-          <span className="text-[11px] font-bold text-emerald-600">Excellent</span>
+          <span className="text-[11px] font-bold text-[#10B981]">Excellent</span>
         </div>
       </div>
 
@@ -238,20 +238,17 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
       <div className="bg-white border border-gray-200/90 rounded-2xl p-6 shadow-2xs space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-                Today's Work Log <span className="text-xs font-semibold text-gray-400">({todayStr})</span>
+                Today's Work Log <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-[#F1F5F9] text-[#64748B]">{todayStr}</span>
               </h3>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Record your daily contributions and progress • Earn points for consistency
-              </p>
             </div>
           </div>
-          <span className="px-3.5 py-1.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-1.5 shrink-0">
-            <Award className="w-4 h-4 text-indigo-600" /> +20 Pts to DB
+          <span className="px-3.5 py-1.5 rounded-full bg-[#F3E8FF] border border-purple-100 text-[#6D28D9] text-xs font-bold flex items-center gap-1.5 shrink-0">
+            <Award className="w-4 h-4 text-[#6D28D9]" /> +20 Pts to DB
           </span>
         </div>
 
@@ -293,21 +290,18 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
               <label className="block text-xs font-bold text-gray-800 mb-1">
                 Hours Spent (optional)
               </label>
-              <div className="relative">
-                <Clock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  max="24"
-                  value={hoursSpent !== undefined ? hoursSpent : ''}
-                  onChange={(e) =>
-                    setHoursSpent(e.target.value ? parseFloat(e.target.value) : undefined)
-                  }
-                  placeholder="e.g. 3.5"
-                  className="w-full pl-9 pr-3 py-2 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
-                />
-              </div>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                max="24"
+                value={hoursSpent !== undefined ? hoursSpent : ''}
+                onChange={(e) =>
+                  setHoursSpent(e.target.value ? parseFloat(e.target.value) : undefined)
+                }
+                placeholder="e.g., 4.5"
+                className="w-full px-3.5 py-2.5 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+              />
             </div>
 
             <div>
@@ -318,8 +312,8 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                 type="text"
                 value={blockers}
                 onChange={(e) => setBlockers(e.target.value)}
-                placeholder="Any technical blockers or dependencies?"
-                className="w-full px-3 py-2 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                placeholder="Any challenges or blockers faced..."
+                className="w-full px-3.5 py-2.5 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
               />
             </div>
           </div>

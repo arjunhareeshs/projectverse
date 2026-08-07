@@ -8,15 +8,14 @@ import {
   FileText,
   Users,
   Star,
-  HelpCircle,
   Sparkles,
   AlertCircle,
   CheckCircle2,
   XCircle,
-  Lock,
   ArrowRight,
   RefreshCw,
   Info,
+  FileEdit,
 } from 'lucide-react';
 import { proposalService, ProposalEvaluationResult } from '../services/proposal.service';
 
@@ -32,49 +31,49 @@ export const ProposeProblem: React.FC = () => {
   const criteriaList = [
     {
       icon: Target,
-      color: 'bg-blue-50 text-blue-600 border-blue-100',
+      color: 'bg-[#E0F2FE] text-[#0284C7]',
       title: 'Problem Relevance',
       desc: 'Is it solving a real and important problem?',
     },
     {
       icon: MessageSquare,
-      color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+      color: 'bg-[#DCFCE7] text-[#16A34A]',
       title: 'Problem Clarity',
       desc: 'Is the problem well-defined and understandable?',
     },
     {
       icon: Code,
-      color: 'bg-purple-50 text-purple-600 border-purple-100',
+      color: 'bg-[#F3E8FF] text-[#9333EA]',
       title: 'Technical Feasibility',
       desc: 'Can it be realistically implemented?',
     },
     {
       icon: Lightbulb,
-      color: 'bg-amber-50 text-amber-600 border-amber-100',
+      color: 'bg-[#FEF3C7] text-[#D97706]',
       title: 'Innovation',
       desc: 'How novel and unique is the proposed idea?',
     },
     {
       icon: Target,
-      color: 'bg-cyan-50 text-cyan-600 border-cyan-100',
+      color: 'bg-[#E0F2FE] text-[#0284C7]',
       title: 'Expected Outcome',
       desc: 'Is the outcome clearly defined and valuable?',
     },
     {
       icon: FileText,
-      color: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+      color: 'bg-[#EEF2FF] text-[#4F46E5]',
       title: 'Feature Completeness',
       desc: 'Are the proposed features sufficient?',
     },
     {
       icon: Users,
-      color: 'bg-rose-50 text-rose-600 border-rose-100',
+      color: 'bg-[#FFE4E6] text-[#E11D48]',
       title: 'Industry & Social Impact',
       desc: 'Will it benefit industry or society?',
     },
     {
       icon: Star,
-      color: 'bg-amber-50 text-amber-600 border-amber-100',
+      color: 'bg-[#FFEDD5] text-[#EA580C]',
       title: 'Overall Recommendation',
       desc: 'Accept, Improve, or Reject',
     },
@@ -125,9 +124,6 @@ export const ProposeProblem: React.FC = () => {
       navigate('/projects');
     } catch (err: any) {
       console.error('Error publishing proposal:', err);
-      // The server re-scores on publish and can reach a different verdict than the
-      // preview (e.g. a near-duplicate was added in between). Swap in its result so
-      // the panel explains the rejection instead of just flashing a message.
       const serverEvaluation = err.response?.data?.evaluation;
       if (serverEvaluation) setEvaluation(serverEvaluation);
       setError(err.response?.data?.message || 'Failed to publish project to catalog.');
@@ -137,37 +133,34 @@ export const ProposeProblem: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 md:p-8">
+    <div className="min-h-screen bg-[#FAFAFC] p-6 md:p-8 max-w-7xl mx-auto space-y-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-blue-50 text-blue-600">
-              <Lightbulb className="h-6 w-6" />
-            </div>
-            <h1 className="text-2xl font-bold text-slate-900">Propose New Problem Statement</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#EEF2FF] border border-indigo-100 text-[#4F46E5] flex items-center justify-center shrink-0">
+            <FileEdit className="h-5 w-5" />
           </div>
-          <p className="text-sm text-slate-500 mt-1">
-            Describe your idea clearly. The AI model will evaluate it based on industry-grade criteria.
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
+            Propose New Problem Statement
+          </h1>
         </div>
 
         <button
           onClick={() => setShowHowItWorks(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full border border-gray-200 bg-white text-xs font-bold text-[#4F46E5] hover:bg-gray-50 transition shadow-2xs"
         >
-          <HelpCircle className="h-4 w-4 text-blue-600" />
+          <Info className="h-4 w-4 text-[#4F46E5]" />
           How it works?
         </button>
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Criteria (4 cols) */}
-        <div className="lg:col-span-4 flex flex-col gap-4">
-          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm">
-            <h2 className="text-base font-bold text-slate-900 mb-1">AI Evaluation Criteria</h2>
-            <p className="text-xs text-slate-500 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Criteria (5 cols) */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+          <div className="bg-white rounded-2xl p-6 border border-gray-200/80 shadow-2xs">
+            <h2 className="text-lg font-extrabold text-[#0F172A]">AI Evaluation Criteria</h2>
+            <p className="text-xs text-[#64748B] mt-1 mb-6">
               Your submission will be evaluated on the following aspects.
             </p>
 
@@ -176,125 +169,97 @@ export const ProposeProblem: React.FC = () => {
                 const Icon = item.icon;
                 return (
                   <div key={idx} className="flex items-start gap-3.5">
-                    <div
-                      className={`p-2.5 rounded-xl border shrink-0 ${item.color}`}
-                    >
+                    <div className={`p-2.5 rounded-xl shrink-0 ${item.color}`}>
                       <Icon className="h-4 w-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-semibold text-slate-800">{item.title}</h4>
-                      <p className="text-[11px] text-slate-500 leading-normal">{item.desc}</p>
+                      <h4 className="text-xs font-bold text-[#0F172A]">{item.title}</h4>
+                      <p className="text-[11px] text-[#64748B] leading-snug">{item.desc}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
-
-            <div className="mt-6 p-3.5 rounded-xl bg-blue-50/70 border border-blue-100 flex items-start gap-2.5">
-              <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-blue-900 leading-relaxed">
-                The AI model evaluates your submission based on these criteria before forwarding it for faculty review.
-              </p>
-            </div>
           </div>
         </div>
 
-        {/* Right Column: Input & Results (8 cols) */}
-        <div className="lg:col-span-8 flex flex-col gap-6">
+        {/* Right Column: Input & Results (7 cols) */}
+        <div className="lg:col-span-7 flex flex-col gap-6">
           {!evaluation ? (
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col gap-6">
+            <div className="bg-white rounded-2xl p-6 border border-gray-200/80 shadow-2xs flex flex-col gap-5">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Describe Your Project</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Provide all the details about your project in the text box below.
-                </p>
+                <h2 className="text-xl font-extrabold text-[#0F172A]">Describe Your Project</h2>
               </div>
 
               {error && (
-                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-semibold">
                   <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
                   <span>{error}</span>
                 </div>
               )}
 
-              <div className="relative">
+              <div className="rounded-2xl border border-gray-200 p-4 bg-white focus-within:ring-2 focus-within:ring-[#4F46E5]/20 focus-within:border-[#4F46E5] transition">
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value.slice(0, 5000))}
                   placeholder="Enter your project overview, problem statement, features, expected outcome, target users, technology ideas, and any other relevant details..."
-                  className="w-full h-80 p-4 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-sm text-slate-800 placeholder:text-slate-400 resize-none outline-none transition-all"
+                  className="w-full h-72 text-xs text-slate-800 placeholder:text-gray-400 outline-none resize-none bg-transparent"
                 />
-                <div className="absolute bottom-3 right-4 text-[11px] text-slate-400 font-mono">
-                  {description.length} / 5000 characters
+                <div className="text-xs text-gray-400 font-semibold text-right pt-2">
+                  {description.length} / 5000
                 </div>
               </div>
 
               {/* What to include chips */}
               <div>
-                <span className="text-xs font-semibold text-slate-700 block mb-2">
+                <span className="text-xs font-bold text-gray-800 block mb-2">
                   What to include in your description?
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2.5">
                   {chipTemplates.map((chip, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => handleInsertChip(chip.snippet)}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors"
+                      className="px-3.5 py-1.5 rounded-full border border-gray-200 bg-gray-50/80 hover:bg-gray-100 text-xs font-semibold text-slate-700 transition flex items-center gap-1"
                     >
-                      + {chip.label}
+                      <span className="text-[#4F46E5] font-bold">+</span> {chip.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Tip alert */}
-              <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/60 flex items-center gap-2.5">
-                <Lightbulb className="h-4 w-4 text-amber-600 shrink-0" />
-                <p className="text-xs text-amber-900 font-medium">
-                  Be specific and clear. More accurate details help the AI evaluate your proposal better.
-                </p>
-              </div>
-
               {/* Submit CTA */}
-              <div className="flex flex-col items-end gap-2 pt-2">
+              <div className="flex justify-end pt-2">
                 <button
                   onClick={handleEvaluate}
                   disabled={loading || description.length < 30}
-                  className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 text-white font-medium text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm shadow-blue-500/20"
+                  className="flex items-center justify-center px-6 py-3 rounded-xl bg-[#1E40AF] hover:bg-[#1E3A8A] text-white font-bold text-xs disabled:opacity-50 transition shadow-md"
                 >
                   {loading ? (
-                    <>
+                    <div className="flex items-center gap-2">
                       <RefreshCw className="h-4 w-4 animate-spin" />
-                      Evaluating with AI...
-                    </>
+                      <span>Evaluating with AI...</span>
+                    </div>
                   ) : (
-                    <>
-                      <Sparkles className="h-4 w-4" />
-                      Submit for AI Evaluation
-                    </>
+                    "Submit for AI Evaluation"
                   )}
                 </button>
-
-                <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                  <Lock className="h-3 w-3" />
-                  Your data is secure and confidential
-                </div>
               </div>
             </div>
           ) : (
             /* Evaluation Results View */
-            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex flex-col gap-6">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div className="bg-white rounded-2xl p-6 border border-gray-200/80 shadow-2xs flex flex-col gap-6">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
                 <div>
-                  <h2 className="text-base font-bold text-slate-900">AI Evaluation Report</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
+                  <h2 className="text-lg font-extrabold text-[#0F172A]">AI Evaluation Report</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
                     Review your proposal score and detailed rubric assessment below.
                   </p>
                 </div>
                 <button
                   onClick={() => setEvaluation(null)}
-                  className="text-xs text-blue-600 hover:underline font-medium"
+                  className="text-xs text-[#4F46E5] hover:underline font-bold"
                 >
                   Edit Submission
                 </button>
@@ -425,7 +390,7 @@ export const ProposeProblem: React.FC = () => {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-slate-200 shadow-xl space-y-4">
             <h3 className="text-lg font-bold text-slate-900">How AI Evaluation Works</h3>
             <p className="text-xs text-slate-600 leading-relaxed">
-              When you submit your problem statement, our AI model analyzes your proposal against 5 core industry criteria: Problem Relevance, Technical Feasibility, Clarity, Novelty, and Expected Impact.
+              When you submit your problem statement, our AI model analyzes your proposal against core industry criteria: Problem Relevance, Technical Feasibility, Clarity, Novelty, and Expected Impact.
             </p>
             <ul className="text-xs text-slate-600 space-y-2 list-disc list-inside bg-slate-50 p-3.5 rounded-xl border border-slate-200">
               <li><strong>Stateless Evaluation:</strong> Your text is first scored without writing to the database.</li>
@@ -435,7 +400,7 @@ export const ProposeProblem: React.FC = () => {
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setShowHowItWorks(false)}
-                className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-medium hover:bg-blue-700"
+                className="px-4 py-2 rounded-xl bg-[#4F46E5] text-white text-xs font-bold hover:bg-[#4338CA]"
               >
                 Got it
               </button>
@@ -446,3 +411,4 @@ export const ProposeProblem: React.FC = () => {
     </div>
   );
 };
+
