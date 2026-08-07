@@ -338,6 +338,96 @@ export const ProposeProblem: React.FC = () => {
                 </div>
               </div>
 
+              {/* Five-perspective validation */}
+              {evaluation.perspectives && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">
+                    Multi-Perspective Validation
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {Object.entries(evaluation.perspectives).map(([key, val]) => (
+                      <div key={key} className="p-3.5 rounded-xl border border-indigo-200/60 bg-indigo-50/40 flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-slate-800 capitalize">
+                            {key.replace(/([A-Z])/g, ' $1')}
+                          </span>
+                          <span
+                            className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+                              val.score >= 70 ? 'bg-emerald-100 text-emerald-700' : val.score >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                            }`}
+                          >
+                            {val.score}/100
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-snug">{val.rationale}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Hardware constraints, if this is a Hardware/IoT/Hybrid proposal */}
+              {evaluation.hardwareConstraints && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">
+                    Hardware Constraints
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 rounded-xl border border-slate-200/70 bg-slate-50/50">
+                      <span className="text-xs font-semibold text-slate-800 block mb-1">Component Availability</span>
+                      <p className="text-[11px] text-slate-500 leading-snug">{evaluation.hardwareConstraints.componentAvailability}</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200/70 bg-slate-50/50">
+                      <span className="text-xs font-semibold text-slate-800 block mb-1">Integration Complexity</span>
+                      <p className="text-[11px] text-slate-500 leading-snug">{evaluation.hardwareConstraints.integrationComplexity}</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl border border-slate-200/70 bg-slate-50/50">
+                      <span className="text-xs font-semibold text-slate-800 block mb-1">Problem/Solution Complexity</span>
+                      <p className="text-[11px] text-slate-500 leading-snug">{evaluation.hardwareConstraints.problemSolutionComplexity}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* AI-extracted features + reward points preview */}
+              {!!evaluation.features?.length && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Extracted Features & Reward Points
+                    </h4>
+                    <span className="text-xs font-bold text-indigo-600">
+                      {evaluation.features.reduce((sum, f) => sum + f.points, 0)} / 1,000 pts
+                    </span>
+                  </div>
+                  <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+                    {evaluation.features.map((f, i) => (
+                      <div key={i} className="p-3.5 bg-white flex items-start justify-between gap-3">
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 block">{f.name}</span>
+                          <p className="text-[11px] text-slate-500 mt-0.5">{f.description}</p>
+                          <p className="text-[10px] text-indigo-500 mt-1">AI: {f.aiRationale}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mb-1 ${
+                              f.importance === 'High'
+                                ? 'bg-rose-100 text-rose-800'
+                                : f.importance === 'Medium'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {f.importance}
+                          </span>
+                          <span className="block text-sm font-extrabold text-slate-900">{f.points} pts</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Reasons / Improvement Hints */}
               {evaluation.improvementHints.length > 0 && (
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">

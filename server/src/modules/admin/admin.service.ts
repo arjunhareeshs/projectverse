@@ -132,6 +132,15 @@ export class AdminService {
     return user;
   }
 
+  // Promotes/demotes a user between STUDENT/FACULTY/ADMIN. FACULTY is the role
+  // that unlocks the phase-review endpoints (lifecycle.routes.ts) — until an
+  // admin runs this at least once, only ADMIN accounts can review phases.
+  static async updateUserRole(userId: string, role: 'ADMIN' | 'STUDENT' | 'FACULTY') {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+    return prisma.user.update({ where: { id: userId }, data: { role } });
+  }
+
   static async getStudents(page = 1, limit = 50) {
     const skip = (page - 1) * limit;
     const [students, total, studentRankings] = await Promise.all([

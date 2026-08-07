@@ -2,8 +2,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -12,6 +10,7 @@ datasource db {
 enum RoleType {
   ADMIN
   STUDENT
+  FACULTY
 }
 
 enum ProjectCategory {
@@ -21,104 +20,107 @@ enum ProjectCategory {
 }
 
 model User {
-  id              String          @id @default(cuid())
-  email           String          @unique
-  regNo           String?         @unique
-  fullName        String
-  passwordHash    String
-  mustChangePassword Boolean      @default(false)
-  role            RoleType
-  organizationId  String?
-  teamId          String?
-  githubUsername  String?         // self-linked GitHub login, used to attribute repo contributions in ranking
+  id                    String                      @id @default(cuid())
+  email                 String                      @unique
+  regNo                 String?                     @unique
+  fullName              String
+  passwordHash          String
+  mustChangePassword    Boolean                     @default(false)
+  role                  RoleType
+  organizationId        String?
+  teamId                String?
+  githubUsername        String? // self-linked GitHub login, used to attribute repo contributions in ranking
   // Student profile fields (from Excel data)
-  year            String?         // "I", "II", "III", "IV"
-  department      String?         // "Agricultural Engineering", etc.
-  deptCode        String?         // "AG", "CSE", "ECE", etc.
-  cluster         String?         // "CS", "Non CS"
-  gender          String?         // "M", "F"
-  resident        String?         // "H" (Hosteller), "D" (Day-scholar)
-  learningMode    String?         // "Project-Based Learning Mode", etc.
-  ssgEnrolled     Boolean         @default(false)
-  ssgDomain       String?         // "Hardware", "Software"
-  groupRegistered Boolean         @default(false)
-  skillsRegistered Boolean        @default(false)
-  rewardPoints    Int             @default(0)
-  activityPoints  Int             @default(0)
-  teamRole        String?         // "team-captain", "team-member-5", etc.
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  organization    Organization?   @relation(fields: [organizationId], references: [id])
-  team            Team?           @relation(fields: [teamId], references: [id])
-  leadingTeams    Team[]          @relation("TeamLead")
-  projectMembers  ProjectMember[]
-  teamMemberships TeamMember[]
-  tasks           Task[]          @relation("TaskAssignee")
-  comments        Comment[]
-  files           FileAsset[]
-  notifications   Notification[]
-  activityLogs    ActivityLog[]
-  documents       Document[]
-  auditLogs       AuditLog[]
-  teamMessages    TeamMessage[]
-  teamInvites     TeamInvite[]
-  userSkills      UserSkill[]
-  streaks         UserStreak[]
-  adminAchievements AdminAchievement[] @relation("AchievementRecipient")
-  adminChats      AdminChatHistory[] @relation("AdminChatUser")
-  projectReviews  ProjectReview[]
-  dailyWorkLogs   DailyWorkLog[]
-  proposals       ProblemStatementProposal[]
-  reviewedOverlapFlags ProjectOverlapFlag[] @relation("OverlapFlagReviewer")
-  reviewedStandouts   StandoutProject[]    @relation("StandoutReviewer")
+  year                  String? // "I", "II", "III", "IV"
+  department            String? // "Agricultural Engineering", etc.
+  deptCode              String? // "AG", "CSE", "ECE", etc.
+  cluster               String? // "CS", "Non CS"
+  gender                String? // "M", "F"
+  resident              String? // "H" (Hosteller), "D" (Day-scholar)
+  learningMode          String? // "Project-Based Learning Mode", etc.
+  ssgEnrolled           Boolean                     @default(false)
+  ssgDomain             String? // "Hardware", "Software"
+  groupRegistered       Boolean                     @default(false)
+  skillsRegistered      Boolean                     @default(false)
+  rewardPoints          Int                         @default(0)
+  activityPoints        Int                         @default(0)
+  teamRole              String? // "team-captain", "team-member-5", etc.
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  organization          Organization?               @relation(fields: [organizationId], references: [id])
+  team                  Team?                       @relation(fields: [teamId], references: [id])
+  leadingTeams          Team[]                      @relation("TeamLead")
+  projectMembers        ProjectMember[]
+  teamMemberships       TeamMember[]
+  tasks                 Task[]                      @relation("TaskAssignee")
+  comments              Comment[]
+  files                 FileAsset[]
+  notifications         Notification[]
+  activityLogs          ActivityLog[]
+  documents             Document[]
+  auditLogs             AuditLog[]
+  teamMessages          TeamMessage[]
+  teamInvites           TeamInvite[]
+  userSkills            UserSkill[]
+  streaks               UserStreak[]
+  adminAchievements     AdminAchievement[]          @relation("AchievementRecipient")
+  adminChats            AdminChatHistory[]          @relation("AdminChatUser")
+  projectReviews        ProjectReview[]
+  dailyWorkLogs         DailyWorkLog[]
+  proposals             ProblemStatementProposal[]
+  reviewedOverlapFlags  ProjectOverlapFlag[]        @relation("OverlapFlagReviewer")
+  reviewedStandouts     StandoutProject[]           @relation("StandoutReviewer")
   reviewedOpportunities OpportunityRecommendation[] @relation("OpportunityReviewer")
+  rewardTransactions    RewardTransaction[]
+  phaseSubmissions      PhaseSubmission[]           @relation("PhaseSubmitter")
+  reviewedSubmissions   PhaseSubmission[]           @relation("PhaseReviewer")
 }
 
 model Organization {
-  id            String         @id @default(cuid())
-  name          String
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  users         User[]
-  projects      Project[]
-  roles         Role[]
-  permissions   Permission[]
-  teams         Team[]
-  hackathons    Hackathon[]
+  id               String            @id @default(cuid())
+  name             String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  users            User[]
+  projects         Project[]
+  roles            Role[]
+  permissions      Permission[]
+  teams            Team[]
+  hackathons       Hackathon[]
   leetCodeContests LeetCodeContest[]
 }
 
 model Team {
-  id                  String        @id @default(cuid())
-  organizationId      String
-  name                String
-  description         String?
-  domain              String?
-  color               String?       @default("#7C3AED")
-  leadId              String?
-  maxMembers          Int           @default(6)
-  isPublic            Boolean       @default(true)
-  currentProjectLabel String?
+  id                     String              @id @default(cuid())
+  organizationId         String
+  name                   String
+  description            String?
+  domain                 String?
+  color                  String?             @default("#7C3AED")
+  leadId                 String?
+  maxMembers             Int                 @default(6)
+  isPublic               Boolean             @default(true)
+  currentProjectLabel    String?
   // Group metadata from Excel
-  groupCode           String?       @unique // "A#100161"
-  groupLevel          String?       // "Level 1", "Level 2", "Level 3"
-  groupCategory       String?       // "C", etc.
-  iYearCount          Int           @default(0)
-  iiYearCount         Int           @default(0)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  organization        Organization  @relation(fields: [organizationId], references: [id])
-  lead                User?         @relation("TeamLead", fields: [leadId], references: [id])
-  members             User[]
-  teamMembers         TeamMember[]
-  projects            Project[]
-  invites             TeamInvite[]
-  messages            TeamMessage[]
-  collaboratingProjects   Project[]           @relation("CollaboratingTeam")
-  collabRequestsSent      TeamCollaboration[] @relation("FromTeam")
-  collabRequestsReceived  TeamCollaboration[] @relation("ToTeam")
-  ranking             GroupRanking?
-  achievements        AdminAchievement[] @relation("AchievementTeam")
+  groupCode              String?             @unique // "A#100161"
+  groupLevel             String? // "Level 1", "Level 2", "Level 3"
+  groupCategory          String? // "C", etc.
+  iYearCount             Int                 @default(0)
+  iiYearCount            Int                 @default(0)
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  organization           Organization        @relation(fields: [organizationId], references: [id])
+  lead                   User?               @relation("TeamLead", fields: [leadId], references: [id])
+  members                User[]
+  teamMembers            TeamMember[]
+  projects               Project[]
+  invites                TeamInvite[]
+  messages               TeamMessage[]
+  collaboratingProjects  Project[]           @relation("CollaboratingTeam")
+  collabRequestsSent     TeamCollaboration[] @relation("FromTeam")
+  collabRequestsReceived TeamCollaboration[] @relation("ToTeam")
+  ranking                GroupRanking?
+  achievements           AdminAchievement[]  @relation("AchievementTeam")
 }
 
 model TeamCollaboration {
@@ -136,20 +138,20 @@ model TeamCollaboration {
 }
 
 model TeamInvite {
-  id         String   @id @default(cuid())
-  teamId     String
-  email      String
-  userId     String?
-  roleLabel  String   @default("Member")
-  message    String?
-  skills     String[] @default([])
-  type       String   @default("INVITE") // INVITE | JOIN_REQUEST
-  status     String   @default("pending") // pending | accepted | declined
-  invitedBy  String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  team       Team     @relation(fields: [teamId], references: [id])
-  user       User?    @relation(fields: [userId], references: [id])
+  id        String   @id @default(cuid())
+  teamId    String
+  email     String
+  userId    String?
+  roleLabel String   @default("Member")
+  message   String?
+  skills    String[] @default([])
+  type      String   @default("INVITE") // INVITE | JOIN_REQUEST
+  status    String   @default("pending") // pending | accepted | declined
+  invitedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  team      Team     @relation(fields: [teamId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
 }
 
 model TeamMessage {
@@ -163,7 +165,7 @@ model TeamMessage {
 }
 
 model Project {
-  id                  String          @id @default(cuid())
+  id                  String   @id @default(cuid())
   organizationId      String
   teamId              String?
   collaboratingTeamId String?
@@ -171,80 +173,82 @@ model Project {
   description         String?
   domain              String?
   difficultyLevel     String?
-  type                String?         // "Hardware", "Software"
-  approved            Boolean         @default(false)
+  type                String? // "Hardware", "Software"
+  approved            Boolean  @default(false)
   repoLink            String?
   problemStatement    String?
   objective           String?
   expectedOutcome     String?
-  technologies        String[]        @default([])
+  technologies        String[] @default([])
   requirements        String?
   innovation          String?
   // Problem-statement catalog metadata (SRP S4 combined problem statements)
-  problemId           String?         @unique // e.g. "H0001", "S0001"
-  sector              String?         // niche sector within domain, e.g. "Precision Farming / Smart Irrigation"
-  shortName           String?         // short handle for the problem statement
-  status              String          @default("planned")
-  isTemplate          Boolean         @default(false)
+  problemId           String?  @unique // e.g. "H0001", "S0001"
+  sector              String? // niche sector within domain, e.g. "Precision Farming / Smart Irrigation"
+  shortName           String? // short handle for the problem statement
+  status              String   @default("planned")
+  isTemplate          Boolean  @default(false)
   parentProjectId     String?
-  maxTeams            Int             @default(3)
+  maxTeams            Int      @default(3)
 
   // Industry-grade problem metadata (extended catalog fields)
-  soul                    String?     // one-line essence
-  backgroundContext       String?
-  targetUsers             String?
-  useCases                Json?       // string[]
-  constraints             String?
-  outOfScope              String?     // explicitly what NOT to build
-  expectedMetrics         Json?       // { name, target, unit }[]
-  deliverables            Json?       // string[]
-  courseOutcomes          String[]    @default([]) // ['CO1', 'CO2']
-  programOutcomes         String[]    @default([]) // ['PO1', 'PO5']
-  skillsGained            String[]    @default([]) // ['Embedded C', 'REST API design', 'PCB routing']
-  prerequisites           String[]    @default([]) // skills + prior coursework
-  phases                  Json?       // [{ label: "Review 1", week: 4, expected: "..." }]
-  hardwareComponents      String[]    @default([]) // ['DHT22', 'ESP32', 'Relay 5V']
-  budgetEstimateInr       Int?
-  budgetNotes             String?
-  standards               String[]    @default([]) // ['MQTT', 'BLE']
-  expectedImpact          String?
-  sdgAlignment            Int[]       @default([]) // SDG goal numbers
-  publicationPotential    String?
-  referenceLinks          String[]    @default([])
-  similarProducts         String[]    @default([]) // existing products to differentiate against
-  suggestedDurationWeeks  Int?
-  typeSpecific            Json?       // Tier-3 block (software scale/load, hardware BOM, IoT payload/frequency)
+  soul                   String? // one-line essence
+  backgroundContext      String?
+  targetUsers            String?
+  useCases               Json? // string[]
+  constraints            String?
+  outOfScope             String? // explicitly what NOT to build
+  expectedMetrics        Json? // { name, target, unit }[]
+  deliverables           Json? // string[]
+  courseOutcomes         String[] @default([]) // ['CO1', 'CO2']
+  programOutcomes        String[] @default([]) // ['PO1', 'PO5']
+  skillsGained           String[] @default([]) // ['Embedded C', 'REST API design', 'PCB routing']
+  prerequisites          String[] @default([]) // skills + prior coursework
+  phases                 Json? // [{ label: "Review 1", week: 4, expected: "..." }]
+  hardwareComponents     String[] @default([]) // ['DHT22', 'ESP32', 'Relay 5V']
+  budgetEstimateInr      Int?
+  budgetNotes            String?
+  standards              String[] @default([]) // ['MQTT', 'BLE']
+  expectedImpact         String?
+  sdgAlignment           Int[]    @default([]) // SDG goal numbers
+  publicationPotential   String?
+  referenceLinks         String[] @default([])
+  similarProducts        String[] @default([]) // existing products to differentiate against
+  suggestedDurationWeeks Int?
+  typeSpecific           Json? // Tier-3 block (software scale/load, hardware BOM, IoT payload/frequency)
 
   // Differentiation system (each team must bring a unique angle)
-  differentiationApproach String?     // team's unique angle, 30+ chars
-  differentiationKeywords String[]    @default([]) // extracted tags for similarity check
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  organization        Organization    @relation(fields: [organizationId], references: [id])
-  team                Team?           @relation(fields: [teamId], references: [id])
-  collaboratingTeam   Team?           @relation("CollaboratingTeam", fields: [collaboratingTeamId], references: [id])
-  parentProject       Project?        @relation("ProjectTemplate", fields: [parentProjectId], references: [id])
-  childProjects       Project[]       @relation("ProjectTemplate")
-  members         ProjectMember[]
-  tasks           Task[]
-  boards          Board[]
-  meetings        Meeting[]
-  reports         Report[]
-  sprints         Sprint[]
-  milestones      Milestone[]
-  documents       Document[]
-  category            ProjectCategory?   // null for legacy projects
-  reviews         ProjectReview[]
-  githubRepo      GithubRepository?
-  projectLog      ProjectLog?
-  dailyWorkLogs   DailyWorkLog[]
-  executionDocuments ExecutionDocument[]
-  evaluationReports EvaluationReport[]
-  duplicateProposals ProblemStatementProposal[] @relation("ProposalDuplicate")
-  publishedProposals ProblemStatementProposal[] @relation("ProposalPublished")
-  overlapMembers     ProjectOverlapMember[]
-  standout           StandoutProject?
+  differentiationApproach   String? // team's unique angle, 30+ chars
+  differentiationKeywords   String[]                   @default([]) // extracted tags for similarity check
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  organization              Organization               @relation(fields: [organizationId], references: [id])
+  team                      Team?                      @relation(fields: [teamId], references: [id])
+  collaboratingTeam         Team?                      @relation("CollaboratingTeam", fields: [collaboratingTeamId], references: [id])
+  parentProject             Project?                   @relation("ProjectTemplate", fields: [parentProjectId], references: [id])
+  childProjects             Project[]                  @relation("ProjectTemplate")
+  members                   ProjectMember[]
+  tasks                     Task[]
+  boards                    Board[]
+  meetings                  Meeting[]
+  reports                   Report[]
+  sprints                   Sprint[]
+  milestones                Milestone[]
+  documents                 Document[]
+  category                  ProjectCategory? // null for legacy projects
+  reviews                   ProjectReview[]
+  githubRepo                GithubRepository?
+  projectLog                ProjectLog?
+  dailyWorkLogs             DailyWorkLog[]
+  executionDocuments        ExecutionDocument[]
+  evaluationReports         EvaluationReport[]
+  duplicateProposals        ProblemStatementProposal[] @relation("ProposalDuplicate")
+  publishedProposals        ProblemStatementProposal[] @relation("ProposalPublished")
+  overlapMembers            ProjectOverlapMember[]
+  standout                  StandoutProject?
   opportunityRecommendation OpportunityRecommendation?
+  features                  ProjectFeature[]
+  executionPhases           ProjectPhase[]
 }
 
 model ProblemStatementProposal {
@@ -252,7 +256,7 @@ model ProblemStatementProposal {
   submitterId        String
   rawText            String
   scores             Json?
-  verdict            String   // ACCEPTED | REJECTED | PENDING_ADMIN
+  verdict            String // ACCEPTED | REJECTED | PENDING_ADMIN
   reasons            String[] @default([])
   improvementHints   String[] @default([])
   duplicateOfId      String?
@@ -267,69 +271,69 @@ model ProblemStatementProposal {
 }
 
 model ProjectMember {
-  id         String   @id @default(cuid())
-  projectId  String
-  userId     String
-  role       RoleType
-  createdAt  DateTime @default(now())
-  project    Project  @relation(fields: [projectId], references: [id])
-  user       User     @relation(fields: [userId], references: [id])
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  role      RoleType
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 
   @@unique([projectId, userId])
 }
 
 model Task {
-  id           String      @id @default(cuid())
-  projectId    String
-  assigneeId   String?
-  title        String
-  description  String?
-  status       String      @default("todo")
-  priority     String      @default("medium")
-  category     String?     @default("Development")
-  progress     Int         @default(0)
-  startDate    DateTime?
-  dueDate      DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  project      Project     @relation(fields: [projectId], references: [id])
-  assignee     User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  subtasks     Subtask[]
-  comments     Comment[]
-  labels       Label[]
+  id          String    @id @default(cuid())
+  projectId   String
+  assigneeId  String?
+  title       String
+  description String?
+  status      String    @default("todo")
+  priority    String    @default("medium")
+  category    String?   @default("Development")
+  progress    Int       @default(0)
+  startDate   DateTime?
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  project     Project   @relation(fields: [projectId], references: [id])
+  assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  subtasks    Subtask[]
+  comments    Comment[]
+  labels      Label[]
 }
 
 model Subtask {
-  id        String   @id @default(cuid())
-  taskId    String
-  title     String
-  done      Boolean  @default(false)
-  task      Task     @relation(fields: [taskId], references: [id])
+  id     String  @id @default(cuid())
+  taskId String
+  title  String
+  done   Boolean @default(false)
+  task   Task    @relation(fields: [taskId], references: [id])
 }
 
 model Board {
-  id         String      @id @default(cuid())
-  projectId  String
-  name       String
-  project    Project     @relation(fields: [projectId], references: [id])
-  columns    BoardColumn[]
+  id        String        @id @default(cuid())
+  projectId String
+  name      String
+  project   Project       @relation(fields: [projectId], references: [id])
+  columns   BoardColumn[]
 }
 
 model BoardColumn {
-  id        String   @id @default(cuid())
-  boardId   String
-  name      String
-  position  Int
-  board     Board    @relation(fields: [boardId], references: [id])
+  id       String @id @default(cuid())
+  boardId  String
+  name     String
+  position Int
+  board    Board  @relation(fields: [boardId], references: [id])
 }
 
 model Label {
-  id      String   @id @default(cuid())
-  taskId  String
-  name    String
-  color   String
-  task    Task     @relation(fields: [taskId], references: [id])
+  id     String @id @default(cuid())
+  taskId String
+  name   String
+  color  String
+  task   Task   @relation(fields: [taskId], references: [id])
 }
 
 model Comment {
@@ -343,22 +347,22 @@ model Comment {
 }
 
 model FileAsset {
-  id          String   @id @default(cuid())
-  userId      String
-  name        String
-  url         String
-  mimeType    String
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id])
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  url       String
+  mimeType  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model Meeting {
-  id         String   @id @default(cuid())
-  projectId  String
-  title      String
-  notes      String?
-  startsAt   DateTime?
-  project    Project  @relation(fields: [projectId], references: [id])
+  id        String    @id @default(cuid())
+  projectId String
+  title     String
+  notes     String?
+  startsAt  DateTime?
+  project   Project   @relation(fields: [projectId], references: [id])
 }
 
 model Report {
@@ -370,13 +374,13 @@ model Report {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   title     String
   body      String
   readAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
 }
 
 model ActivityLog {
@@ -389,64 +393,63 @@ model ActivityLog {
   user       User     @relation(fields: [userId], references: [id])
 }
 
-
 model Document {
-  id          String   @id @default(cuid())
-  projectId   String?
-  userId      String
-  title       String
-  content     String?
-  fileName    String?
-  fileSize    Int?
-  mimeType    String?
-  fileUrl     String?
-  documentType String?    // "ipr", "report", etc.
-  version     Int      @default(1)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  project     Project? @relation(fields: [projectId], references: [id])
-  user        User     @relation(fields: [userId], references: [id])
+  id           String   @id @default(cuid())
+  projectId    String?
+  userId       String
+  title        String
+  content      String?
+  fileName     String?
+  fileSize     Int?
+  mimeType     String?
+  fileUrl      String?
+  documentType String? // "ipr", "report", etc.
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  project      Project? @relation(fields: [projectId], references: [id])
+  user         User     @relation(fields: [userId], references: [id])
 }
 
 model Sprint {
-  id          String   @id @default(cuid())
-  projectId   String
-  name        String
-  startsAt    DateTime?
-  endsAt      DateTime?
-  project     Project  @relation(fields: [projectId], references: [id])
+  id        String    @id @default(cuid())
+  projectId String
+  name      String
+  startsAt  DateTime?
+  endsAt    DateTime?
+  project   Project   @relation(fields: [projectId], references: [id])
 }
 
 model Milestone {
-  id         String   @id @default(cuid())
-  projectId  String
-  title      String
-  dueDate    DateTime?
-  project    Project  @relation(fields: [projectId], references: [id])
+  id        String    @id @default(cuid())
+  projectId String
+  title     String
+  dueDate   DateTime?
+  project   Project   @relation(fields: [projectId], references: [id])
 }
 
 model Role {
-  id              String         @id @default(cuid())
-  organizationId  String
-  name            String
-  organization    Organization   @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  organization   Organization @relation(fields: [organizationId], references: [id])
 }
 
 model Permission {
-  id              String         @id @default(cuid())
-  organizationId  String
-  key             String
-  description     String?
-  organization    Organization   @relation(fields: [organizationId], references: [id])
+  id             String       @id @default(cuid())
+  organizationId String
+  key            String
+  description    String?
+  organization   Organization @relation(fields: [organizationId], references: [id])
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String
-  action     String
-  details    String?
-  createdAt  DateTime @default(now())
-  user       User     @relation(fields: [userId], references: [id])
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  details   String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model TeamMember {
@@ -461,16 +464,15 @@ model TeamMember {
   @@unique([teamId, userId])
 }
 
-
 model UserSkill {
-  id            String   @id @default(cuid())
-  userId        String
-  skillName     String
-  skillType     String   // "primary", "secondary", "specialization"
-  totalPoints   Int      @default(0)
-  skillRank     Int?     // e.g., 88 out of 285
-  totalRanks    Int?     // e.g., 285 total students ranked
-  user          User     @relation(fields: [userId], references: [id])
+  id          String @id @default(cuid())
+  userId      String
+  skillName   String
+  skillType   String // "primary", "secondary", "specialization"
+  totalPoints Int    @default(0)
+  skillRank   Int? // e.g., 88 out of 285
+  totalRanks  Int? // e.g., 285 total students ranked
+  user        User   @relation(fields: [userId], references: [id])
 
   @@unique([userId, skillName])
 }
@@ -484,18 +486,18 @@ model GroupRanking {
 }
 
 model AdminAchievement {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String
-  type        String    // 'individual' | 'team'
+  type        String // 'individual' | 'team'
   recipientId String?
   teamId      String?
-  points      Int       @default(0)
-  date        DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  recipient   User?     @relation("AchievementRecipient", fields: [recipientId], references: [id])
-  team        Team?     @relation("AchievementTeam", fields: [teamId], references: [id])
+  points      Int      @default(0)
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  recipient   User?    @relation("AchievementRecipient", fields: [recipientId], references: [id])
+  team        Team?    @relation("AchievementTeam", fields: [teamId], references: [id])
 }
 
 model AdminChatHistory {
@@ -514,170 +516,170 @@ model UserStreak {
   currentStreak      Int      @default(0)
   longestStreak      Int      @default(0)
   totalContributions Int      @default(0)
-  gridData           String   // JSON string of contributions by date
+  gridData           String // JSON string of contributions by date
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   user               User     @relation(fields: [userId], references: [id])
 }
 
 model Hackathon {
-  id              String       @id @default(cuid())
-  organizationId  String?
-  name            String
-  dateRange       String       // e.g. "Aug 1 - Aug 3, 2025"
-  status          String       @default("Upcoming")
-  createdAt       DateTime     @default(now())
-  organization    Organization? @relation(fields: [organizationId], references: [id])
+  id             String        @id @default(cuid())
+  organizationId String?
+  name           String
+  dateRange      String // e.g. "Aug 1 - Aug 3, 2025"
+  status         String        @default("Upcoming")
+  createdAt      DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 }
 
 model LeetCodeContest {
-  id              String       @id @default(cuid())
-  organizationId  String?
-  name            String
-  startTime       DateTime
-  status          String       @default("Register")
-  createdAt       DateTime     @default(now())
-  organization    Organization? @relation(fields: [organizationId], references: [id])
+  id             String        @id @default(cuid())
+  organizationId String?
+  name           String
+  startTime      DateTime
+  status         String        @default("Register")
+  createdAt      DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 }
 
 model ProjectReview {
-  id          String   @id @default(cuid())
-  projectId   String
-  reviewerId  String
-  reportUrl   String?
-  milestone   String?
-  comments    String?
-  status      String   @default("pending") // approved, request_modification
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  reviewer    User     @relation(fields: [reviewerId], references: [id])
+  id         String   @id @default(cuid())
+  projectId  String
+  reviewerId String
+  reportUrl  String?
+  milestone  String?
+  comments   String?
+  status     String   @default("pending") // approved, request_modification
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer   User     @relation(fields: [reviewerId], references: [id])
 }
 
 model GithubRepository {
-  id                    String    @id @default(cuid())
-  projectId             String?   @unique
-  owner                 String
-  repository            String
-  description           String?
-  visibility            String    @default("public")
-  defaultBranch         String?
-  homepage              String?
-  license               String?
-  topics                String[]  @default([])
-  language              String?
-  languages             Json?
-  repoCreatedAt         DateTime?
-  repoUpdatedAt         DateTime?
-  pushedAt              DateTime?
-  sizeKb                Int       @default(0)
-  isArchived            Boolean   @default(false)
-  isDisabled            Boolean   @default(false)
-  isTemplate            Boolean   @default(false)
-  hasWiki               Boolean   @default(false)
-  hasPages              Boolean   @default(false)
-  hasDiscussions        Boolean   @default(false)
+  id             String    @id @default(cuid())
+  projectId      String?   @unique
+  owner          String
+  repository     String
+  description    String?
+  visibility     String    @default("public")
+  defaultBranch  String?
+  homepage       String?
+  license        String?
+  topics         String[]  @default([])
+  language       String?
+  languages      Json?
+  repoCreatedAt  DateTime?
+  repoUpdatedAt  DateTime?
+  pushedAt       DateTime?
+  sizeKb         Int       @default(0)
+  isArchived     Boolean   @default(false)
+  isDisabled     Boolean   @default(false)
+  isTemplate     Boolean   @default(false)
+  hasWiki        Boolean   @default(false)
+  hasPages       Boolean   @default(false)
+  hasDiscussions Boolean   @default(false)
 
-  stars                 Int       @default(0)
-  forks                 Int       @default(0)
-  watchers              Int       @default(0)
-  subscribers           Int       @default(0)
+  stars       Int @default(0)
+  forks       Int @default(0)
+  watchers    Int @default(0)
+  subscribers Int @default(0)
 
-  latestCommitSha       String?
-  latestCommitMessage   String?
-  latestCommitAuthor    String?
-  latestCommitDate      DateTime?
-  commitCount           Int       @default(0)
-  branchCount           Int       @default(0)
-  releaseCount          Int       @default(0)
-  tagCount              Int       @default(0)
+  latestCommitSha     String?
+  latestCommitMessage String?
+  latestCommitAuthor  String?
+  latestCommitDate    DateTime?
+  commitCount         Int       @default(0)
+  branchCount         Int       @default(0)
+  releaseCount        Int       @default(0)
+  tagCount            Int       @default(0)
 
-  contributorCount      Int       @default(0)
+  contributorCount Int @default(0)
 
-  openIssues            Int       @default(0)
-  closedIssues          Int       @default(0)
-  openPullRequests      Int       @default(0)
-  closedPullRequests    Int       @default(0)
-  mergedPullRequests    Int       @default(0)
-  labels                Json?
-  milestones            Json?
+  openIssues         Int   @default(0)
+  closedIssues       Int   @default(0)
+  openPullRequests   Int   @default(0)
+  closedPullRequests Int   @default(0)
+  mergedPullRequests Int   @default(0)
+  labels             Json?
+  milestones         Json?
 
-  hasReadme             Boolean   @default(false)
-  hasContributing       Boolean   @default(false)
-  hasCodeOfConduct      Boolean   @default(false)
-  hasSecurityPolicy     Boolean   @default(false)
-  hasChangelog          Boolean   @default(false)
+  hasReadme         Boolean @default(false)
+  hasContributing   Boolean @default(false)
+  hasCodeOfConduct  Boolean @default(false)
+  hasSecurityPolicy Boolean @default(false)
+  hasChangelog      Boolean @default(false)
 
-  structure             Json?
+  structure Json?
 
-  popularityScore       Int       @default(0)
-  maintenanceScore      Int       @default(0)
-  communityScore        Int       @default(0)
-  freshnessScore        Int       @default(0)
+  popularityScore  Int @default(0)
+  maintenanceScore Int @default(0)
+  communityScore   Int @default(0)
+  freshnessScore   Int @default(0)
 
-  lastSyncedAt          DateTime?
-  lastSyncError         String?
+  lastSyncedAt  DateTime?
+  lastSyncError String?
 
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  project               Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  contributors          GithubContributor[]
-  commits               GithubCommit[]
-  snapshots             GithubSnapshot[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  project      Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contributors GithubContributor[]
+  commits      GithubCommit[]
+  snapshots    GithubSnapshot[]
 
   @@unique([owner, repository])
 }
 
 model GithubContributor {
-  id              String   @id @default(cuid())
-  repositoryId    String
-  username        String
-  contributions   Int      @default(0)
-  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  id            String           @id @default(cuid())
+  repositoryId  String
+  username      String
+  contributions Int              @default(0)
+  repository    GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 
   @@unique([repositoryId, username])
 }
 
 model GithubCommit {
-  id              String   @id @default(cuid())
-  repositoryId    String
-  sha             String
-  author          String
-  message         String
-  date            DateTime
-  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  id           String           @id @default(cuid())
+  repositoryId String
+  sha          String
+  author       String
+  message      String
+  date         DateTime
+  repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 
   @@unique([repositoryId, sha])
 }
 
 model GithubSnapshot {
-  id              String   @id @default(cuid())
-  repositoryId    String
-  capturedAt      DateTime @default(now())
-  metrics         Json
-  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  id           String           @id @default(cuid())
+  repositoryId String
+  capturedAt   DateTime         @default(now())
+  metrics      Json
+  repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 
   @@index([repositoryId, capturedAt])
 }
 
 model ProjectLog {
-  id          String   @id @default(cuid())
-  projectId   String   @unique
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version     Int      @default(0)
-  state       Json     // ProjectLogState
-  updatedAt   DateTime @updatedAt
-  createdAt   DateTime @default(now())
-  events      ProjectLogEvent[]
+  id        String            @id @default(cuid())
+  projectId String            @unique
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version   Int               @default(0)
+  state     Json // ProjectLogState
+  updatedAt DateTime          @updatedAt
+  createdAt DateTime          @default(now())
+  events    ProjectLogEvent[]
 }
 
 model ProjectLogEvent {
   id          String     @id @default(cuid())
   logId       String
   log         ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
-  seq         Int        // monotonically increasing per log; equals state.version after apply
-  type        String     // ProjectLogEventType
-  actorUserId String     // userId | "SYSTEM" | "AI"
+  seq         Int // monotonically increasing per log; equals state.version after apply
+  type        String // ProjectLogEventType
+  actorUserId String // userId | "SYSTEM" | "AI"
   data        Json
   note        String?
   createdAt   DateTime   @default(now())
@@ -696,7 +698,7 @@ model DailyWorkLog {
   workDone     String
   hoursSpent   Float?
   blockers     String?
-  evidenceUrls Json?    // string[]
+  evidenceUrls Json? // string[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -705,26 +707,26 @@ model DailyWorkLog {
 }
 
 model ExecutionDocument {
-  id         String   @id @default(cuid())
-  projectId  String
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version    Int
-  content    Json     // ExecutionDocContent
-  markdown   String   // rendered markdown, source of truth for download
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version   Int
+  content   Json // ExecutionDocContent
+  markdown  String // rendered markdown, source of truth for download
+  createdAt DateTime @default(now())
 
   @@unique([projectId, version])
 }
 
 model EvaluationReport {
-  id           String   @id @default(cuid())
-  projectId    String
-  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  cycle        Int      // 1, 2, 3… (15-day cycles)
-  periodStart  DateTime
-  periodEnd    DateTime
-  content      Json     // EvaluationReportContent
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cycle       Int // 1, 2, 3… (15-day cycles)
+  periodStart DateTime
+  periodEnd   DateTime
+  content     Json // EvaluationReportContent
+  createdAt   DateTime @default(now())
 
   @@unique([projectId, cycle])
 }
@@ -735,7 +737,7 @@ model ProjectOverlapFlag {
   id                  String                 @id @default(cuid())
   clusterHash         String                 @unique
   domain              String?
-  severity            String                 // 'PARTIAL_OVERLAP' | 'SUBSTANTIAL_OVERLAP' | 'NEAR_DUPLICATE'
+  severity            String // 'PARTIAL_OVERLAP' | 'SUBSTANTIAL_OVERLAP' | 'NEAR_DUPLICATE'
   similarityScore     Float
   confidence          Int
   overlappingFeatures String[]
@@ -775,7 +777,7 @@ model StandoutProject {
   projectId          String   @unique
   project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   teamId             String?
-  verdict            String   // 'NOT_YET' | 'PROMISING' | 'STARTUP_WORTHY'
+  verdict            String // 'NOT_YET' | 'PROMISING' | 'STARTUP_WORTHY'
   confidence         Int
   evidenceScore      Float
   cyclesEvaluated    Int
@@ -803,25 +805,97 @@ model StandoutProject {
 }
 
 model OpportunityRecommendation {
-  id                 String   @id @default(cuid())
-  projectId          String   @unique
-  project            Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  teamId             String?
-  opportunityScore   Float    // 0-100 composite readiness score (static, cached)
-  cyclesEvaluated    Int
-  lastCycleSeen      Int
-  hackathonFit       Int      // 0-100 sub-score
-  presentationFit    Int      // 0-100 sub-score
-  incubationFit      Int      // 0-100 sub-score
-  recommendations    Json     // Array<{ type, name, url, why, deadline?, matchReason }>
-  isFallback         Boolean  @default(false)
-  status             String   @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED'
-  reviewedById       String?
-  reviewedBy         User?    @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
-  reviewNote         String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id               String   @id @default(cuid())
+  projectId        String   @unique
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId           String?
+  opportunityScore Float // 0-100 composite readiness score (static, cached)
+  cyclesEvaluated  Int
+  lastCycleSeen    Int
+  hackathonFit     Int // 0-100 sub-score
+  presentationFit  Int // 0-100 sub-score
+  incubationFit    Int // 0-100 sub-score
+  recommendations  Json // Array<{ type, name, url, why, deadline?, matchReason }>
+  isFallback       Boolean  @default(false)
+  status           String   @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED'
+  reviewedById     String?
+  reviewedBy       User?    @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
+  reviewNote       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([status])
   @@index([opportunityScore])
+}
+
+// ─── Feature Extraction, Phase Execution & Rewards ────────────────────────────
+
+model ProjectFeature {
+  id                   String   @id @default(cuid())
+  projectId            String
+  project              Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String
+  importance           String // 'High' | 'Medium' | 'Low'
+  implementationMethod String?
+  points               Int
+  aiRationale          String?
+  addedBy              String // 'AI' | userId
+  status               String   @default("ACTIVE") // 'ACTIVE' | 'REMOVED'
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([projectId, status])
+}
+
+model ProjectPhase {
+  id                   String            @id @default(cuid())
+  projectId            String
+  project              Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phaseNumber          Int
+  title                String
+  expectedDeliverables String
+  weekTarget           Int
+  points               Int
+  hardwareNote         String?
+  status               String            @default("PLANNED") // PLANNED | SUBMITTED | APPROVED | CHANGES_REQUESTED
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  submissions          PhaseSubmission[]
+
+  @@unique([projectId, phaseNumber])
+}
+
+model PhaseSubmission {
+  id             String       @id @default(cuid())
+  phaseId        String
+  phase          ProjectPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  projectId      String
+  submittedById  String
+  submittedBy    User         @relation("PhaseSubmitter", fields: [submittedById], references: [id])
+  submissionNote String
+  evidenceUrls   Json?
+  status         String       @default("PENDING") // PENDING | APPROVED | CHANGES_REQUESTED
+  reviewedById   String?
+  reviewedBy     User?        @relation("PhaseReviewer", fields: [reviewedById], references: [id])
+  reviewNote     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([phaseId, status])
+}
+
+model RewardTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  projectId   String?
+  source      String // 'PHASE_APPROVAL' | 'DAILY_LOG' | 'ADMIN_ACHIEVEMENT'
+  sourceRefId String?
+  points      Int
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([projectId])
 }

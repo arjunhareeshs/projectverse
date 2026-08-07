@@ -133,8 +133,9 @@ export const TimelineGantt: React.FC = () => {
     try {
       const token = localStorage.getItem('pv_token');
       const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
-      const res = await axios.get(`${apiBase}/projects`, { headers: { Authorization: `Bearer ${token}` } });
-      const list = res.data ?? [];
+      const res = await axios.get(`${apiBase}/projects/active`, { headers: { Authorization: `Bearer ${token}` } });
+      const raw = res.data;
+      const list = Array.isArray(raw) ? raw : Object.values(raw || {}).flat();
       setProjects(list);
       if (list.length > 0) setForm(f => ({ ...f, projectId: list[0].id }));
     } catch (e) { console.error(e); }
@@ -174,14 +175,14 @@ export const TimelineGantt: React.FC = () => {
     }
 
     const dates = tasks.flatMap(t => [
-      t.startDate ? new Date(t.startDate) : null,
-      t.dueDate ? new Date(t.dueDate) : null,
+      t.startDate ? new Date(t.startDate) : today,
+      t.dueDate ? new Date(t.dueDate) : addDays(t.startDate ? new Date(t.startDate) : today, 14),
     ]).filter(Boolean) as Date[];
 
     const minD = new Date(Math.min(...dates.map(d => d.getTime())));
     const maxD = new Date(Math.max(...dates.map(d => d.getTime())));
     const s = addDays(minD, -7);
-    const totalDays = daysBetween(s, addDays(maxD, 14));
+    const totalDays = Math.max(30, daysBetween(s, addDays(maxD, 14)));
 
     const weeks: { label: string; days: Date[] }[] = [];
     let cur = new Date(s);

@@ -288,4 +288,83 @@ export const projectService = {
 
     return { recommendations: sorted };
   },
+
+  async getProjectFeatures(projectId: string) {
+    return prisma.projectFeature.findMany({
+      where: { projectId, status: 'ACTIVE' },
+      orderBy: { createdAt: 'desc' },
+    });
+  },
+
+  async addProjectFeature(
+    projectId: string,
+    data: {
+      name: string;
+      description: string;
+      importance?: string;
+      implementationMethod?: string;
+      points?: number;
+      addedBy?: string;
+    }
+  ) {
+    return prisma.projectFeature.create({
+      data: {
+        projectId,
+        name: data.name,
+        description: data.description,
+        importance: data.importance || 'Medium',
+        implementationMethod: data.implementationMethod || null,
+        points: data.points ?? 10,
+        addedBy: data.addedBy || 'USER',
+        status: 'ACTIVE',
+      },
+    });
+  },
+
+  async deleteProjectFeature(projectId: string, featureId: string, userId: string) {
+    const feature = await prisma.projectFeature.findFirst({
+      where: { id: featureId, projectId },
+    });
+
+    if (!feature) throw new Error('Feature not found');
+    if (feature.status === 'REMOVED') return { success: true, feature };
+
+    const updated = await prisma.projectFeature.update({
+      where: { id: featureId },
+      data: { status: 'REMOVED' },
+    });
+
+    if (feature.points > 0 && userId) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (user) {
+        const newPoints = Math.max(0, user.rewardPoints - feature.points);
+        await prisma.user.update({
+          where: { id: userId },
+          data: { rewardPoints: newPoints },
+        });
+
+        await prisma.rewardTransaction.create({
+          data: {
+            userId,
+            projectId,
+            source: 'FEATURE_DELETION',
+            sourceRefId: featureId,
+            points: -feature.points,
+            note: `Deducted ${feature.points} pts for deletion of feature "${feature.name}"`,
+          },
+        });
+      }
+    }
+
+    await prisma.activityLog.create({
+      data: {
+        userId,
+        action: `deleted feature "${feature.name}"`,
+        entityType: 'PROJECT_FEATURE',
+        entityId: feature.id,
+      },
+    });
+
+    return { success: true, feature: updated };
+  },
 };

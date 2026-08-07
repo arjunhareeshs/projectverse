@@ -22,12 +22,14 @@ export function add401Interceptor(instance: AxiosInstance) {
     (response) => response,
     (error) => {
       if (error.response && error.response.status === 401) {
-        // Clear token and user info
-        localStorage.removeItem('pv_token');
-        localStorage.removeItem('pv_user');
-        // Redirect to login page if we are not already there
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
+        const isAuthEndpoint = error.config?.url?.includes('/auth/login') || error.config?.url?.includes('/auth/register');
+        if (!isAuthEndpoint) {
+          const hadToken = !!localStorage.getItem('pv_token');
+          localStorage.removeItem('pv_token');
+          localStorage.removeItem('pv_user');
+          if (hadToken && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
+            window.location.href = '/login';
+          }
         }
       }
       return Promise.reject(error);

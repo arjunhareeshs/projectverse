@@ -29,7 +29,7 @@ export async function requireProjectAccess(req: Request, res: Response, next: Ne
       return;
     }
 
-    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN' || user.role === 'FACULTY_GUIDE') {
+    if (user.role === 'ADMIN' || user.role === 'FACULTY') {
       next();
       return;
     }

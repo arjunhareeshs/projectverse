@@ -5,6 +5,26 @@ export interface RubricScore {
   rationale: string;
 }
 
+export interface PerspectiveScore {
+  score: number; // 0 - 100
+  rationale: string;
+}
+
+export interface ExtractedFeaturePreview {
+  name: string;
+  description: string;
+  importance: 'High' | 'Medium' | 'Low';
+  implementationMethod: string;
+  points: number;
+  aiRationale: string;
+}
+
+export interface HardwareConstraintsPreview {
+  componentAvailability: string;
+  integrationComplexity: string;
+  problemSolutionComplexity: string;
+}
+
 export interface ProposalEvaluationResult {
   verdict: 'ACCEPTED' | 'REJECTED' | 'NEEDS_IMPROVEMENT';
   reasons: string[];
@@ -38,6 +58,15 @@ export interface ProposalEvaluationResult {
     skillsGained?: string[];
     prerequisites?: string[];
   };
+  perspectives?: {
+    feasibility: PerspectiveScore;
+    effectiveness: PerspectiveScore;
+    studentPotential: PerspectiveScore;
+    businessPotential: PerspectiveScore;
+    projectPotential: PerspectiveScore;
+  };
+  hardwareConstraints?: HardwareConstraintsPreview | null;
+  features?: ExtractedFeaturePreview[];
 }
 
 export interface ApproachCheckResult {

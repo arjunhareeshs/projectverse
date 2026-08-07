@@ -2,10 +2,24 @@ import React, { useRef } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowRight, Bot, LayoutDashboard, BarChart3, Zap, Shield, Sparkles, Activity, Layers } from 'lucide-react';
+import { useAppSelector } from '../app/hooks';
 
 export const Landing: React.FC = () => {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+
+  const handleAction = () => {
+    if (isAuthenticated && user) {
+      if (user.role === 'ADMIN') {
+        navigate('/admin/top-teams');
+      } else {
+        navigate('/dashboard');
+      }
+    } else {
+      navigate('/login');
+    }
+  };
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
@@ -63,14 +77,17 @@ export const Landing: React.FC = () => {
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <Link to="/login" className="text-sm font-medium text-slate-300 hover:text-white transition-colors hidden md:block">
-            Sign In
-          </Link>
+          <button
+            onClick={handleAction}
+            className="text-sm font-medium text-slate-300 hover:text-white transition-colors hidden md:block"
+          >
+            {isAuthenticated ? 'Go to Workspace' : 'Sign In'}
+          </button>
           <button 
-            onClick={() => navigate('/login')}
+            onClick={handleAction}
             className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-full transition-all shadow-[0_0_15px_rgba(79,70,229,0.5)] hover:shadow-[0_0_25px_rgba(79,70,229,0.7)]"
           >
-            Get Started
+            {isAuthenticated ? 'Dashboard' : 'Get Started'}
           </button>
         </div>
       </nav>
@@ -124,10 +141,10 @@ export const Landing: React.FC = () => {
             className="flex items-center gap-4"
           >
             <button 
-              onClick={() => navigate('/login')}
+              onClick={handleAction}
               className="group flex items-center gap-2 px-8 py-4 bg-white text-slate-950 font-semibold rounded-full hover:bg-slate-200 transition-all"
             >
-              Start Building
+              {isAuthenticated ? 'Open Workspace' : 'Start Building'}
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </button>
           </motion.div>
@@ -208,10 +225,10 @@ export const Landing: React.FC = () => {
               Join thousands of teams already building the future with ProjectVerse.
             </p>
             <button 
-              onClick={() => navigate('/login')}
+              onClick={handleAction}
               className="px-10 py-5 bg-white text-slate-950 font-bold rounded-full text-lg hover:scale-105 transition-transform shadow-[0_0_30px_rgba(255,255,255,0.3)] hover:shadow-[0_0_50px_rgba(255,255,255,0.5)]"
             >
-              Create Free Account
+              {isAuthenticated ? 'Go to Dashboard' : 'Create Free Account'}
             </button>
           </div>
         </motion.div>

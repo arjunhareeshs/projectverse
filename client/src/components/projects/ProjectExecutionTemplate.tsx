@@ -29,9 +29,11 @@ import {
   FeatureAllocationItem,
   TeamShareAllocationItem,
   ProjectLogState,
+  ProjectPhaseItem,
 } from '../../types/projectLog';
 import { lifecycleService } from '../../services/lifecycle.service';
 import { teamService } from '../../services/team.service';
+import { useAppSelector } from '../../app/hooks';
 
 interface ProjectExecutionTemplateProps {
   projectId: string;
@@ -42,95 +44,8 @@ interface ProjectExecutionTemplateProps {
   onSaved?: () => void;
 }
 
-const DEFAULT_FEATURES: FeatureAllocationItem[] = [
-  {
-    id: 'feat-1',
-    name: 'AI-based Waste Segregation',
-    description: 'AI model to automatically classify waste types in real time.',
-    importance: 'High',
-    points: 200,
-  },
-  {
-    id: 'feat-2',
-    name: 'Real-time Bin Level Monitoring',
-    description: 'IoT sensor integration to track fill levels and send alerts.',
-    importance: 'High',
-    points: 200,
-  },
-  {
-    id: 'feat-3',
-    name: 'Route Optimization for Collection',
-    description: 'Smart algorithm to compute shortest collection routes.',
-    importance: 'Medium',
-    points: 150,
-  },
-  {
-    id: 'feat-4',
-    name: 'Analytics Dashboard',
-    description: 'Visual insights for municipal authorities and waste management teams.',
-    importance: 'Medium',
-    points: 150,
-  },
-  {
-    id: 'feat-5',
-    name: 'User & Role Management',
-    description: 'RBAC for admins, driver staff, and domain supervisors.',
-    importance: 'Low',
-    points: 100,
-  },
-];
-
 const DEFAULT_MEMBERS: TeamShareAllocationItem[] = [
   { userId: 'u-1', name: 'Project Selector (Lead)', role: 'Project Selector / Lead', sharePercent: 100, rewardPoints: 500, isLead: true },
-];
-
-interface PhaseExecutionItem {
-  id: string;
-  phaseNum: number;
-  title: string;
-  week: string;
-  expected: string;
-  points: number;
-  status: 'Approved' | 'In Progress' | 'Scheduled';
-}
-
-const DEFAULT_PHASES: PhaseExecutionItem[] = [
-  {
-    id: 'phase-1',
-    phaseNum: 1,
-    title: 'Phase 1 Review: Architecture & Scoping',
-    week: 'Week 2',
-    expected: 'SRS document, System Architecture, API Schemas, Database ERD',
-    points: 350,
-    status: 'Approved',
-  },
-  {
-    id: 'phase-2',
-    phaseNum: 2,
-    title: 'Phase 2 Review: Core Implementation & AI Training',
-    week: 'Week 6',
-    expected: 'Trained Waste Segregation AI Model & Telemetry Endpoints',
-    points: 750,
-    status: 'In Progress',
-  },
-  {
-    id: 'phase-3',
-    phaseNum: 3,
-    title: 'Phase 3 Review: System Integration & Web Dashboard',
-    week: 'Week 10',
-    expected: 'Full Web Dashboard, IoT Telemetry Integration & Test Suite',
-    points: 750,
-    status: 'Scheduled',
-  },
-  {
-    id: 'phase-4',
-    phaseNum: 4,
-    title: 'Phase 4 Review: Final Field Deployment & Verification',
-    week: 'Week 14',
-    expected: 'Live Staging/Production Deployment & Final Faculty Demo',
-    points: 500,
-    status: 'Scheduled',
-  },
 ];
 
 export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> = ({
@@ -146,53 +61,75 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
     initialTab || 'team-features'
   );
 
-  // Editable Execution Phases State
-  const [phases, setPhases] = useState<PhaseExecutionItem[]>(DEFAULT_PHASES);
+  const user = useAppSelector((s) => s.auth.user);
+  const isReviewer = (user?.role as string) === 'ADMIN' || (user?.role as string) === 'FACULTY';
 
-  const handleUpdatePhase = (id: string, field: keyof PhaseExecutionItem, value: any) => {
-    setPhases((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, [field]: value } : p))
-    );
-  };
+  // Execution Phases — server-generated (exactly 4), fetched live. Points and
+  // count are computed server-side (ideaIntelligence.service.generatePhasePlan);
+  // this UI can submit/review them but never edits point values directly.
+  const [phases, setPhases] = useState<ProjectPhaseItem[]>([]);
+  const [phasesLoading, setPhasesLoading] = useState(false);
 
-  const handleAddPhase = () => {
-    const nextNum = phases.length + 1;
-    setPhases((prev) => [
-      ...prev,
-      {
-        id: `phase-${Date.now()}`,
-        phaseNum: nextNum,
-        title: `Phase ${nextNum} Review: Custom Milestone`,
-        week: `Week ${nextNum * 3}`,
-        expected: 'Deliverables & review output criteria',
-        points: 500,
-        status: 'Scheduled',
-      },
-    ]);
-  };
-
-  const handleDeletePhase = (id: string) => {
-    setPhases((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  // Phase Review Reward Claiming state
-  const [claimedPhases, setClaimedPhases] = useState<Record<string, boolean>>({});
-  const [claimingPhase, setClaimingPhase] = useState<string | null>(null);
-
-  const handleClaimPhaseReward = async (phaseId: string, phaseName: string, points: number) => {
-    setClaimingPhase(phaseId);
+  const loadPhases = async () => {
+    setPhasesLoading(true);
     try {
-      const res = await lifecycleService.claimPhaseReward(projectId, phaseId, phaseName, points);
-      setClaimedPhases((prev) => ({ ...prev, [phaseId]: true }));
-      setNotification({ type: 'success', message: res.message });
-    } catch (err: any) {
-      console.error('Failed to claim phase reward:', err);
-      setNotification({
-        type: 'error',
-        message: err?.response?.data?.message || 'Failed to claim phase review reward points to DB.',
-      });
+      const res = await lifecycleService.getPhases(projectId);
+      setPhases(res.phases);
+    } catch (err) {
+      console.error('Failed to load phases:', err);
     } finally {
-      setClaimingPhase(null);
+      setPhasesLoading(false);
+    }
+  };
+
+  // Phase submission (student) & review (ADMIN/FACULTY) state
+  const [submitModalPhaseId, setSubmitModalPhaseId] = useState<string | null>(null);
+  const [submissionNote, setSubmissionNote] = useState('');
+  const [evidenceUrlsText, setEvidenceUrlsText] = useState('');
+  const [submittingPhase, setSubmittingPhase] = useState<string | null>(null);
+  const [reviewingPhase, setReviewingPhase] = useState<string | null>(null);
+  const [reviewNoteDraft, setReviewNoteDraft] = useState<Record<string, string>>({});
+
+  const handleSubmitPhase = async () => {
+    if (!submitModalPhaseId || !submissionNote.trim()) return;
+    setSubmittingPhase(submitModalPhaseId);
+    try {
+      const evidenceUrls = evidenceUrlsText
+        .split(/[\n,]/)
+        .map((u) => u.trim())
+        .filter(Boolean);
+      await lifecycleService.submitPhase(projectId, submitModalPhaseId, { submissionNote, evidenceUrls });
+      setNotification({ type: 'success', message: 'Phase submitted for faculty review.' });
+      setSubmitModalPhaseId(null);
+      setSubmissionNote('');
+      setEvidenceUrlsText('');
+      await loadPhases();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Failed to submit phase.' });
+    } finally {
+      setSubmittingPhase(null);
+    }
+  };
+
+  const handleReviewPhase = async (phaseId: string, decision: 'APPROVED' | 'CHANGES_REQUESTED') => {
+    setReviewingPhase(phaseId);
+    try {
+      const res = await lifecycleService.reviewPhase(projectId, phaseId, {
+        decision,
+        reviewNote: reviewNoteDraft[phaseId] || '',
+      });
+      setNotification({
+        type: 'success',
+        message:
+          decision === 'APPROVED'
+            ? `Phase approved — reward points credited to the team.`
+            : 'Changes requested — the team has been notified.',
+      });
+      await loadPhases();
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Failed to submit review.' });
+    } finally {
+      setReviewingPhase(null);
     }
   };
 
@@ -205,9 +142,30 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
   const [subdomain, setSubdomain] = useState<string>('Waste Management');
   const [proposedDate, setProposedDate] = useState<string>('Jul 31, 2025');
 
-  // Editable Allocation State
-  const [features, setFeatures] = useState<FeatureAllocationItem[]>(DEFAULT_FEATURES);
+  // Editable Allocation State — features are fetched live (AI-extracted + scored
+  // server-side); this UI never assigns points itself.
+  const [features, setFeatures] = useState<FeatureAllocationItem[]>([]);
+  const [featuresLoading, setFeaturesLoading] = useState(false);
   const [teamShare, setTeamShare] = useState<TeamShareAllocationItem[]>(DEFAULT_MEMBERS);
+
+  const loadFeatures = async () => {
+    setFeaturesLoading(true);
+    try {
+      const res = await lifecycleService.getFeatures(projectId);
+      setFeatures(res.features);
+      setInitialFeaturePoints(res.totalPoints || 1000);
+    } catch (err) {
+      console.error('Failed to load features:', err);
+    } finally {
+      setFeaturesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFeatures();
+    loadPhases();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   // Feature reduction warning tracking
   const [initialFeaturePoints, setInitialFeaturePoints] = useState<number>(1000);
@@ -267,13 +225,13 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
   >('overview');
 
   // Editing Modals / Inline Edit
-  const [editingFeature, setEditingFeature] = useState<FeatureAllocationItem | null>(null);
+  const [editingFeatureId, setEditingFeatureId] = useState<string | null>(null);
   const [showAddFeatureModal, setShowAddFeatureModal] = useState(false);
+  const [savingFeature, setSavingFeature] = useState(false);
   const [newFeature, setNewFeature] = useState({
     name: '',
     description: '',
-    importance: 'Medium' as 'High' | 'Medium' | 'Low',
-    points: 100,
+    implementationMethod: '',
   });
 
   // Member Search State (Search by RegNo / Name)
@@ -466,31 +424,69 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
     );
   }, [teamRewardCapacity]);
 
-  // Feature Operations
-  const handleAddFeature = () => {
-    if (!newFeature.name.trim()) return;
-    const addedPoints = Number(newFeature.points) || 100;
-
-    const created: FeatureAllocationItem = {
-      id: `feat-${Date.now()}`,
-      name: newFeature.name.trim(),
-      description: newFeature.description.trim() || 'New project feature',
-      importance: newFeature.importance,
-      points: addedPoints,
-    };
-
-    const updatedFeatures = [...features, created];
-    setFeatures(updatedFeatures);
-    setNewFeature({ name: '', description: '', importance: 'Medium', points: 100 });
-    setShowAddFeatureModal(false);
+  // Feature Operations — points/importance are always AI-scored server-side
+  // (rescoreFeature re-runs the LLM against the stored problem statement every
+  // time a feature is added or edited); the client only supplies the raw inputs.
+  const handleAddFeature = async () => {
+    if (!newFeature.name.trim() || !newFeature.description.trim() || !newFeature.implementationMethod.trim()) return;
+    setSavingFeature(true);
+    try {
+      if (editingFeatureId) {
+        const res = await lifecycleService.updateFeature(projectId, editingFeatureId, {
+          name: newFeature.name.trim(),
+          description: newFeature.description.trim(),
+          implementationMethod: newFeature.implementationMethod.trim(),
+        });
+        setFeatures((prev) => prev.map((f) => (f.id === editingFeatureId ? res.feature : f)));
+        setNotification({
+          type: 'success',
+          message: res.budgetClamped
+            ? `Feature updated — points capped to fit the remaining 1,000-pt budget (${res.feature.points} pts).`
+            : `Feature re-scored by AI: ${res.feature.points} pts.`,
+        });
+      } else {
+        const res = await lifecycleService.addFeature(projectId, {
+          name: newFeature.name.trim(),
+          description: newFeature.description.trim(),
+          implementationMethod: newFeature.implementationMethod.trim(),
+        });
+        setFeatures((prev) => [...prev, res.feature]);
+        setNotification({
+          type: 'success',
+          message: res.budgetClamped
+            ? `Feature added — points capped to fit the remaining 1,000-pt budget (${res.feature.points} pts).`
+            : `Feature added — AI scored it at ${res.feature.points} pts.`,
+        });
+      }
+      setNewFeature({ name: '', description: '', implementationMethod: '' });
+      setEditingFeatureId(null);
+      setShowAddFeatureModal(false);
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Failed to save feature.' });
+    } finally {
+      setSavingFeature(false);
+    }
   };
 
-  const handleDeleteFeature = (id: string) => {
-    const featureToRemove = features.find((f) => f.id === id);
-    if (!featureToRemove) return;
+  const handleEditFeature = (feature: FeatureAllocationItem) => {
+    setEditingFeatureId(feature.id);
+    setNewFeature({
+      name: feature.name,
+      description: feature.description,
+      implementationMethod: feature.implementationMethod || '',
+    });
+    setShowAddFeatureModal(true);
+  };
 
-    const filtered = features.filter((f) => f.id !== id);
-    setFeatures(filtered);
+  const handleDeleteFeature = async (id: string) => {
+    const previous = features;
+    setFeatures((prev) => prev.filter((f) => f.id !== id));
+    try {
+      await lifecycleService.removeFeature(projectId, id);
+    } catch (err: any) {
+      setFeatures(previous);
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Failed to remove feature.' });
+    }
   };
 
   const handleUpdateMemberShare = (userId: string, newShare: number) => {
@@ -812,6 +808,11 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                           <td className="py-3 px-3">
                             <span className="font-bold text-gray-900 block">{feat.name}</span>
                             <span className="text-[11px] text-gray-500 line-clamp-1">{feat.description}</span>
+                            {feat.aiRationale && (
+                              <span className="text-[10px] text-indigo-500 line-clamp-1 block mt-0.5" title={feat.aiRationale}>
+                                AI: {feat.aiRationale}
+                              </span>
+                            )}
                           </td>
                           <td className="py-3 px-3">
                             <span
@@ -830,16 +831,32 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                             {feat.points} pts
                           </td>
                           <td className="py-3 px-3 text-center">
-                            <button
-                              onClick={() => handleDeleteFeature(feat.id)}
-                              className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
-                              title="Delete Feature"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleEditFeature(feat)}
+                                className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition"
+                                title="Edit Feature"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteFeature(feat.id)}
+                                className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                                title="Delete Feature"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
+                      {!featuresLoading && features.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="py-6 text-center text-gray-400 text-xs">
+                            No features yet — add one below.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                     <tfoot className="sticky bottom-0 bg-gray-50 z-10">
                       <tr className="border-t border-gray-200 font-bold text-xs">
@@ -856,7 +873,11 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                 </div>
 
                 <button
-                  onClick={() => setShowAddFeatureModal(true)}
+                  onClick={() => {
+                    setEditingFeatureId(null);
+                    setNewFeature({ name: '', description: '', implementationMethod: '' });
+                    setShowAddFeatureModal(true);
+                  }}
                   className="mt-3 w-full py-2 bg-indigo-50/60 border border-dashed border-indigo-200 hover:bg-indigo-100/60 text-indigo-700 text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add Feature
@@ -1044,38 +1065,41 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" /> Phase-by-Phase Execution Plan & Review Rewards
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  Editable phase document baseline • Earn reward points credited directly to DB on phase review approval.
+                  4 mandatory review checkpoints, generated by AI from your features. Submit evidence for faculty
+                  review — reward points are only credited to your team once a phase is approved.
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleAddPhase}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-xl hover:bg-indigo-100 transition shadow-2xs"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Phase
-                </button>
-                <div className="px-3.5 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-right shrink-0">
-                  <span className="text-[10px] font-bold text-indigo-600 uppercase block tracking-wider">Total Review Points</span>
-                  <span className="text-sm font-extrabold text-indigo-900">
-                    {phases.reduce((sum, p) => sum + (p.points || 0), 0).toLocaleString()} Pts
-                  </span>
-                </div>
+              <div className="px-3.5 py-1.5 bg-indigo-50 border border-indigo-200 rounded-xl text-right shrink-0">
+                <span className="text-[10px] font-bold text-indigo-600 uppercase block tracking-wider">Total Review Points</span>
+                <span className="text-sm font-extrabold text-indigo-900">
+                  {phases.reduce((sum, p) => sum + (p.points || 0), 0).toLocaleString()} Pts
+                </span>
               </div>
             </div>
 
-            {/* PHASE REVIEW CARDS LIST (EDITABLE) */}
+            {phasesLoading && <div className="text-center text-xs text-gray-400 py-8">Loading phases...</div>}
+            {!phasesLoading && phases.length === 0 && (
+              <div className="text-center text-xs text-gray-400 py-8">
+                No execution phases yet — these are generated automatically when the project is created.
+              </div>
+            )}
+
+            {/* PHASE REVIEW CARDS LIST */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {phases.map((phase) => {
-                const isClaimed = !!claimedPhases[phase.id] || phase.status === 'Approved';
-                const isClaiming = claimingPhase === phase.id;
+                const latestSubmission = phase.submissions?.[0];
+                const isApproved = phase.status === 'APPROVED';
+                const isSubmitted = phase.status === 'SUBMITTED';
+                const isChangesRequested = phase.status === 'CHANGES_REQUESTED';
 
                 return (
                   <div
                     key={phase.id}
                     className={`p-5 rounded-2xl border transition shadow-2xs space-y-3 flex flex-col justify-between ${
-                      isClaimed
+                      isApproved
                         ? 'bg-emerald-50/40 border-emerald-200'
+                        : isChangesRequested
+                        ? 'bg-amber-50/40 border-amber-200'
                         : 'bg-white border-gray-200 hover:border-indigo-200'
                     }`}
                   >
@@ -1083,98 +1107,184 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-2 flex-1">
                           <span className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 font-extrabold text-xs flex items-center justify-center shrink-0">
-                            P{phase.phaseNum}
+                            P{phase.phaseNumber}
                           </span>
                           <div className="flex-1">
-                            <input
-                              type="text"
-                              value={phase.title}
-                              onChange={(e) => handleUpdatePhase(phase.id, 'title', e.target.value)}
-                              className="text-sm font-bold text-gray-900 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none w-full"
-                              placeholder="Phase Title..."
-                            />
-                            <div className="flex items-center gap-1 mt-0.5">
-                              <span className="text-[10px] font-bold text-gray-400">Schedule:</span>
-                              <input
-                                type="text"
-                                value={phase.week}
-                                onChange={(e) => handleUpdatePhase(phase.id, 'week', e.target.value)}
-                                className="text-[11px] font-semibold text-indigo-600 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none w-24"
-                                placeholder="Week Target"
-                              />
-                            </div>
+                            <span className="text-sm font-bold text-gray-900 block">{phase.title}</span>
+                            <span className="text-[11px] font-semibold text-indigo-600">Week {phase.weekTarget} target</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              isClaimed
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : phase.status === 'In Progress'
-                                ? 'bg-indigo-100 text-indigo-800'
-                                : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {isClaimed ? '✓ Approved' : phase.status}
-                          </span>
-                          {phases.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeletePhase(phase.id)}
-                              className="p-1 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
-                              title="Delete Phase"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                            isApproved
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isSubmitted
+                              ? 'bg-indigo-100 text-indigo-800'
+                              : isChangesRequested
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {isApproved
+                            ? '✓ Approved'
+                            : isSubmitted
+                            ? 'Pending Review'
+                            : isChangesRequested
+                            ? 'Changes Requested'
+                            : 'Planned'}
+                        </span>
                       </div>
 
                       <div className="space-y-1 bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
                         <span className="text-[11px] font-bold text-gray-800 block">Expected Deliverables / Output:</span>
-                        <textarea
-                          rows={2}
-                          value={phase.expected}
-                          onChange={(e) => handleUpdatePhase(phase.id, 'expected', e.target.value)}
-                          className="w-full text-xs text-gray-700 bg-white p-2 rounded-lg border border-gray-200 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                          placeholder="Describe expected output..."
-                        />
+                        <p className="w-full text-xs text-gray-700">{phase.expectedDeliverables}</p>
+                        {phase.hardwareNote && (
+                          <p className="w-full text-[11px] text-amber-700 mt-1">⚡ {phase.hardwareNote}</p>
+                        )}
                       </div>
+
+                      {isChangesRequested && latestSubmission?.reviewNote && (
+                        <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                          <span className="font-bold block mb-0.5">Reviewer feedback:</span>
+                          {latestSubmission.reviewNote}
+                        </div>
+                      )}
+
+                      {isReviewer && isSubmitted && latestSubmission && (
+                        <div className="p-2.5 rounded-xl bg-indigo-50/60 border border-indigo-100 text-[11px] text-gray-700 space-y-1">
+                          <span className="font-bold block">Submission note:</span>
+                          <p>{latestSubmission.submissionNote}</p>
+                          {!!latestSubmission.evidenceUrls?.length && (
+                            <ul className="list-disc pl-4">
+                              {latestSubmission.evidenceUrls.map((u, i) => (
+                                <li key={i}>
+                                  <a href={u} target="_blank" rel="noreferrer" className="text-indigo-600 underline break-all">
+                                    {u}
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">Points:</span>
-                        <input
-                          type="number"
-                          value={phase.points}
-                          onChange={(e) => handleUpdatePhase(phase.id, 'points', Number(e.target.value))}
-                          className="w-16 px-1.5 py-0.5 border border-gray-200 rounded text-xs font-extrabold text-indigo-600 bg-gray-50 text-right focus:bg-white focus:outline-none"
-                        />
-                        <span className="text-xs font-bold text-indigo-600">pts</span>
+                    <div className="pt-2 border-t border-gray-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-600">{phase.points} pts</span>
                       </div>
 
-                      <button
-                        type="button"
-                        disabled={isClaimed || isClaiming}
-                        onClick={() => handleClaimPhaseReward(phase.id, phase.title, phase.points)}
-                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
-                          isClaimed
-                            ? 'bg-emerald-100 text-emerald-800 cursor-default'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
-                        }`}
-                      >
-                        <Award className="w-3.5 h-3.5" />
-                        {isClaiming
-                          ? 'Awarding DB Points...'
-                          : isClaimed
-                          ? 'Points Saved to DB'
-                          : `Claim +${phase.points} Pts to DB`}
-                      </button>
+                      {isReviewer ? (
+                        isSubmitted ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={reviewNoteDraft[phase.id] || ''}
+                              onChange={(e) => setReviewNoteDraft((prev) => ({ ...prev, [phase.id]: e.target.value }))}
+                              placeholder="Review note (optional for approve, shown to team on request-changes)"
+                              className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={reviewingPhase === phase.id}
+                                onClick={() => handleReviewPhase(phase.id, 'APPROVED')}
+                                className="flex-1 px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
+                              >
+                                Approve +{phase.points} pts
+                              </button>
+                              <button
+                                type="button"
+                                disabled={reviewingPhase === phase.id}
+                                onClick={() => handleReviewPhase(phase.id, 'CHANGES_REQUESTED')}
+                                className="flex-1 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition disabled:opacity-50"
+                              >
+                                Request Changes
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-gray-400 italic">
+                            {isApproved ? 'Already approved.' : 'Waiting on team submission.'}
+                          </span>
+                        )
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isApproved || isSubmitted}
+                          onClick={() => setSubmitModalPhaseId(phase.id)}
+                          className={`w-full px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                            isApproved
+                              ? 'bg-emerald-100 text-emerald-800 cursor-default'
+                              : isSubmitted
+                              ? 'bg-gray-100 text-gray-500 cursor-default'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs'
+                          }`}
+                        >
+                          <Award className="w-3.5 h-3.5" />
+                          {isApproved
+                            ? `Approved — +${phase.points} pts awarded`
+                            : isSubmitted
+                            ? 'Pending Faculty Review'
+                            : isChangesRequested
+                            ? 'Resubmit for Review'
+                            : 'Submit for Faculty Review'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------------------- SUBMIT PHASE MODAL */}
+      {submitModalPhaseId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4">
+            <h3 className="text-base font-bold text-gray-900">Submit Phase for Review</h3>
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Submission Note</label>
+                <textarea
+                  value={submissionNote}
+                  onChange={(e) => setSubmissionNote(e.target.value)}
+                  placeholder="Summarize what was completed for this phase..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">Evidence Links (one per line)</label>
+                <textarea
+                  value={evidenceUrlsText}
+                  onChange={(e) => setEvidenceUrlsText(e.target.value)}
+                  placeholder="https://github.com/your-org/repo&#10;https://drive.google.com/..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  setSubmitModalPhaseId(null);
+                  setSubmissionNote('');
+                  setEvidenceUrlsText('');
+                }}
+                className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitPhase}
+                disabled={!submissionNote.trim() || submittingPhase === submitModalPhaseId}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition disabled:opacity-50"
+              >
+                {submittingPhase === submitModalPhaseId ? 'Submitting...' : 'Submit for Review'}
+              </button>
             </div>
           </div>
         </div>
@@ -1542,7 +1652,11 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
       {showAddFeatureModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 max-w-md w-full shadow-xl space-y-4">
-            <h3 className="text-base font-bold text-gray-900">Add New Feature</h3>
+            <h3 className="text-base font-bold text-gray-900">{editingFeatureId ? 'Edit Feature' : 'Add New Feature'}</h3>
+            <p className="text-[11px] text-gray-500 -mt-2">
+              Importance and reward points are assigned automatically by AI based on the description and how you plan
+              to build it — the model re-scores against the project's problem statement every time.
+            </p>
 
             <div className="space-y-3 text-xs">
               <div>
@@ -1567,50 +1681,34 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Importance</label>
-                  <select
-                    value={newFeature.importance}
-                    onChange={(e) =>
-                      setNewFeature({ ...newFeature, importance: e.target.value as any })
-                    }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none"
-                  >
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="font-bold text-gray-700 block mb-1">Reward Points</label>
-                  <input
-                    type="number"
-                    min={10}
-                    max={500}
-                    value={newFeature.points}
-                    onChange={(e) =>
-                      setNewFeature({ ...newFeature, points: Number(e.target.value) })
-                    }
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none font-bold"
-                  />
-                </div>
+              <div>
+                <label className="font-bold text-gray-700 block mb-1">How will you build it?</label>
+                <textarea
+                  value={newFeature.implementationMethod}
+                  onChange={(e) => setNewFeature({ ...newFeature, implementationMethod: e.target.value })}
+                  placeholder="e.g. Fine-tuning a custom model, calling a hosted API with light glue code, a tuned traditional ML model..."
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:outline-none"
+                />
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
               <button
-                onClick={() => setShowAddFeatureModal(false)}
+                onClick={() => {
+                  setShowAddFeatureModal(false);
+                  setEditingFeatureId(null);
+                }}
                 className="px-4 py-2 border border-gray-200 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddFeature}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
+                disabled={savingFeature}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition disabled:opacity-50"
               >
-                Add Feature
+                {savingFeature ? 'Scoring with AI...' : editingFeatureId ? 'Save Changes' : 'Add Feature'}
               </button>
             </div>
           </div>

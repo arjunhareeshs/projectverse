@@ -262,7 +262,13 @@ export function applyEvent(state: ProjectLogState, event: ProjectLogEventPayload
     case 'SELECTION_DRAFT':
     case 'SELECTION_VOTE':
     case 'INTERVENTION_LOGGED':
-    case 'DELIVERABLE_DRAFTED': {
+    case 'DELIVERABLE_DRAFTED':
+    case 'FEATURE_ADDED':
+    case 'FEATURE_UPDATED':
+    case 'FEATURE_REMOVED':
+    case 'PHASE_SUBMITTED':
+    case 'PHASE_APPROVED':
+    case 'PHASE_CHANGES_REQUESTED': {
       // Audit-stream events — no direct state mutation required
       break;
     }

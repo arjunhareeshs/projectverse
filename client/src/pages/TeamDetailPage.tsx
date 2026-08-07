@@ -16,39 +16,9 @@ import {
   PieChart, Pie, Cell, ComposedChart,
 } from 'recharts';
 import { teamService } from '../services/team.service';
+import { useNotifications } from '../contexts/NotificationContext';
 import { cn } from '../utils/cn';
-export const MEMBER_MOCK_DETAILS: Record<string, { regNo: string; project: string; skills: string[] }> = {
-  'rahul.verma@projectverse.com': {
-    regNo: '2021CSE0042',
-    project: 'Smart Campus Management System',
-    skills: ['Database Design', 'PostgreSQL', 'SQL', 'Node.js', 'Express']
-  },
-  'arun.kumar@projectverse.com': {
-    regNo: '2021CSE0018',
-    project: 'Smart Campus Management System',
-    skills: ['UI/UX Design', 'Figma', 'CSS Grid', 'Tailwind CSS', 'React']
-  },
-  'priya.sharma@projectverse.com': {
-    regNo: '2021CSE0087',
-    project: 'Smart Campus Management System',
-    skills: ['React', 'TypeScript', 'CSS Modules', 'State Management']
-  },
-  'karthik.m@projectverse.com': {
-    regNo: '2021CSE0056',
-    project: 'Mobile App',
-    skills: ['Docker', 'Kubernetes', 'CI/CD', 'AWS', 'GitHub Actions']
-  },
-  'student@projectverse.com': {
-    regNo: '2021CSE0102',
-    project: 'Smart Campus Management System',
-    skills: ['Full Stack Dev', 'Next.js', 'Node.js', 'PostgreSQL', 'TypeScript']
-  },
-  'admin@projectverse.com': {
-    regNo: '2021CSE0001',
-    project: 'Smart Campus Management System',
-    skills: ['Project Management', 'System Architecture', 'Agile', 'Scrum']
-  }
-};
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -273,10 +243,6 @@ export const TeamDetailPage: React.FC = () => {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (isCaptainOrAdmin) loadMetrics();
-  }, [isCaptainOrAdmin, loadMetrics]);
-
   const loadTasks = useCallback(async () => {
     if (!id) return;
     try {
@@ -294,6 +260,42 @@ export const TeamDetailPage: React.FC = () => {
     } catch (err) { console.error(err); }
     finally { setProjectsLoaded(true); }
   }, [id]);
+
+  const { socket } = useNotifications();
+
+  useEffect(() => {
+    if (isCaptainOrAdmin) loadMetrics();
+  }, [isCaptainOrAdmin, loadMetrics]);
+
+  useEffect(() => {
+    if (!socket || !id) return;
+
+    const handleSocketMessage = (data: { teamId: string; message: any }) => {
+      if (data.teamId === id) {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === data.message.id)) return prev;
+          return [...prev, data.message];
+        });
+      }
+    };
+
+    const handleTeamUpdate = (data: { teamId: string; type: string }) => {
+      if (data.teamId === id) {
+        loadCore();
+        if (isCaptainOrAdmin) loadMetrics();
+        if (tasksLoaded) loadTasks();
+        if (projectsLoaded) loadProjects();
+      }
+    };
+
+    socket.on('teamMessage', handleSocketMessage);
+    socket.on('teamUpdate', handleTeamUpdate);
+
+    return () => {
+      socket.off('teamMessage', handleSocketMessage);
+      socket.off('teamUpdate', handleTeamUpdate);
+    };
+  }, [socket, id, loadCore, loadMetrics, loadTasks, loadProjects, isCaptainOrAdmin, tasksLoaded, projectsLoaded]);
 
   const saveRepoLink = async (projectId: string) => {
     if (!id || !repoLinkDraft.trim()) return;

@@ -171,4 +171,43 @@ export const projectController = {
         .json({ message: 'Failed to recommend catalog' });
     }
   },
+
+  async getProjectFeatures(req: Request, res: Response) {
+    try {
+      const { projectId } = req.params;
+      const features = await projectService.getProjectFeatures(projectId as string);
+      res.json(features);
+    } catch (error) {
+      console.error('Error fetching project features:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to fetch features' });
+    }
+  },
+
+  async addProjectFeature(req: Request, res: Response) {
+    try {
+      const { projectId } = req.params;
+      const feature = await projectService.addProjectFeature(projectId as string, req.body);
+      res.status(StatusCodes.CREATED).json(feature);
+    } catch (error) {
+      console.error('Error adding project feature:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to add feature' });
+    }
+  },
+
+  async deleteProjectFeature(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      const { projectId, featureId } = req.params;
+      const result = await projectService.deleteProjectFeature(
+        projectId as string,
+        featureId as string,
+        user.id
+      );
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error deleting project feature:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: error?.message || 'Failed to delete feature' });
+    }
+  },
 };

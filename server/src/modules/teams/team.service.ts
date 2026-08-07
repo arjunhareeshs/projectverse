@@ -3,8 +3,25 @@ import axios from 'axios';
 import { githubService } from '../github/github.service';
 import { logger } from '../../shared/logger';
 import { getIoInstance } from '../../infrastructure/socket';
+import { notificationService } from '../notifications/notification.service';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+
+async function notifyTeamUpdate(teamId: string, type: string) {
+  try {
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: { members: { select: { id: true } } },
+    });
+    if (!team) return;
+    const io = getIoInstance();
+    for (const member of team.members) {
+      io.to(`user:${member.id}`).emit('teamUpdate', { teamId, type });
+    }
+  } catch (e) {
+    logger.error(`Socket emission failed for teamUpdate (${type}):`, e);
+  }
+}
 
 const userSelect = {
   id: true,
@@ -149,7 +166,7 @@ export const teamService = {
     if (requesterRole !== 'ADMIN' && team.leadId !== requesterId) {
       throw new Error('Only the team lead or an admin can edit this team');
     }
-    return prisma.team.update({
+    const updatedTeam = await prisma.team.update({
       where: { id },
       data: {
         name: data.name,
@@ -162,6 +179,9 @@ export const teamService = {
         currentProjectLabel: data.currentProjectLabel,
       },
     });
+
+    notifyTeamUpdate(id, 'teamUpdated');
+    return updatedTeam;
   },
 
   async addMember(organizationId: string, teamId: string, userId: string, roleLabel: string) {
@@ -186,11 +206,20 @@ export const teamService = {
     });
     await prisma.user.update({ where: { id: userId }, data: { teamId } });
 
-    return prisma.teamMember.upsert({
+    const member = await prisma.teamMember.upsert({
       where: { teamId_userId: { teamId, userId } },
       update: { roleLabel },
       create: { teamId, userId, roleLabel },
     });
+
+    notificationService.createForUser(
+      userId,
+      'Added to Team',
+      `You have been added to team "${team.name}" as ${roleLabel}.`
+    ).catch((err) => logger.error('Failed sending addMember notification', err));
+
+    notifyTeamUpdate(teamId, 'memberAdded');
+    return member;
   },
 
   async removeMember(
@@ -254,6 +283,7 @@ export const teamService = {
       return { success: true, teamDeleted: true };
     }
 
+    notifyTeamUpdate(teamId, 'memberRemoved');
     return { success: true, teamDeleted: false };
   },
 
@@ -922,6 +952,15 @@ export const teamService = {
       },
     });
 
+    if (task.assigneeId) {
+      notificationService.createForUser(
+        task.assigneeId,
+        'Task Assigned',
+        `You were assigned to task "${task.title}".`
+      ).catch((err) => logger.error('Failed sending task assignment notification', err));
+    }
+
+    notifyTeamUpdate(teamId, 'taskCreated');
     return task;
   },
 
@@ -956,6 +995,13 @@ export const teamService = {
       });
     }
 
+    notificationService.broadcastToTeam(
+      teamId,
+      'Task Status Updated',
+      `Task "${task.title}" status changed to ${status}.`
+    ).catch((err) => logger.error('Failed broadcasting task update notification', err));
+
+    notifyTeamUpdate(teamId, 'taskStatusUpdated');
     return updated;
   },
 
@@ -1015,6 +1061,14 @@ export const teamService = {
         entityId: project.id,
       },
     });
+
+    notificationService.broadcastToTeam(
+      teamId,
+      'New Project Created',
+      `Project "${project.name}" has been created for your team.`
+    ).catch((err) => logger.error('Failed broadcasting project creation notification', err));
+
+    notifyTeamUpdate(teamId, 'projectCreated');
 
     if (project.repoLink) {
       githubService.analyzeAndLinkProject(project.id, project.repoLink).catch((err) => {

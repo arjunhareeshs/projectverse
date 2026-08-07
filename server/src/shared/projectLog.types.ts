@@ -95,7 +95,13 @@ export type ProjectLogEventType =
   | 'SELECTION_LOCKED'
   | 'BLOCKER_ESCALATED'
   | 'INTERVENTION_LOGGED'
-  | 'DELIVERABLE_DRAFTED';
+  | 'DELIVERABLE_DRAFTED'
+  | 'FEATURE_ADDED'
+  | 'FEATURE_UPDATED'
+  | 'FEATURE_REMOVED'
+  | 'PHASE_SUBMITTED'
+  | 'PHASE_APPROVED'
+  | 'PHASE_CHANGES_REQUESTED';
 
 export interface ProjectLogEventPayload {
   type: ProjectLogEventType;

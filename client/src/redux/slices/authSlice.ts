@@ -18,9 +18,9 @@ interface AuthState {
 }
 
 const initialState: AuthState = {
-  user: null,
-  token: localStorage.getItem('token'),
-  isAuthenticated: !!localStorage.getItem('token'),
+  user: localStorage.getItem('pv_user') ? JSON.parse(localStorage.getItem('pv_user')!) : null,
+  token: localStorage.getItem('pv_token'),
+  isAuthenticated: !!localStorage.getItem('pv_token'),
   isLoading: false,
   error: null,
 };
@@ -37,14 +37,16 @@ export const authSlice = createSlice({
       state.token = action.payload.token;
       state.isAuthenticated = true;
       state.error = null;
-      localStorage.setItem('token', action.payload.token);
+      localStorage.setItem('pv_token', action.payload.token);
+      localStorage.setItem('pv_user', JSON.stringify(action.payload.user));
     },
     logout: (state) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
       state.error = null;
-      localStorage.removeItem('token');
+      localStorage.removeItem('pv_token');
+      localStorage.removeItem('pv_user');
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.isLoading = action.payload;

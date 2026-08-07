@@ -6,6 +6,8 @@ import {
   ExecutionDocContent,
   EvaluationReportContent,
   MentorStatus,
+  FeatureAllocationItem,
+  ProjectPhaseItem,
 } from '../types/projectLog';
 
 export const lifecycleService = {
@@ -167,17 +169,55 @@ export const lifecycleService = {
     return res.data;
   },
 
-  claimPhaseReward: async (
+  getFeatures: async (
+    projectId: string
+  ): Promise<{ features: FeatureAllocationItem[]; totalPoints: number; capPoints: number }> => {
+    const res = await api.get(`/lifecycle/${projectId}/features`);
+    return res.data;
+  },
+
+  addFeature: async (
+    projectId: string,
+    data: { name: string; description: string; implementationMethod: string }
+  ): Promise<{ feature: FeatureAllocationItem; budgetClamped: boolean; duplicateOfFeatureId: string | null }> => {
+    const res = await api.post(`/lifecycle/${projectId}/features`, data);
+    return res.data;
+  },
+
+  updateFeature: async (
+    projectId: string,
+    featureId: string,
+    data: { name?: string; description?: string; implementationMethod?: string }
+  ): Promise<{ feature: FeatureAllocationItem; budgetClamped: boolean; duplicateOfFeatureId: string | null }> => {
+    const res = await api.patch(`/lifecycle/${projectId}/features/${featureId}`, data);
+    return res.data;
+  },
+
+  removeFeature: async (projectId: string, featureId: string): Promise<{ success: boolean }> => {
+    const res = await api.delete(`/lifecycle/${projectId}/features/${featureId}`);
+    return res.data;
+  },
+
+  getPhases: async (projectId: string): Promise<{ phases: ProjectPhaseItem[] }> => {
+    const res = await api.get(`/lifecycle/${projectId}/phases`);
+    return res.data;
+  },
+
+  submitPhase: async (
     projectId: string,
     phaseId: string,
-    phaseName: string,
-    points: number
-  ): Promise<{ success: boolean; pointsAwarded: number; newTotalPoints: number; message: string }> => {
-    const res = await api.post(`/lifecycle/${projectId}/claim-phase-reward`, {
-      phaseId,
-      phaseName,
-      points,
-    });
+    data: { submissionNote: string; evidenceUrls?: string[] }
+  ): Promise<{ submission: any; phaseStatus: string }> => {
+    const res = await api.post(`/lifecycle/${projectId}/phases/${phaseId}/submit`, data);
+    return res.data;
+  },
+
+  reviewPhase: async (
+    projectId: string,
+    phaseId: string,
+    data: { decision: 'APPROVED' | 'CHANGES_REQUESTED'; reviewNote?: string }
+  ): Promise<{ success: boolean; status: string; splits?: Array<{ userId: string; points: number }> }> => {
+    const res = await api.post(`/lifecycle/${projectId}/phases/${phaseId}/review`, data);
     return res.data;
   },
 };

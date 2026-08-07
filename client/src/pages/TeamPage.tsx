@@ -16,7 +16,7 @@ import { cn } from '../utils/cn';
 import { teamService } from '../services/team.service';
 import { Link, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { MEMBER_MOCK_DETAILS, CollaborationModal } from './TeamDetailPage';
+import { CollaborationModal } from './TeamDetailPage';
 
 interface TeamMember {
   id: string;

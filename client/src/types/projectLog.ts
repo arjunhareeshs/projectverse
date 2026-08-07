@@ -116,6 +116,55 @@ export interface FeatureAllocationItem {
   description: string;
   importance: 'High' | 'Medium' | 'Low';
   points: number;
+  implementationMethod?: string | null;
+  aiRationale?: string | null;
+  addedBy?: string;
+  status?: 'ACTIVE' | 'REMOVED';
+}
+
+export interface PhaseSubmissionItem {
+  id: string;
+  phaseId: string;
+  submittedById: string;
+  submissionNote: string;
+  evidenceUrls?: string[] | null;
+  status: 'PENDING' | 'APPROVED' | 'CHANGES_REQUESTED';
+  reviewedById?: string | null;
+  reviewNote?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+}
+
+export interface ProjectPhaseItem {
+  id: string;
+  projectId: string;
+  phaseNumber: number;
+  title: string;
+  expectedDeliverables: string;
+  weekTarget: number;
+  points: number;
+  hardwareNote?: string | null;
+  status: 'PLANNED' | 'SUBMITTED' | 'APPROVED' | 'CHANGES_REQUESTED';
+  submissions?: PhaseSubmissionItem[];
+}
+
+export interface PerspectiveScore {
+  score: number;
+  rationale: string;
+}
+
+export interface IdeaPerspectives {
+  feasibility: PerspectiveScore;
+  effectiveness: PerspectiveScore;
+  studentPotential: PerspectiveScore;
+  businessPotential: PerspectiveScore;
+  projectPotential: PerspectiveScore;
+}
+
+export interface HardwareConstraints {
+  componentAvailability: string;
+  integrationComplexity: string;
+  problemSolutionComplexity: string;
 }
 
 export interface TeamShareAllocationItem {

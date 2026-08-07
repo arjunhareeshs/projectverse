@@ -2,12 +2,13 @@ import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { z } from 'zod';
 import { prisma } from '../../shared/database';
-import { chatJSON, chatJSONWithMeta, ChatMessage } from '../ai/llm.service';
+import { chatJSON, ChatMessage } from '../ai/llm.service';
 import { ProjectCategory } from '../../shared/projectLog.types';
 import { wordOverlapRatio, jaccardSimilarity } from '../../shared/stringUtils';
 import { MAX_TEAMS_PER_STATEMENT, APPROACH_OVERLAP_THRESHOLD, availability } from './selection.constants';
 import { getTeamSelectionReadiness } from './selection.readiness';
 import { computeFit, DOMAIN_REQUIRED_SKILLS } from '../metrics/selectionFit';
+import { validateIdea, extractFeaturesForCombinedStatement, generatePhasePlan, MIN_PROPOSAL_LENGTH } from '../intelligence/ideaIntelligence.service';
 
 const ApproachCheckSchema = z.object({
   uniquenessScore: z.number().min(0).max(100),
@@ -16,41 +17,6 @@ const ApproachCheckSchema = z.object({
   reason: z.string(),
   suggestions: z.array(z.string()).default([]),
   keywords: z.array(z.string()).default([]),
-});
-
-const ProposalEvaluationSchema = z.object({
-  verdict: z.enum(['ACCEPTED', 'REJECTED', 'NEEDS_IMPROVEMENT']),
-  reasons: z.array(z.string()).default([]),
-  improvementHints: z.array(z.string()).default([]),
-  overallScore: z.number().min(0).max(100),
-  rubrics: z.object({
-    relevance: z.object({ score: z.number(), rationale: z.string() }),
-    clarity: z.object({ score: z.number(), rationale: z.string() }),
-    feasibility: z.object({ score: z.number(), rationale: z.string() }),
-    novelty: z.object({ score: z.number(), rationale: z.string() }),
-    expectedOutcome: z.object({ score: z.number(), rationale: z.string() }),
-    featureCompleteness: z.object({ score: z.number(), rationale: z.string() }),
-    industryImpact: z.object({ score: z.number(), rationale: z.string() }),
-  }),
-  duplicate: z.object({
-    isDuplicate: z.boolean(),
-    similarProjectId: z.string().optional(),
-    similarProjectTitle: z.string().optional(),
-    similarityScore: z.number().optional(),
-  }),
-  extracted: z.object({
-    title: z.string(),
-    soul: z.string(),
-    domain: z.string(),
-    sector: z.string(),
-    type: z.enum(['Software', 'Hardware', 'IoT', 'Hybrid']),
-    difficultyLevel: z.string(),
-    technologies: z.array(z.string()),
-    outcomes: z.array(z.string()),
-    outOfScope: z.string().optional(),
-    skillsGained: z.array(z.string()).optional(),
-    prerequisites: z.array(z.string()).optional(),
-  }),
 });
 
 const VALID_CATEGORIES: ProjectCategory[] = ['MINI', 'FINAL_YEAR', 'RESEARCH'];
@@ -122,182 +88,6 @@ function typeToPrefix(type: string): 'H' | 'S' | 'HS' {
   if (type === 'Hardware' || type === 'IoT') return 'H';
   if (type === 'Hardware & Software' || type === 'Hybrid' || type === 'Combination') return 'HS';
   return 'S';
-}
-
-type ProposalEvaluation = z.infer<typeof ProposalEvaluationSchema>;
-
-export const MIN_PROPOSAL_LENGTH = 40;
-
-/**
- * Scores a raw problem-statement proposal across the 7 rubrics, checks it for
- * duplication against the live catalog, and extracts the catalog-card fields.
- *
- * Shared by POST /proposals/evaluate (preview) and POST /proposals (publish) so
- * the publish path never has to trust a client-supplied verdict — a submitter
- * could otherwise POST `{ evaluation: { verdict: 'ACCEPTED' } }` and push
- * arbitrary text into the shared catalog.
- */
-async function runProposalEvaluation(rawText: string): Promise<ProposalEvaluation> {
-  const allTemplates = await prisma.project.findMany({
-    where: { isTemplate: true, status: 'CATALOG' },
-    select: { id: true, name: true, problemStatement: true, shortName: true },
-  });
-
-  // Rank candidates with Jaccard, NOT wordOverlapRatio. wordOverlapRatio divides
-  // by the smaller word set, so a long detailed proposal scores 1.0 against any
-  // short title whose words it happens to contain — every thorough submission was
-  // being flagged as a duplicate of a 5-word catalog entry.
-  const ranked = allTemplates
-    .map((t) => {
-      const text = `${t.name} ${t.shortName || ''} ${t.problemStatement || ''}`;
-      return { id: t.id, name: t.name, statement: t.problemStatement || '', score: jaccardSimilarity(rawText, text) };
-    })
-    .sort((a, b) => b.score - a.score);
-
-  const topDuplicateCandidate = ranked[0] && ranked[0].score > 0.12 ? ranked[0] : null;
-
-  // Only a genuine near-copy is rejected without the model's opinion. Anything
-  // below this is merely "related" and is handed to the LLM to judge in context.
-  const isDuplicate = Boolean(topDuplicateCandidate && topDuplicateCandidate.score > 0.6);
-  const duplicateScore = topDuplicateCandidate ? Math.round(topDuplicateCandidate.score * 100) : 0;
-
-  // Shortlist of nearest catalog entries so the model can reason about overlap.
-  const nearest = ranked
-    .filter((r) => r.score > 0.08)
-    .slice(0, 8)
-    .map((r) => ({ title: r.name, statement: r.statement.slice(0, 300), similarity: Math.round(r.score * 100) }));
-
-  const fallbackResult: ProposalEvaluation = {
-    verdict: isDuplicate ? 'REJECTED' : 'ACCEPTED',
-    reasons: isDuplicate
-      ? [`High similarity to existing catalog project "${topDuplicateCandidate?.name}".`]
-      : ['Proposal meets technical clarity and industry relevance criteria.'],
-    improvementHints: isDuplicate
-      ? ['Focus on a distinct application niche or unique dataset.']
-      : ['Define clear quantitative metrics and specific target users.'],
-    overallScore: isDuplicate ? 45 : 84,
-    rubrics: {
-      relevance: { score: 85, rationale: 'Addresses a clear domain problem statement.' },
-      clarity: { score: 82, rationale: 'Problem statement and scope are clear.' },
-      feasibility: { score: 85, rationale: 'Realistically buildable within project timeline.' },
-      novelty: {
-        score: isDuplicate ? 35 : 80,
-        rationale: isDuplicate
-          ? 'Very similar to an existing catalog statement.'
-          : 'Presents a fresh angle or implementation.',
-      },
-      expectedOutcome: { score: 82, rationale: 'Expected outcomes are defined.' },
-      featureCompleteness: { score: 78, rationale: 'Key features outlined.' },
-      industryImpact: { score: 80, rationale: 'Beneficial for industrial/societal application.' },
-    },
-    duplicate: {
-      isDuplicate,
-      similarProjectId: topDuplicateCandidate?.id,
-      similarProjectTitle: topDuplicateCandidate?.name,
-      similarityScore: duplicateScore,
-    },
-    extracted: {
-      title: rawText.trim().slice(0, 45),
-      soul: rawText.trim().split('.')[0] || rawText.trim().slice(0, 100),
-      domain: 'Computer Science & IT',
-      sector: 'Software Systems',
-      type: 'Software',
-      difficultyLevel: '3',
-      technologies: ['React', 'Node.js', 'PostgreSQL'],
-      outcomes: ['Working prototype', 'Documentation'],
-      outOfScope: 'Massive scale distribution',
-      skillsGained: ['System Design', 'Full-stack Development'],
-      prerequisites: ['Database Systems', 'Software Engineering'],
-    },
-  };
-
-  // The exact response shape MUST be spelled out here. Saying "match the required
-  // schema" without stating it makes the model invent its own wrapper object, Zod
-  // rejects it, and chatJSON silently returns the fallback — which looked like the
-  // evaluator ignoring the LLM entirely.
-  const messages: ChatMessage[] = [
-    {
-      role: 'system',
-      content:
-        'You are an expert evaluator for student engineering project proposals. ' +
-        'Score the proposal on 7 rubrics, each 0-100, and extract catalog metadata.\n\n' +
-        'Respond with ONLY a JSON object in EXACTLY this shape — no wrapper key, no extra keys:\n' +
-        '{\n' +
-        '  "verdict": "ACCEPTED" | "REJECTED" | "NEEDS_IMPROVEMENT",\n' +
-        '  "overallScore": number (0-100, the weighted average of the rubric scores),\n' +
-        '  "reasons": string[],\n' +
-        '  "improvementHints": string[],\n' +
-        '  "rubrics": {\n' +
-        '    "relevance":           { "score": number, "rationale": string },\n' +
-        '    "clarity":             { "score": number, "rationale": string },\n' +
-        '    "feasibility":         { "score": number, "rationale": string },\n' +
-        '    "novelty":             { "score": number, "rationale": string },\n' +
-        '    "expectedOutcome":     { "score": number, "rationale": string },\n' +
-        '    "featureCompleteness": { "score": number, "rationale": string },\n' +
-        '    "industryImpact":      { "score": number, "rationale": string }\n' +
-        '  },\n' +
-        '  "duplicate": { "isDuplicate": boolean, "similarProjectTitle": string, "similarityScore": number },\n' +
-        '  "extracted": {\n' +
-        '    "title": string, "soul": string (one-line essence), "domain": string, "sector": string,\n' +
-        '    "type": "Software" | "Hardware" | "IoT" | "Hybrid",\n' +
-        '    "difficultyLevel": string ("1"-"5"),\n' +
-        '    "technologies": string[], "outcomes": string[],\n' +
-        '    "outOfScope": string, "skillsGained": string[], "prerequisites": string[]\n' +
-        '  }\n' +
-        '}\n\n' +
-        'Grading guidance: verdict is ACCEPTED when overallScore >= 70 and the proposal is not a ' +
-        'near-copy of an existing catalog entry. Use NEEDS_IMPROVEMENT for a real but under-specified ' +
-        'idea (50-69). Reserve REJECTED for vague, trivial, or duplicate submissions. ' +
-        'A detailed, well-scoped proposal with a clear industry problem, defined users, a concrete ' +
-        'deliverable and a realistic stack should score highly — do not mark it down for length. ' +
-        'nearestCatalogEntries are provided for duplicate judgement only: sharing a broad domain ' +
-        '(e.g. both are "smart city" projects) is NOT duplication. Set isDuplicate only if the ' +
-        'proposal solves substantially the same problem in substantially the same way.',
-    },
-    {
-      role: 'user',
-      content: JSON.stringify({
-        rawText,
-        nearestCatalogEntries: nearest,
-      }),
-    },
-  ];
-
-  const { data: result, degraded } = await chatJSONWithMeta(messages, fallbackResult, {
-    feature: 'evaluateProposal',
-    schema: ProposalEvaluationSchema,
-    retries: 2,
-  });
-
-  if (degraded) {
-    console.warn(
-      '[evaluateProposal] LLM unavailable or response rejected by schema — returning heuristic fallback scores.',
-    );
-  }
-
-  // A measured near-copy (>0.6 Jaccard) is rejected regardless of the model's
-  // opinion. Below that the model's judgement stands — it can see the nearest
-  // entries and decide whether shared domain vocabulary is actual duplication.
-  if (isDuplicate) {
-    return {
-      ...result,
-      verdict: 'REJECTED',
-      duplicate: fallbackResult.duplicate,
-      reasons: Array.from(new Set([...(result.reasons || []), ...fallbackResult.reasons])),
-    };
-  }
-
-  // Attach the resolved catalog id — the model is never given ids, so it cannot
-  // supply one, and the publish path needs it to record duplicateOfId.
-  return {
-    ...result,
-    duplicate: {
-      ...result.duplicate,
-      similarProjectId: result.duplicate?.isDuplicate ? topDuplicateCandidate?.id : undefined,
-      similarProjectTitle: result.duplicate?.similarProjectTitle || topDuplicateCandidate?.name,
-      similarityScore: result.duplicate?.similarityScore ?? duplicateScore,
-    },
-  };
 }
 
 export const catalogController = {
@@ -655,7 +445,7 @@ export const catalogController = {
         });
       }
 
-      const result = await runProposalEvaluation(rawText.trim());
+      const result = await validateIdea(rawText.trim());
       res.json(result);
     } catch (error) {
       console.error('Error validating proposal:', error);
@@ -682,7 +472,7 @@ export const catalogController = {
       // Re-score server-side. The client's `evaluation` is a preview only and is
       // deliberately ignored — trusting it would let a submitter forge an
       // ACCEPTED verdict and publish arbitrary text into the shared catalog.
-      const evaluation = await runProposalEvaluation(proposalText);
+      const evaluation = await validateIdea(proposalText);
 
       if (evaluation.verdict !== 'ACCEPTED') {
         // Keep the rejection on record so repeat/duplicate submissions are auditable.
@@ -758,6 +548,41 @@ export const catalogController = {
           extracted,
           publishedProjectId: publishedProject.id,
         },
+      });
+
+      if (evaluation.features.length > 0) {
+        await tx.projectFeature.createMany({
+          data: evaluation.features.map((f) => ({
+            projectId: publishedProject.id,
+            name: f.name,
+            description: f.description,
+            importance: f.importance,
+            implementationMethod: f.implementationMethod,
+            points: f.points,
+            aiRationale: f.aiRationale,
+            addedBy: 'AI',
+          })),
+        });
+      }
+
+      const featureTotal = evaluation.features.reduce((sum, f) => sum + f.points, 0);
+      const weeks = publishedProject.suggestedDurationWeeks || 14;
+      const phasePlan = await generatePhasePlan({
+        problemStatement: proposalText,
+        projectType: extracted.type || 'Software',
+        featureTotal,
+        weeks,
+      });
+      await tx.projectPhase.createMany({
+        data: phasePlan.map((p) => ({
+          projectId: publishedProject.id,
+          phaseNumber: p.phaseNumber,
+          title: p.title,
+          expectedDeliverables: p.expectedDeliverables,
+          weekTarget: p.weekTarget,
+          points: p.points,
+          hardwareNote: p.hardwareNote,
+        })),
       });
 
         return { publishedProject, proposalRow };
@@ -922,6 +747,48 @@ export const catalogController = {
         ];
 
         await tx.projectMember.createMany({ data: projectMembers });
+
+        // Same feature-extraction + phase-generation the propose-new-idea path
+        // gets, run against the combined template statement + this team's
+        // differentiation approach so a static catalog pick gets its own
+        // reward-point scorecard instead of an empty execution template.
+        const combinedText = `${template.problemStatement || ''}\n\nTeam's unique approach:\n${differentiationApproach}`;
+        const { features } = await extractFeaturesForCombinedStatement(combinedText, template.type);
+
+        if (features.length > 0) {
+          await tx.projectFeature.createMany({
+            data: features.map((f) => ({
+              projectId: created.id,
+              name: f.name,
+              description: f.description,
+              importance: f.importance,
+              implementationMethod: f.implementationMethod,
+              points: f.points,
+              aiRationale: f.aiRationale,
+              addedBy: 'AI',
+            })),
+          });
+        }
+
+        const featureTotal = features.reduce((sum, f) => sum + f.points, 0);
+        const weeks = template.suggestedDurationWeeks || 14;
+        const phasePlan = await generatePhasePlan({
+          problemStatement: combinedText,
+          projectType: template.type,
+          featureTotal,
+          weeks,
+        });
+        await tx.projectPhase.createMany({
+          data: phasePlan.map((p) => ({
+            projectId: created.id,
+            phaseNumber: p.phaseNumber,
+            title: p.title,
+            expectedDeliverables: p.expectedDeliverables,
+            weekTarget: p.weekTarget,
+            points: p.points,
+            hardwareNote: p.hardwareNote,
+          })),
+        });
 
         return created;
       });

@@ -16,6 +16,10 @@ import {
   flagResolveSchema,
   manualNoteSchema,
   memberAddSchema,
+  featureCreateSchema,
+  featureUpdateSchema,
+  phaseSubmitSchema,
+  phaseReviewSchema,
 } from './lifecycle.schemas';
 import { lifecycleController } from './lifecycle.controller';
 
@@ -50,7 +54,17 @@ router.post('/:projectId/document/generate', requireProjectAccess, lifecycleCont
 router.get('/:projectId/document', requireProjectAccess, lifecycleController.getDocument as any);
 router.put('/:projectId/document', requireProjectAccess, lifecycleController.saveDocument as any);
 router.get('/:projectId/document/download', requireProjectAccess, lifecycleController.downloadDocument as any);
-router.post('/:projectId/claim-phase-reward', requireProjectAccess, lifecycleController.claimPhaseReward as any);
+
+// Feature extraction & reward-point endpoints
+router.get('/:projectId/features', requireProjectAccess, lifecycleController.getFeatures as any);
+router.post('/:projectId/features', requireProjectAccess, validateBody(featureCreateSchema), lifecycleController.addFeature as any);
+router.patch('/:projectId/features/:featureId', requireProjectAccess, validateBody(featureUpdateSchema), lifecycleController.updateFeature as any);
+router.delete('/:projectId/features/:featureId', requireProjectAccess, lifecycleController.removeFeature as any);
+
+// Phase execution & faculty/admin review endpoints
+router.get('/:projectId/phases', requireProjectAccess, lifecycleController.getPhases as any);
+router.post('/:projectId/phases/:phaseId/submit', requireProjectAccess, validateBody(phaseSubmitSchema), lifecycleController.submitPhase as any);
+router.post('/:projectId/phases/:phaseId/review', requireRole(['ADMIN', 'FACULTY']) as any, validateBody(phaseReviewSchema), lifecycleController.reviewPhase as any);
 
 // Daily work log endpoints
 router.get('/:projectId/daily-log/draft', requireProjectAccess, lifecycleController.getDailyLogDraft as any);

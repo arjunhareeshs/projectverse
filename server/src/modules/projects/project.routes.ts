@@ -26,6 +26,11 @@ router.post('/recommend-technology', projectController.recommendTechnology);
 router.post('/recommend-catalog', projectController.recommendCatalog);
 router.post('/', projectController.createProject);
 
+// Features
+router.get('/:projectId/features', projectController.getProjectFeatures);
+router.post('/:projectId/features', projectController.addProjectFeature);
+router.delete('/:projectId/features/:featureId', projectController.deleteProjectFeature);
+
 // Reviews
 router.post('/:projectId/reviews', projectController.addProjectReview);
 router.get('/:projectId/reviews', projectController.getProjectReviews);

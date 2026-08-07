@@ -15,6 +15,23 @@ export const adminController = {
     }
   },
 
+  // ── Users ────────────────────────────────────────────────────────────────
+
+  updateUserRole: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.params.userId as string;
+      const { role } = req.body as { role?: string };
+      if (!role || !['ADMIN', 'STUDENT', 'FACULTY'].includes(role)) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'role must be one of ADMIN, STUDENT, FACULTY' });
+        return;
+      }
+      const user = await AdminService.updateUserRole(userId, role as 'ADMIN' | 'STUDENT' | 'FACULTY');
+      res.json(user);
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  },
+
   // ── Students ─────────────────────────────────────────────────────────────
 
   createStudent: async (req: AuthenticatedRequest, res: Response) => {

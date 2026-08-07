@@ -15,6 +15,9 @@ import { intakeSchema, dailyLogSchema, durationCheckSchema, suggestMembersSchema
 import { draftDailyLog } from './dailyLog.prefill';
 import { detectPersistentBlockers } from '../metrics/blockerEscalation';
 import { teamWorkload } from '../metrics/workload';
+import { rescoreFeature } from '../intelligence/ideaIntelligence.service';
+import { FEATURE_POINTS_CAP } from '../intelligence/ideaIntelligence.schemas';
+import { notificationService } from '../notifications/notification.service';
 
 /**
  * Access guard for project-scoped lifecycle endpoints (Overview §5).
@@ -23,7 +26,7 @@ import { teamWorkload } from '../metrics/workload';
  */
 async function userCanAccessProject(user: any, projectId: string): Promise<boolean> {
   if (!user) return false;
-  if (user.role === 'ADMIN') return true;
+  if (user.role === 'ADMIN' || user.role === 'FACULTY') return true;
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -581,45 +584,379 @@ export class LifecycleController {
     }
   }
 
-  async claimPhaseReward(req: Request, res: Response): Promise<void> {
+  // ── Features ──────────────────────────────────────────────────────────────
+
+  async getFeatures(req: Request, res: Response): Promise<void> {
     try {
       const projectId = req.params.projectId as string;
-      const { phaseId, phaseName, points } = req.body;
-      const userId = (req as any).user?.id;
+      const features = await prisma.projectFeature.findMany({
+        where: { projectId, status: 'ACTIVE' },
+        orderBy: { createdAt: 'asc' },
+      });
+      const total = features.reduce((sum, f) => sum + f.points, 0);
+      res.status(StatusCodes.OK).json({ features, totalPoints: total, capPoints: FEATURE_POINTS_CAP });
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
 
+  async addFeature(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const userId = (req as any).user?.id || 'SYSTEM';
+      const { name, description, implementationMethod } = req.body;
+
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Project not found' });
+        return;
+      }
+
+      const existing = await prisma.projectFeature.findMany({
+        where: { projectId, status: 'ACTIVE' },
+        select: { id: true, name: true, description: true, points: true },
+      });
+
+      const scored = await rescoreFeature({
+        problemStatement: project.problemStatement || '',
+        projectType: project.type,
+        existingFeatures: existing,
+        proposed: { name, description, implementationMethod },
+      });
+
+      const created = await prisma.projectFeature.create({
+        data: {
+          projectId,
+          name,
+          description,
+          implementationMethod,
+          importance: scored.importance,
+          points: scored.points,
+          aiRationale: scored.aiRationale,
+          addedBy: userId,
+        },
+      });
+
+      await projectLogService.appendEvent(projectId, {
+        type: 'FEATURE_ADDED',
+        actorUserId: userId,
+        data: { featureId: created.id, name: created.name, points: created.points },
+      });
+
+      res.status(StatusCodes.CREATED).json({ feature: created, budgetClamped: scored.budgetClamped, duplicateOfFeatureId: scored.duplicateOfFeatureId });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async updateFeature(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const featureId = req.params.featureId as string;
+      const userId = (req as any).user?.id || 'SYSTEM';
+
+      const feature = await prisma.projectFeature.findFirst({ where: { id: featureId, projectId, status: 'ACTIVE' } });
+      if (!feature) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Feature not found' });
+        return;
+      }
+
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      if (!project) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Project not found' });
+        return;
+      }
+
+      const name = req.body.name ?? feature.name;
+      const description = req.body.description ?? feature.description;
+      const implementationMethod = req.body.implementationMethod ?? feature.implementationMethod ?? '';
+
+      const otherActive = await prisma.projectFeature.findMany({
+        where: { projectId, status: 'ACTIVE', id: { not: featureId } },
+        select: { id: true, name: true, description: true, points: true },
+      });
+
+      const scored = await rescoreFeature({
+        problemStatement: project.problemStatement || '',
+        projectType: project.type,
+        existingFeatures: otherActive,
+        proposed: { name, description, implementationMethod },
+      });
+
+      const updated = await prisma.projectFeature.update({
+        where: { id: featureId },
+        data: {
+          name,
+          description,
+          implementationMethod,
+          importance: scored.importance,
+          points: scored.points,
+          aiRationale: scored.aiRationale,
+        },
+      });
+
+      await projectLogService.appendEvent(projectId, {
+        type: 'FEATURE_UPDATED',
+        actorUserId: userId,
+        data: { featureId: updated.id, name: updated.name, points: updated.points },
+      });
+
+      res.status(StatusCodes.OK).json({ feature: updated, budgetClamped: scored.budgetClamped, duplicateOfFeatureId: scored.duplicateOfFeatureId });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async removeFeature(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const featureId = req.params.featureId as string;
+      const userId = (req as any).user?.id || 'SYSTEM';
+
+      const feature = await prisma.projectFeature.findFirst({ where: { id: featureId, projectId, status: 'ACTIVE' } });
+      if (!feature) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Feature not found' });
+        return;
+      }
+
+      await prisma.projectFeature.update({ where: { id: featureId }, data: { status: 'REMOVED' } });
+
+      await projectLogService.appendEvent(projectId, {
+        type: 'FEATURE_REMOVED',
+        actorUserId: userId,
+        data: { featureId, name: feature.name },
+      });
+
+      res.status(StatusCodes.OK).json({ success: true });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  // ── Phases ────────────────────────────────────────────────────────────────
+
+  async getPhases(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const phases = await prisma.projectPhase.findMany({
+        where: { projectId },
+        orderBy: { phaseNumber: 'asc' },
+        include: { submissions: { orderBy: { createdAt: 'desc' }, take: 1 } },
+      });
+      res.status(StatusCodes.OK).json({ phases });
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  }
+
+  async submitPhase(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const phaseId = req.params.phaseId as string;
+      const userId = (req as any).user?.id;
       if (!userId) {
         res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User ID required' });
         return;
       }
+      const { submissionNote, evidenceUrls } = req.body;
 
-      const ptsToAward = Number(points) || 250;
-
-      // Update reward points in DB for user
-      const updatedUser = await prisma.user.update({
-        where: { id: userId },
-        data: { rewardPoints: { increment: ptsToAward } },
-      });
-
-      // Record project log event
-      try {
-        await projectLogService.appendEvent(projectId, {
-          type: 'MANUAL_NOTE',
-          actorUserId: userId,
-          data: { note: `Claimed Phase Review Reward (${phaseName || phaseId}): +${ptsToAward} pts awarded to DB.` },
-        });
-      } catch (logErr) {
-        // Event append best-effort
+      const phase = await prisma.projectPhase.findFirst({ where: { id: phaseId, projectId } });
+      if (!phase) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Phase not found' });
+        return;
+      }
+      if (phase.status === 'APPROVED') {
+        res.status(StatusCodes.CONFLICT).json({ message: 'This phase has already been approved' });
+        return;
       }
 
-      res.status(StatusCodes.OK).json({
-        success: true,
-        pointsAwarded: ptsToAward,
-        newTotalPoints: updatedUser.rewardPoints,
-        message: `Successfully claimed +${ptsToAward} reward points for ${phaseName || 'Phase Review'}! Points saved to DB.`,
+      const [submission] = await prisma.$transaction([
+        prisma.phaseSubmission.create({
+          data: {
+            phaseId,
+            projectId,
+            submittedById: userId,
+            submissionNote,
+            evidenceUrls: evidenceUrls || [],
+            status: 'PENDING',
+          },
+        }),
+        prisma.projectPhase.update({ where: { id: phaseId }, data: { status: 'SUBMITTED' } }),
+      ]);
+
+      await projectLogService.appendEvent(projectId, {
+        type: 'PHASE_SUBMITTED',
+        actorUserId: userId,
+        data: { phaseId, phaseNumber: phase.phaseNumber, submissionId: submission.id },
       });
+
+      try {
+        const project = await prisma.project.findUnique({ where: { id: projectId }, select: { organizationId: true, name: true } });
+        if (project?.organizationId) {
+          const reviewers = await prisma.user.findMany({
+            where: { organizationId: project.organizationId, role: { in: ['ADMIN', 'FACULTY'] } },
+            select: { id: true },
+          });
+          await Promise.all(
+            reviewers.map((r) =>
+              notificationService.createForUser(
+                r.id,
+                'Phase submitted for review',
+                `${project.name || 'A project'} submitted Phase ${phase.phaseNumber} ("${phase.title}") for review.`,
+              ),
+            ),
+          );
+        }
+      } catch (notifyErr) {
+        // Notification is best-effort
+      }
+
+      res.status(StatusCodes.CREATED).json({ submission, phaseStatus: 'SUBMITTED' });
     } catch (err: any) {
-      console.error('Claim phase reward error:', err);
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
+  async reviewPhase(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const phaseId = req.params.phaseId as string;
+      const reviewerId = (req as any).user?.id;
+      if (!reviewerId) {
+        res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User ID required' });
+        return;
+      }
+      const { decision, reviewNote } = req.body as { decision: 'APPROVED' | 'CHANGES_REQUESTED'; reviewNote?: string };
+
+      const phase = await prisma.projectPhase.findFirst({ where: { id: phaseId, projectId } });
+      if (!phase) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Phase not found' });
+        return;
+      }
+      const submission = await prisma.phaseSubmission.findFirst({
+        where: { phaseId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!submission) {
+        res.status(StatusCodes.CONFLICT).json({ message: 'No pending submission for this phase' });
+        return;
+      }
+
+      if (decision === 'CHANGES_REQUESTED') {
+        await prisma.$transaction([
+          prisma.phaseSubmission.update({
+            where: { id: submission.id },
+            data: { status: 'CHANGES_REQUESTED', reviewedById: reviewerId, reviewNote, reviewedAt: new Date() },
+          }),
+          prisma.projectPhase.update({ where: { id: phaseId }, data: { status: 'CHANGES_REQUESTED' } }),
+        ]);
+
+        await projectLogService.appendEvent(projectId, {
+          type: 'PHASE_CHANGES_REQUESTED',
+          actorUserId: reviewerId,
+          data: { phaseId, phaseNumber: phase.phaseNumber, reviewNote: reviewNote || '' },
+        });
+
+        try {
+          const members = await prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } });
+          await Promise.all(
+            members.map((m) =>
+              notificationService.createForUser(
+                m.userId,
+                'Phase changes requested',
+                `Phase ${phase.phaseNumber} ("${phase.title}") needs changes: ${reviewNote || 'See reviewer notes.'}`,
+              ),
+            ),
+          );
+        } catch {
+          // best-effort
+        }
+
+        res.status(StatusCodes.OK).json({ success: true, status: 'CHANGES_REQUESTED' });
+        return;
+      }
+
+      // APPROVED — this is the only place reward points are ever credited to
+      // User.rewardPoints for phase work. Points come from phase.points (server
+      // state, computed at generation time), never from the request body.
+      const project = await prisma.project.findUnique({ where: { id: projectId } });
+      const executionDoc = await prisma.executionDocument.findFirst({
+        where: { projectId },
+        orderBy: { version: 'desc' },
+        select: { content: true },
+      });
+      const teamShare = (executionDoc?.content as any)?.teamShare as
+        | Array<{ userId: string; sharePercent: number }>
+        | undefined;
+
+      const members = await prisma.projectMember.findMany({ where: { projectId }, select: { userId: true } });
+      let splits: Array<{ userId: string; points: number }>;
+
+      if (teamShare && teamShare.length > 0) {
+        const totalShare = teamShare.reduce((sum, m) => sum + (m.sharePercent || 0), 0) || 100;
+        splits = teamShare.map((m) => ({
+          userId: m.userId,
+          points: Math.round(phase.points * ((m.sharePercent || 0) / totalShare)),
+        }));
+      } else if (members.length > 0) {
+        const equalShare = Math.floor(phase.points / members.length);
+        splits = members.map((m, idx) => ({
+          userId: m.userId,
+          points: idx === members.length - 1 ? phase.points - equalShare * (members.length - 1) : equalShare,
+        }));
+      } else {
+        splits = [];
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.phaseSubmission.update({
+          where: { id: submission.id },
+          data: { status: 'APPROVED', reviewedById: reviewerId, reviewNote, reviewedAt: new Date() },
+        });
+        await tx.projectPhase.update({ where: { id: phaseId }, data: { status: 'APPROVED' } });
+
+        for (const split of splits) {
+          if (split.points <= 0) continue;
+          await tx.user.update({
+            where: { id: split.userId },
+            data: { rewardPoints: { increment: split.points } },
+          });
+          await tx.rewardTransaction.create({
+            data: {
+              userId: split.userId,
+              projectId,
+              source: 'PHASE_APPROVAL',
+              sourceRefId: submission.id,
+              points: split.points,
+              note: `Phase ${phase.phaseNumber} approved: ${phase.title}`,
+            },
+          });
+        }
+      });
+
+      await projectLogService.appendEvent(projectId, {
+        type: 'PHASE_APPROVED',
+        actorUserId: reviewerId,
+        data: { phaseId, phaseNumber: phase.phaseNumber, pointsAwarded: phase.points, splits },
+      });
+
+      try {
+        await Promise.all(
+          splits.map((s) =>
+            notificationService.createForUser(
+              s.userId,
+              'Phase approved!',
+              `Phase ${phase.phaseNumber} ("${phase.title}") of ${project?.name || 'your project'} was approved — +${s.points} pts awarded.`,
+            ),
+          ),
+        );
+      } catch {
+        // best-effort
+      }
+
+      res.status(StatusCodes.OK).json({ success: true, status: 'APPROVED', splits });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
     }
   }
 }

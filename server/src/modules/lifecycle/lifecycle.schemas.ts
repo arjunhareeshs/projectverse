@@ -74,3 +74,25 @@ export const memberAddSchema = z.object({
   userId: z.string().min(1),
   name: z.string().optional(),
 });
+
+export const featureCreateSchema = z.object({
+  name: z.string().min(2),
+  description: z.string().min(5),
+  implementationMethod: z.string().min(2),
+});
+
+export const featureUpdateSchema = z.object({
+  name: z.string().min(2).optional(),
+  description: z.string().min(5).optional(),
+  implementationMethod: z.string().min(2).optional(),
+});
+
+export const phaseSubmitSchema = z.object({
+  submissionNote: z.string().min(5),
+  evidenceUrls: z.array(z.string()).optional(),
+});
+
+export const phaseReviewSchema = z.object({
+  decision: z.enum(['APPROVED', 'CHANGES_REQUESTED']),
+  reviewNote: z.string().optional(),
+});
