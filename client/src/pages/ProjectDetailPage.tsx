@@ -8,12 +8,14 @@ import {
   ChevronDown,
   Check,
   Folder,
+  LogOut,
 } from 'lucide-react';
 import { useAppSelector } from '../app/hooks';
 import { ProjectReviewerPanel } from '../components/projects/ProjectReviewerPanel';
 import { ProjectExecutionTemplate } from '../components/projects/ProjectExecutionTemplate';
 import { DailyLogTab } from './ProjectWorkspace/DailyLogTab';
 import { IntakeWizard } from '../components/lifecycle/IntakeWizard';
+import { WithdrawProjectModal } from '../components/projects/WithdrawProjectModal';
 import { lifecycleService } from '../services/lifecycle.service';
 import { teamService } from '../services/team.service';
 import { ProjectLogState } from '../types/projectLog';
@@ -32,6 +34,7 @@ export const ProjectDetailPage: React.FC = () => {
   const [logState, setLogState] = useState<ProjectLogState | null>(null);
   const [unresolvedFlagsCount, setUnresolvedFlagsCount] = useState(0);
   const [showWizard, setShowWizard] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [justGeneratedFallback, setJustGeneratedFallback] = useState(false);
   const [teamProjects, setTeamProjects] = useState<any[]>([]);
@@ -100,7 +103,7 @@ export const ProjectDetailPage: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
-            {logState?.title || 'Wind Powered Child Warming System'}
+            {logState?.title || 'Untitled Project'}
           </h1>
         </div>
 
@@ -141,8 +144,17 @@ export const ProjectDetailPage: React.FC = () => {
           >
             <Folder className="w-4 h-4" /> All Projects
           </button>
+
+          <button
+            onClick={() => setShowWithdrawModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition shadow-2xs"
+            title="Withdraw from this project"
+          >
+            <LogOut className="w-4 h-4 text-rose-600" /> Withdraw Project
+          </button>
         </div>
       </div>
+
 
       {/* Tabs Navigation Container */}
       <div className="bg-white border border-gray-200/80 rounded-2xl p-2 shadow-2xs flex items-center gap-2 overflow-x-auto">
@@ -174,6 +186,8 @@ export const ProjectDetailPage: React.FC = () => {
             projectId={projectId}
             logState={logState}
             initialTab="team-features"
+            hideHeader={true}
+            hideTabs={true}
             onBack={() => navigate('/projects')}
           />
         )}
@@ -182,6 +196,8 @@ export const ProjectDetailPage: React.FC = () => {
             projectId={projectId}
             logState={logState}
             initialTab="execution-plan"
+            hideHeader={true}
+            hideTabs={true}
             onBack={() => navigate('/projects')}
           />
         )}
@@ -208,7 +224,17 @@ export const ProjectDetailPage: React.FC = () => {
           onClose={() => setShowWizard(false)}
         />
       )}
+
+      {/* Withdraw Project Modal */}
+      <WithdrawProjectModal
+        isOpen={showWithdrawModal}
+        projectId={projectId}
+        projectName={logState?.title || 'Current Project'}
+        onClose={() => setShowWithdrawModal(false)}
+        onSuccess={() => navigate('/projects')}
+      />
     </div>
   );
 };
+
 

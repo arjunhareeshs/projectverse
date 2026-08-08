@@ -101,7 +101,8 @@ export type ProjectLogEventType =
   | 'FEATURE_REMOVED'
   | 'PHASE_SUBMITTED'
   | 'PHASE_APPROVED'
-  | 'PHASE_CHANGES_REQUESTED';
+  | 'PHASE_CHANGES_REQUESTED'
+  | 'PHASE_UPDATED';
 
 export interface ProjectLogEventPayload {
   type: ProjectLogEventType;

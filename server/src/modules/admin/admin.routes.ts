@@ -18,6 +18,9 @@ router.get('/stats', adminController.getStats);
 // User role management (promotes a user to FACULTY so they can review phase submissions)
 router.patch('/users/:userId/role', adminController.updateUserRole);
 
+// Proposals — AI evaluation audit trail (reasoning behind every accept/reject/points decision)
+router.get('/proposals', adminController.getProposals);
+
 // Students Data Management & Ingest
 router.get('/students', adminController.getStudents);
 router.post('/students', adminController.createStudent);

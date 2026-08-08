@@ -141,9 +141,10 @@ export const Notifications: React.FC = () => {
         <div className="flex items-center gap-2">
           <button
             onClick={triggerMockNotification}
+            title="Send a sample notification to verify the in-app notification flow"
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/90 text-white transition-colors shadow-sm"
           >
-            <Plus className="h-3.5 w-3.5" /> Trigger Mock Alert
+            <Plus className="h-3.5 w-3.5" /> Send Test Notification
           </button>
           {unreadCount > 0 && (
             <button
@@ -167,7 +168,7 @@ export const Notifications: React.FC = () => {
           </span>
           <h3 className="font-semibold text-foreground">No alerts here</h3>
           <p className="text-xs text-muted-foreground max-w-xs">
-            You are fully caught up! Click the "Trigger Mock Alert" button above to simulate system logs.
+            You are fully caught up. New alerts will appear here as your team progresses.
           </p>
         </div>
       ) : (

@@ -22,6 +22,7 @@ import { Dashboard } from './pages/Dashboard';
 import { AllProjects } from './pages/AllProjects';
 import { ProjectCatalogPage } from './pages/ProjectCatalogPage';
 import { ProposeProblem } from './pages/ProposeProblem';
+import { MyProposals } from './pages/MyProposals';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { ProjectExecutionTemplatePage } from './pages/ProjectExecutionTemplatePage';
 import { KanbanBoard } from './pages/KanbanBoard';
@@ -69,6 +70,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/projects" element={<AllProjects />} />
               <Route path="/projects/propose" element={<ProposeProblem />} />
+              <Route path="/projects/proposals" element={<MyProposals />} />
               <Route path="/projects/catalog" element={<ProjectCatalogPage />} />
               <Route path="/projects/:id" element={<ProjectDetailPage />} />
               <Route path="/projects/:id/execution-doc" element={<ProjectExecutionTemplatePage />} />

@@ -289,82 +289,101 @@ export const projectService = {
     return { recommendations: sorted };
   },
 
-  async getProjectFeatures(projectId: string) {
-    return prisma.projectFeature.findMany({
-      where: { projectId, status: 'ACTIVE' },
-      orderBy: { createdAt: 'desc' },
-    });
-  },
-
-  async addProjectFeature(
-    projectId: string,
-    data: {
-      name: string;
-      description: string;
-      importance?: string;
-      implementationMethod?: string;
-      points?: number;
-      addedBy?: string;
-    }
-  ) {
-    return prisma.projectFeature.create({
-      data: {
-        projectId,
-        name: data.name,
-        description: data.description,
-        importance: data.importance || 'Medium',
-        implementationMethod: data.implementationMethod || null,
-        points: data.points ?? 10,
-        addedBy: data.addedBy || 'USER',
-        status: 'ACTIVE',
+  async withdrawProject(projectId: string, userId: string, reason: string) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        team: true,
       },
     });
-  },
 
-  async deleteProjectFeature(projectId: string, featureId: string, userId: string) {
-    const feature = await prisma.projectFeature.findFirst({
-      where: { id: featureId, projectId },
-    });
+    if (!project) {
+      throw new Error('Project not found');
+    }
 
-    if (!feature) throw new Error('Feature not found');
-    if (feature.status === 'REMOVED') return { success: true, feature };
+    return prisma.$transaction(async (tx) => {
+      // 1. Record Audit Log for withdrawal reason
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'PROJECT_WITHDRAWAL',
+          details: JSON.stringify({
+            projectId: project.id,
+            projectName: project.name,
+            parentProjectId: project.parentProjectId,
+            problemId: project.problemId,
+            teamId: project.teamId,
+            reason,
+          }),
+        },
+      });
 
-    const updated = await prisma.projectFeature.update({
-      where: { id: featureId },
-      data: { status: 'REMOVED' },
-    });
+      // 2. Activity log
+      await tx.activityLog.create({
+        data: {
+          userId,
+          action: `withdrew from project "${project.name}" (Reason: ${reason})`,
+          entityType: 'PROJECT',
+          entityId: project.id,
+        },
+      });
 
-    if (feature.points > 0 && userId) {
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (user) {
-        const newPoints = Math.max(0, user.rewardPoints - feature.points);
-        await prisma.user.update({
-          where: { id: userId },
-          data: { rewardPoints: newPoints },
-        });
+      // 3. Delete non-cascading child relations
+      await tx.projectMember.deleteMany({ where: { projectId } });
 
-        await prisma.rewardTransaction.create({
-          data: {
-            userId,
-            projectId,
-            source: 'FEATURE_DELETION',
-            sourceRefId: featureId,
-            points: -feature.points,
-            note: `Deducted ${feature.points} pts for deletion of feature "${feature.name}"`,
-          },
-        });
+      const tasks = await tx.task.findMany({ where: { projectId }, select: { id: true } });
+      const taskIds = tasks.map((t) => t.id);
+      if (taskIds.length > 0) {
+        await tx.subtask.deleteMany({ where: { taskId: { in: taskIds } } });
+        await tx.comment.deleteMany({ where: { taskId: { in: taskIds } } });
+        await tx.label.deleteMany({ where: { taskId: { in: taskIds } } });
+        await tx.task.deleteMany({ where: { projectId } });
       }
-    }
 
-    await prisma.activityLog.create({
-      data: {
-        userId,
-        action: `deleted feature "${feature.name}"`,
-        entityType: 'PROJECT_FEATURE',
-        entityId: feature.id,
-      },
+      const boards = await tx.board.findMany({ where: { projectId }, select: { id: true } });
+      const boardIds = boards.map((b) => b.id);
+      if (boardIds.length > 0) {
+        await tx.boardColumn.deleteMany({ where: { boardId: { in: boardIds } } });
+        await tx.board.deleteMany({ where: { projectId } });
+      }
+
+      await tx.meeting.deleteMany({ where: { projectId } });
+      await tx.report.deleteMany({ where: { projectId } });
+      await tx.document.deleteMany({ where: { projectId } });
+      await tx.sprint.deleteMany({ where: { projectId } });
+      await tx.milestone.deleteMany({ where: { projectId } });
+      await tx.phaseSubmission.deleteMany({ where: { projectId } });
+
+      await tx.rewardTransaction.updateMany({
+        where: { projectId },
+        data: { projectId: null },
+      });
+
+      await tx.problemStatementProposal.updateMany({
+        where: { publishedProjectId: projectId },
+        data: { publishedProjectId: null },
+      });
+      await tx.problemStatementProposal.updateMany({
+        where: { duplicateOfId: projectId },
+        data: { duplicateOfId: null },
+      });
+
+      // Reset team currentProjectLabel if applicable
+      if (project.teamId) {
+        const team = await tx.team.findUnique({ where: { id: project.teamId } });
+        if (team && team.currentProjectLabel === project.name) {
+          await tx.team.update({
+            where: { id: project.teamId },
+            data: { currentProjectLabel: null },
+          });
+        }
+      }
+
+      // Delete the project (cascading models will auto-delete)
+      await tx.project.delete({ where: { id: projectId } });
+
+      return { success: true, message: 'Project withdrawn successfully' };
     });
-
-    return { success: true, feature: updated };
   },
 };
+

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { catalogController } from './project.catalog.controller';
+import { proposalReadController } from './proposal.read.controller';
 import { authGuard } from '../../middleware/authGuard';
 
 const router = Router();
@@ -15,5 +16,7 @@ const proposalEvaluateLimiter = rateLimit({
 
 router.post('/evaluate', proposalEvaluateLimiter, catalogController.validateProposal);
 router.post('/', catalogController.proposeProblemStatement);
+router.get('/mine', proposalReadController.getMyProposals);
+router.get('/:id', proposalReadController.getProposalById);
 
 export const proposalRoutes = router;

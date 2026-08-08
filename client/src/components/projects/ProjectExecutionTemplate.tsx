@@ -23,6 +23,7 @@ import {
   ShieldAlert,
   Search,
   UserPlus,
+  LogOut,
 } from 'lucide-react';
 import {
   ExecutionDocContent,
@@ -34,15 +35,20 @@ import {
 import { lifecycleService } from '../../services/lifecycle.service';
 import { teamService } from '../../services/team.service';
 import { useAppSelector } from '../../app/hooks';
+import { WithdrawProjectModal } from './WithdrawProjectModal';
+
 
 interface ProjectExecutionTemplateProps {
   projectId: string;
   logState?: ProjectLogState | null;
   initialDoc?: ExecutionDocContent | null;
   initialTab?: 'team-features' | 'execution-plan';
+  hideHeader?: boolean;
+  hideTabs?: boolean;
   onBack?: () => void;
   onSaved?: () => void;
 }
+
 
 const DEFAULT_MEMBERS: TeamShareAllocationItem[] = [
   { userId: 'u-1', name: 'Project Selector (Lead)', role: 'Project Selector / Lead', sharePercent: 100, rewardPoints: 500, isLead: true },
@@ -53,6 +59,8 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
   logState,
   initialDoc,
   initialTab,
+  hideHeader = false,
+  hideTabs = false,
   onBack,
   onSaved,
 }) => {
@@ -61,14 +69,32 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
     initialTab || 'team-features'
   );
 
+  useEffect(() => {
+    if (initialTab) {
+      setActiveMainTab(initialTab);
+    }
+  }, [initialTab]);
+
+
   const user = useAppSelector((s) => s.auth.user);
   const isReviewer = (user?.role as string) === 'ADMIN' || (user?.role as string) === 'FACULTY';
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+
 
   // Execution Phases — server-generated (exactly 4), fetched live. Points and
-  // count are computed server-side (ideaIntelligence.service.generatePhasePlan);
-  // this UI can submit/review them but never edits point values directly.
+  // deliverables are AI-drafted (ideaIntelligence.service.generatePhasePlan)
+  // but editable while a phase is still PLANNED (before it's been submitted or
+  // reviewed) via editingPhaseId/phaseEditDraft below.
   const [phases, setPhases] = useState<ProjectPhaseItem[]>([]);
   const [phasesLoading, setPhasesLoading] = useState(false);
+  const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
+  const [phaseEditDraft, setPhaseEditDraft] = useState<{
+    title: string;
+    expectedDeliverables: string;
+    weekTarget: string;
+    points: string;
+  }>({ title: '', expectedDeliverables: '', weekTarget: '', points: '' });
+  const [savingPhaseEdit, setSavingPhaseEdit] = useState(false);
 
   const loadPhases = async () => {
     setPhasesLoading(true);
@@ -79,6 +105,39 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
       console.error('Failed to load phases:', err);
     } finally {
       setPhasesLoading(false);
+    }
+  };
+
+  const handleStartEditPhase = (phase: ProjectPhaseItem) => {
+    setEditingPhaseId(phase.id);
+    setPhaseEditDraft({
+      title: phase.title,
+      expectedDeliverables: phase.expectedDeliverables,
+      weekTarget: String(phase.weekTarget),
+      points: String(phase.points),
+    });
+  };
+
+  const handleCancelEditPhase = () => {
+    setEditingPhaseId(null);
+  };
+
+  const handleSavePhaseEdit = async (phaseId: string) => {
+    setSavingPhaseEdit(true);
+    try {
+      const res = await lifecycleService.updatePhase(projectId, phaseId, {
+        title: phaseEditDraft.title.trim(),
+        expectedDeliverables: phaseEditDraft.expectedDeliverables.trim(),
+        weekTarget: parseInt(phaseEditDraft.weekTarget, 10) || 1,
+        points: parseInt(phaseEditDraft.points, 10) || 0,
+      });
+      setPhases((prev) => prev.map((p) => (p.id === phaseId ? res.phase : p)));
+      setEditingPhaseId(null);
+      setNotification({ type: 'success', message: `Phase ${res.phase.phaseNumber} updated.` });
+    } catch (err: any) {
+      setNotification({ type: 'error', message: err?.response?.data?.message || 'Failed to update phase.' });
+    } finally {
+      setSavingPhaseEdit(false);
     }
   };
 
@@ -585,77 +644,113 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16 font-sans">
-      {/* ---------------------------------------------------------------- border top / breadcrumb bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-4">
-        <div className="space-y-1">
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-indigo-600 transition mb-1"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Back to Projects
-          </button>
-          <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
-            Project Execution & Reward Template
-          </h1>
-          <p className="text-xs text-gray-500 font-medium">
-            All details below are editable. Changes will update allocations and reports automatically.
-          </p>
-        </div>
+      {/* ---------------------------------------------------------------- Action Bar (Export/Save) */}
+      {!hideHeader ? (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-200 pb-4">
+          <div className="space-y-1">
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-indigo-600 transition mb-1"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Projects
+            </button>
+            <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+              Project Execution & Reward Template
+            </h1>
+            <p className="text-xs text-gray-500 font-medium">
+              All details below are editable. Changes will update allocations and reports automatically.
+            </p>
+          </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleExportPdf}
-            disabled={exporting}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs disabled:opacity-50"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {exporting ? 'Exporting...' : 'Export PDF'}
-          </button>
-          <button
-            onClick={handleShare}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs"
-          >
-            <Share2 className="w-3.5 h-3.5" /> Share
-          </button>
-          <button
-            onClick={handleSaveDoc}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition shadow-xs disabled:opacity-50"
-          >
-            <Save className="w-3.5 h-3.5" />
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setShowWithdrawModal(true)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl hover:bg-rose-100 transition shadow-2xs"
+              title="Withdraw from project"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-600" /> Withdraw Project
+            </button>
+            <button
+              onClick={handleExportPdf}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {exporting ? 'Exporting...' : 'Export PDF'}
+            </button>
+            <button
+              onClick={handleShare}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs"
+            >
+              <Share2 className="w-3.5 h-3.5" /> Share
+            </button>
+            <button
+              onClick={handleSaveDoc}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition shadow-xs disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between pb-2">
+          <p className="text-xs text-gray-500 font-medium">
+            Editable project execution details, features, and phase milestones.
+          </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={handleExportPdf}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {exporting ? 'Exporting...' : 'Export PDF'}
+            </button>
+            <button
+              onClick={handleSaveDoc}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition shadow-xs disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ---------------------------------------------------------------- TOP TAB NAVIGATION: TEAM & FEATURES vs EXECUTION PLAN */}
-      <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl p-2 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => setActiveMainTab('team-features')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition ${
-            activeMainTab === 'team-features'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>1. Team & Features Allocation</span>
-        </button>
+      {!hideTabs && (
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-2xl p-2 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('team-features')}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition ${
+              activeMainTab === 'team-features'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>1. Team & Features Allocation</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveMainTab('execution-plan')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition ${
-            activeMainTab === 'execution-plan'
-              ? 'bg-indigo-600 text-white shadow-xs'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>2. Phase-by-Phase Execution Plan & Reviews</span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => setActiveMainTab('execution-plan')}
+            className={`flex-1 py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition ${
+              activeMainTab === 'execution-plan'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>2. Phase-by-Phase Execution Plan & Reviews</span>
+          </button>
+        </div>
+      )}
+
 
       {/* Notification Toast */}
       {notification && (
@@ -1110,38 +1205,112 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
                             P{phase.phaseNumber}
                           </span>
                           <div className="flex-1">
-                            <span className="text-sm font-bold text-gray-900 block">{phase.title}</span>
+                            {editingPhaseId === phase.id ? (
+                              <input
+                                type="text"
+                                value={phaseEditDraft.title}
+                                onChange={(e) => setPhaseEditDraft((prev) => ({ ...prev, title: e.target.value }))}
+                                className="w-full text-sm font-bold text-gray-900 px-2 py-1 border border-indigo-200 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                              />
+                            ) : (
+                              <span className="text-sm font-bold text-gray-900 block">{phase.title}</span>
+                            )}
                             <span className="text-[11px] font-semibold text-indigo-600">Week {phase.weekTarget} target</span>
                           </div>
                         </div>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                            isApproved
-                              ? 'bg-emerald-100 text-emerald-800'
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {phase.status === 'PLANNED' && editingPhaseId !== phase.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditPhase(phase)}
+                              className="p-1 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+                              title="Edit phase"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : isSubmitted
+                                ? 'bg-indigo-100 text-indigo-800'
+                                : isChangesRequested
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {isApproved
+                              ? '✓ Approved'
                               : isSubmitted
-                              ? 'bg-indigo-100 text-indigo-800'
+                              ? 'Pending Review'
                               : isChangesRequested
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-gray-100 text-gray-600'
-                          }`}
-                        >
-                          {isApproved
-                            ? '✓ Approved'
-                            : isSubmitted
-                            ? 'Pending Review'
-                            : isChangesRequested
-                            ? 'Changes Requested'
-                            : 'Planned'}
-                        </span>
+                              ? 'Changes Requested'
+                              : 'Planned'}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="space-y-1 bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
-                        <span className="text-[11px] font-bold text-gray-800 block">Expected Deliverables / Output:</span>
-                        <p className="w-full text-xs text-gray-700">{phase.expectedDeliverables}</p>
-                        {phase.hardwareNote && (
-                          <p className="w-full text-[11px] text-amber-700 mt-1">⚡ {phase.hardwareNote}</p>
-                        )}
-                      </div>
+                      {editingPhaseId === phase.id ? (
+                        <div className="space-y-2 bg-indigo-50/40 p-2.5 rounded-xl border border-indigo-100">
+                          <label className="text-[11px] font-bold text-gray-800 block">Expected Deliverables / Output</label>
+                          <textarea
+                            value={phaseEditDraft.expectedDeliverables}
+                            onChange={(e) => setPhaseEditDraft((prev) => ({ ...prev, expectedDeliverables: e.target.value }))}
+                            rows={3}
+                            className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                          />
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Week target</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={phaseEditDraft.weekTarget}
+                                onChange={(e) => setPhaseEditDraft((prev) => ({ ...prev, weekTarget: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] font-bold text-gray-600 block mb-0.5">Points</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={phaseEditDraft.points}
+                                onChange={(e) => setPhaseEditDraft((prev) => ({ ...prev, points: e.target.value }))}
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={handleCancelEditPhase}
+                              disabled={savingPhaseEdit}
+                              className="px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSavePhaseEdit(phase.id)}
+                              disabled={savingPhaseEdit}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              {savingPhaseEdit ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-1 bg-gray-50/80 p-2.5 rounded-xl border border-gray-100">
+                          <span className="text-[11px] font-bold text-gray-800 block">Expected Deliverables / Output:</span>
+                          <p className="w-full text-xs text-gray-700">{phase.expectedDeliverables}</p>
+                          {phase.hardwareNote && (
+                            <p className="w-full text-[11px] text-amber-700 mt-1">⚡ {phase.hardwareNote}</p>
+                          )}
+                        </div>
+                      )}
 
                       {isChangesRequested && latestSubmission?.reviewNote && (
                         <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
@@ -1781,6 +1950,18 @@ export const ProjectExecutionTemplate: React.FC<ProjectExecutionTemplateProps> =
           </div>
         </div>
       )}
+
+      {/* Withdraw Project Modal */}
+      <WithdrawProjectModal
+        isOpen={showWithdrawModal}
+        projectId={projectId}
+        projectName={projectName || 'Current Project'}
+        onClose={() => setShowWithdrawModal(false)}
+        onSuccess={() => {
+          if (onBack) onBack();
+        }}
+      />
     </div>
   );
 };
+

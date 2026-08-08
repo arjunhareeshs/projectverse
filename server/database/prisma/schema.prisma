@@ -528,6 +528,8 @@ model Hackathon {
   name           String
   dateRange      String // e.g. "Aug 1 - Aug 3, 2025"
   status         String        @default("Upcoming")
+  url            String?
+  description    String?
   createdAt      DateTime      @default(now())
   organization   Organization? @relation(fields: [organizationId], references: [id])
 }
@@ -538,6 +540,8 @@ model LeetCodeContest {
   name           String
   startTime      DateTime
   status         String        @default("Register")
+  url            String?
+  description    String?
   createdAt      DateTime      @default(now())
   organization   Organization? @relation(fields: [organizationId], references: [id])
 }

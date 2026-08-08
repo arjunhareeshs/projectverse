@@ -174,6 +174,30 @@ export class AdminService {
     return { students: enrichedStudents, total, page, limit };
   }
 
+  // ── Proposals (AI evaluation audit trail) ──────────────────────────────────
+
+  static async getProposals(filters: { verdict?: string; studentId?: string }, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = {};
+    if (filters.verdict) where.verdict = filters.verdict;
+    if (filters.studentId) where.submitterId = filters.studentId;
+
+    const [proposals, total] = await Promise.all([
+      prisma.problemStatementProposal.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          submitter: { select: { id: true, fullName: true, regNo: true, email: true } },
+        },
+      }),
+      prisma.problemStatementProposal.count({ where }),
+    ]);
+
+    return { proposals, total, page, limit };
+  }
+
   // ── Team CRUD ──────────────────────────────────────────────────────────────
 
   static async createTeam(data: {

@@ -172,42 +172,26 @@ export const projectController = {
     }
   },
 
-  async getProjectFeatures(req: Request, res: Response) {
-    try {
-      const { projectId } = req.params;
-      const features = await projectService.getProjectFeatures(projectId as string);
-      res.json(features);
-    } catch (error) {
-      console.error('Error fetching project features:', error);
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to fetch features' });
-    }
-  },
-
-  async addProjectFeature(req: Request, res: Response) {
-    try {
-      const { projectId } = req.params;
-      const feature = await projectService.addProjectFeature(projectId as string, req.body);
-      res.status(StatusCodes.CREATED).json(feature);
-    } catch (error) {
-      console.error('Error adding project feature:', error);
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to add feature' });
-    }
-  },
-
-  async deleteProjectFeature(req: Request, res: Response) {
+  async withdrawProject(req: Request, res: Response) {
     try {
       const user = req.user;
-      if (!user) return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
-      const { projectId, featureId } = req.params;
-      const result = await projectService.deleteProjectFeature(
-        projectId as string,
-        featureId as string,
-        user.id
-      );
+      if (!user) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+
+      const { projectId } = req.params;
+      const { reason } = req.body;
+
+      if (!reason || typeof reason !== 'string' || !reason.trim()) {
+        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'A reason for withdrawal is required.' });
+      }
+
+      const result = await projectService.withdrawProject(projectId as string, user.id, reason.trim());
       res.json(result);
     } catch (error: any) {
-      console.error('Error deleting project feature:', error);
-      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: error?.message || 'Failed to delete feature' });
+      console.error('Error withdrawing project:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: error?.message || 'Failed to withdraw project' });
     }
   },
 };
+

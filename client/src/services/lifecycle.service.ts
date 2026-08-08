@@ -203,6 +203,15 @@ export const lifecycleService = {
     return res.data;
   },
 
+  updatePhase: async (
+    projectId: string,
+    phaseId: string,
+    data: { title?: string; expectedDeliverables?: string; weekTarget?: number; points?: number; reason?: string }
+  ): Promise<{ phase: ProjectPhaseItem }> => {
+    const res = await api.patch(`/lifecycle/${projectId}/phases/${phaseId}`, data);
+    return res.data;
+  },
+
   submitPhase: async (
     projectId: string,
     phaseId: string,

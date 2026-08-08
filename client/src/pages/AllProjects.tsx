@@ -21,9 +21,12 @@ import {
   Droplets,
   Layers,
   ChevronDown,
+  LogOut,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { teamService } from '../services/team.service';
+import { WithdrawProjectModal } from '../components/projects/WithdrawProjectModal';
+
 
 export interface MyProjectItem {
   id: string;
@@ -43,117 +46,9 @@ export interface MyProjectItem {
   iconColor?: string;
 }
 
-const MOCK_MY_PROJECTS: MyProjectItem[] = [
-  {
-    id: 'proj-1',
-    name: 'Wind Powered Child Warming System',
-    categoryTag: 'FINAL YEAR',
-    domain: 'Smart Cities',
-    subdomain: 'Renewable Energy',
-    teamName: 'Team Alpha',
-    memberCount: 5,
-    teamAvatars: [
-      { initials: 'SA', bg: 'bg-indigo-600' },
-      { initials: 'AR', bg: 'bg-blue-600' },
-      { initials: 'KM', bg: 'bg-sky-600' },
-    ],
-    moreMembersCount: 2,
-    status: 'In Progress',
-    progressPercent: 68,
-    lastUpdated: 'Aug 3, 2025 10:30 AM',
-    iconType: 'wind',
-    iconBg: 'bg-purple-100',
-    iconColor: 'text-purple-600',
-  },
-  {
-    id: 'proj-2',
-    name: 'Smart Waste Management System',
-    categoryTag: 'FINAL YEAR',
-    domain: 'Smart Cities',
-    subdomain: 'Waste Management',
-    teamName: 'Team Beta',
-    memberCount: 4,
-    teamAvatars: [
-      { initials: 'VS', bg: 'bg-rose-500' },
-      { initials: 'PR', bg: 'bg-amber-500' },
-      { initials: 'AK', bg: 'bg-purple-600' },
-    ],
-    moreMembersCount: 1,
-    status: 'In Progress',
-    progressPercent: 45,
-    lastUpdated: 'Aug 3, 2025 09:15 AM',
-    iconType: 'trash',
-    iconBg: 'bg-emerald-100',
-    iconColor: 'text-emerald-600',
-  },
-  {
-    id: 'proj-3',
-    name: 'AI Based Crop Disease Detection',
-    categoryTag: 'FINAL YEAR',
-    domain: 'Agriculture',
-    subdomain: 'AI/ML',
-    teamName: 'Team Gamma',
-    memberCount: 5,
-    teamAvatars: [
-      { initials: 'SK', bg: 'bg-amber-600' },
-      { initials: 'MJ', bg: 'bg-emerald-600' },
-      { initials: 'RG', bg: 'bg-orange-500' },
-    ],
-    moreMembersCount: 2,
-    status: 'Review',
-    progressPercent: 75,
-    lastUpdated: 'Aug 2, 2025 04:45 PM',
-    iconType: 'sprout',
-    iconBg: 'bg-amber-100',
-    iconColor: 'text-amber-600',
-  },
-  {
-    id: 'proj-4',
-    name: 'Health Monitoring Wearable Device',
-    categoryTag: 'FINAL YEAR',
-    domain: 'Healthcare',
-    subdomain: 'IoT',
-    teamName: 'Team Delta',
-    memberCount: 4,
-    teamAvatars: [
-      { initials: 'NA', bg: 'bg-rose-600' },
-      { initials: 'KP', bg: 'bg-red-500' },
-      { initials: 'AM', bg: 'bg-amber-600' },
-    ],
-    moreMembersCount: 1,
-    status: 'On Hold',
-    progressPercent: 20,
-    lastUpdated: 'Aug 1, 2025 11:20 AM',
-    iconType: 'activity',
-    iconBg: 'bg-rose-100',
-    iconColor: 'text-rose-600',
-  },
-  {
-    id: 'proj-5',
-    name: 'Smart Water Quality Monitoring',
-    categoryTag: 'FINAL YEAR',
-    domain: 'Environment',
-    subdomain: 'IoT',
-    teamName: 'Team Epsilon',
-    memberCount: 5,
-    teamAvatars: [
-      { initials: 'SV', bg: 'bg-blue-600' },
-      { initials: 'RK', bg: 'bg-indigo-600' },
-      { initials: 'DP', bg: 'bg-sky-500' },
-    ],
-    moreMembersCount: 2,
-    status: 'Completed',
-    progressPercent: 100,
-    lastUpdated: 'Jul 30, 2025 03:10 PM',
-    iconType: 'droplets',
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600',
-  },
-];
-
 export const AllProjects: React.FC = () => {
-  const [projectsList, setProjectsList] = useState<MyProjectItem[]>(MOCK_MY_PROJECTS);
-  const [loading, setLoading] = useState(false);
+  const [projectsList, setProjectsList] = useState<MyProjectItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Filter & Search states
@@ -165,7 +60,11 @@ export const AllProjects: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
+  // Withdraw Modal state
+  const [withdrawTarget, setWithdrawTarget] = useState<{ id: string; name: string } | null>(null);
+
   const user = useAppSelector((s) => s.auth.user);
+
   const navigate = useNavigate();
 
   const fetchUserProjects = async () => {
@@ -197,19 +96,6 @@ export const AllProjects: React.FC = () => {
 
       if (rawProjects.length > 0) {
         const mapped: MyProjectItem[] = rawProjects.map((p: any, idx: number) => {
-          const statuses: Array<'In Progress' | 'Review' | 'Completed' | 'On Hold'> = [
-            'In Progress',
-            'Review',
-            'Completed',
-            'On Hold',
-          ];
-          const icons: Array<'wind' | 'trash' | 'sprout' | 'activity' | 'droplets'> = [
-            'wind',
-            'trash',
-            'sprout',
-            'activity',
-            'droplets',
-          ];
           const iconBgs = ['bg-purple-100', 'bg-emerald-100', 'bg-amber-100', 'bg-rose-100', 'bg-blue-100'];
           const iconColors = [
             'text-purple-600',
@@ -218,46 +104,39 @@ export const AllProjects: React.FC = () => {
             'text-rose-600',
             'text-blue-600',
           ];
+          const iconTypes: MyProjectItem['iconType'][] = ['wind', 'trash', 'sprout', 'activity', 'droplets'];
 
-          const statusVal = p.status
-            ? p.status === 'COMPLETED'
-              ? 'Completed'
-              : p.status === 'ON_HOLD'
-              ? 'On Hold'
-              : p.status === 'REVIEW'
-              ? 'Review'
-              : 'In Progress'
-            : statuses[idx % statuses.length];
+          const statusVal: MyProjectItem['status'] =
+            p.status === 'COMPLETED' ? 'Completed'
+            : p.status === 'ON_HOLD' ? 'On Hold'
+            : p.status === 'REVIEW' ? 'Review'
+            : 'In Progress';
 
-          const iconVal = icons[idx % icons.length];
           const membersList = p.team?.members || p.members || [];
 
           return {
             id: p.id,
-            name: p.name || p.title || p.shortName || 'Project ' + (idx + 1),
-            categoryTag: p.category || (p.type ? String(p.type).toUpperCase() : 'FINAL YEAR'),
-            domain: p.domain || 'Smart Cities',
-            subdomain: p.sector || p.subdomain || 'General',
-            teamName: p.team?.name || 'My Team',
-            memberCount: membersList.length || 4,
-            teamAvatars:
-              membersList.length > 0
-                ? membersList.slice(0, 3).map((m: any, i: number) => ({
-                    initials: ((m.name || m.fullName || `Member ${i + 1}`).split(' ').map((n: string) => n[0]).join('').slice(0, 2) || 'M').toUpperCase(),
-                    bg: ['bg-indigo-600', 'bg-blue-600', 'bg-sky-600', 'bg-purple-600'][i % 4],
-                  }))
-                : [
-                    { initials: 'SA', bg: 'bg-indigo-600' },
-                    { initials: 'AR', bg: 'bg-blue-600' },
-                    { initials: 'KM', bg: 'bg-sky-600' },
-                  ],
-            moreMembersCount: Math.max(0, (membersList.length || 4) - 3),
+            name: p.name || p.title || p.shortName || 'Untitled Project',
+            categoryTag: p.category,
+            domain: p.domain,
+            subdomain: p.sector || p.subdomain,
+            teamName: p.team?.name,
+            memberCount: membersList.length,
+            teamAvatars: membersList.slice(0, 3).map((m: any, i: number) => {
+              const raw = (m.fullName || m.name || 'Member').split(' ');
+              const initials = (raw.map((n: string) => n[0]).join('').slice(0, 2) || 'M').toUpperCase();
+              return {
+                initials,
+                bg: ['bg-indigo-600', 'bg-blue-600', 'bg-sky-600', 'bg-purple-600'][i % 4],
+              };
+            }),
+            moreMembersCount: Math.max(0, membersList.length - 3),
             status: statusVal,
-            progressPercent: p.progress !== undefined ? p.progress : statusVal === 'Completed' ? 100 : Math.floor(30 + ((idx * 23) % 65)),
+            progressPercent: p.progress !== undefined ? p.progress : statusVal === 'Completed' ? 100 : 0,
             lastUpdated: p.updatedAt
               ? new Date(p.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : 'Aug 3, 2025 10:30 AM',
-            iconType: iconVal,
+              : '—',
+            iconType: iconTypes[idx % iconTypes.length],
             iconBg: iconBgs[idx % iconBgs.length],
             iconColor: iconColors[idx % iconColors.length],
           };
@@ -483,7 +362,18 @@ export const AllProjects: React.FC = () => {
       </div>
 
       {/* ---------------------------------------------------------------- DATA TABLE LIST VIEW */}
-      {viewMode === 'list' ? (
+      {!loading && filteredProjects.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
+          <p className="text-sm font-semibold text-slate-600">No projects yet</p>
+          <p className="text-xs text-slate-400 mt-1">Propose a project to start tracking progress and team activity.</p>
+          <button
+            onClick={() => navigate('/projects/propose')}
+            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition"
+          >
+            <Plus className="h-4 w-4" /> Propose Project
+          </button>
+        </div>
+      ) : viewMode === 'list' ? (
         <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -526,14 +416,14 @@ export const AllProjects: React.FC = () => {
                             )}
                           </div>
                           <div className="text-[11px] text-slate-500 mt-0.5 space-x-1 font-medium">
-                            <span>{p.domain || 'Smart Cities'}</span>
-                            <span>•</span>
-                            <span>{p.subdomain || 'General'}</span>
+                            {p.domain && <span>{p.domain}</span>}
+                            {p.domain && p.subdomain && <span>•</span>}
+                            {p.subdomain && <span>{p.subdomain}</span>}
                           </div>
                           <div className="text-[11px] text-slate-400 font-medium">
-                            <span>{p.teamName || 'Team'}</span>
-                            <span> • </span>
-                            <span>{p.memberCount || 4} Members</span>
+                            {p.teamName && <span>{p.teamName}</span>}
+                            {p.teamName && p.memberCount !== undefined && <span> • </span>}
+                            {p.memberCount !== undefined && <span>{p.memberCount} Members</span>}
                           </div>
                         </div>
                       </div>
@@ -616,8 +506,19 @@ export const AllProjects: React.FC = () => {
                         >
                           <FileText className="w-3.5 h-3.5" /> Execution Doc
                         </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setWithdrawTarget({ id: p.id, name: p.name });
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition shadow-2xs"
+                          title="Withdraw from project"
+                        >
+                          <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                        </button>
                       </div>
                     </td>
+
                   </tr>
                 ))}
               </tbody>
@@ -661,13 +562,19 @@ export const AllProjects: React.FC = () => {
                   <h3 className="font-bold text-slate-900 text-base group-hover:text-indigo-600 transition">
                     {p.name}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {p.domain} • {p.subdomain}
-                  </p>
+                  {(p.domain || p.subdomain) && (
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {[p.domain, p.subdomain].filter(Boolean).join(' • ')}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-                  <span>{p.teamName} ({p.memberCount} Members)</span>
+                  <span>
+                    {[p.teamName, p.memberCount !== undefined ? `${p.memberCount} Members` : null]
+                      .filter(Boolean)
+                      .join(' • ')}
+                  </span>
                   <div className="flex items-center -space-x-1.5">
                     {(p.teamAvatars || []).map((av, idx) => (
                       <div
@@ -713,8 +620,19 @@ export const AllProjects: React.FC = () => {
                 >
                   <FileText className="w-3.5 h-3.5" /> Execution Doc
                 </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setWithdrawTarget({ id: p.id, name: p.name });
+                  }}
+                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition border border-rose-200"
+                  title="Withdraw from project"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
+                </button>
               </div>
             </div>
+
           ))}
         </div>
       )}
@@ -770,6 +688,21 @@ export const AllProjects: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Withdraw Project Modal */}
+      {withdrawTarget && (
+        <WithdrawProjectModal
+          isOpen={!!withdrawTarget}
+          projectId={withdrawTarget.id}
+          projectName={withdrawTarget.name}
+          onClose={() => setWithdrawTarget(null)}
+          onSuccess={() => {
+            setWithdrawTarget(null);
+            fetchUserProjects();
+          }}
+        />
+      )}
     </div>
   );
 };
+

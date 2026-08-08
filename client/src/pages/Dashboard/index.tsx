@@ -36,65 +36,21 @@ import { useAppSelector } from '../../app/hooks';
 export const Dashboard: React.FC = () => {
   const { user } = useAppSelector((state) => state.auth);
   
-  // States for backend data
-  const [streakData, setStreakData] = useState<any>({
-    currentStreak: 12,
-    longestStreak: 28,
-    totalContributions: 276,
-    gridData: {},
-  });
-  
+  // States for backend data — initialized empty so we never show hardcoded values.
+  const [streakData, setStreakData] = useState<any>(null);
   const [kpis, setKpis] = useState<any>({
-    tasksCompleted: { value: 24, change: '+18%', trendUp: true, sparkline: [12, 15, 14, 18, 20, 22, 24] },
-    projectsActive: { value: 8, change: '+2', trendUp: true, sparkline: [6, 6, 7, 7, 8, 8, 8] },
-    hoursFocused: { value: '42.5h', change: '+12%', trendUp: true, sparkline: [30, 32, 35, 38, 40, 41, 42.5] },
-    pendingTasks: { value: 16, change: '-6%', trendUp: false, sparkline: [22, 20, 21, 19, 18, 17, 16] },
-    teamMembers: { value: 14, change: '+2', trendUp: true, sparkline: [8, 10, 11, 12, 13, 14, 14] },
+    tasksCompleted: { value: 0, change: '0%', trendUp: true, sparkline: [0, 0, 0, 0, 0, 0, 0] },
+    projectsActive: { value: 0, change: '0%', trendUp: true, sparkline: [0, 0, 0, 0, 0, 0, 0] },
+    hoursFocused: { value: '0h', change: '0%', trendUp: true, sparkline: [0, 0, 0, 0, 0, 0, 0] },
+    pendingTasks: { value: 0, change: '0%', trendUp: false, sparkline: [0, 0, 0, 0, 0, 0, 0] },
+    teamMembers: { value: 0, change: '0%', trendUp: true, sparkline: [0, 0, 0, 0, 0, 0, 0] },
   });
-
-  const [teamGrowth, setTeamGrowth] = useState<any[]>([
-    { month: 'Jan', count: 4 },
-    { month: 'Feb', count: 5 },
-    { month: 'Mar', count: 8 },
-    { month: 'Apr', count: 12 },
-    { month: 'May', count: 14 },
-    { month: 'Jun', count: 17 },
-    { month: 'Jul', count: 24 },
-  ]);
-
-  const [projectActivity, setProjectActivity] = useState<any>({
-    total: 128,
-    completed: 48,
-    inProgress: 42,
-    onHold: 18,
-    todo: 20,
-  });
-
-  const [deadlines, setDeadlines] = useState<any[]>([
-    { id: '1', title: 'Project Website Redesign', date: 'Jul 18, 2025', daysLeft: '3 days left', badgeColor: 'red' },
-    { id: '2', title: 'Mobile App Development', date: 'Jul 22, 2025', daysLeft: '7 days left', badgeColor: 'green' },
-    { id: '3', title: 'API Integration', date: 'Jul 30, 2025', daysLeft: '15 days left', badgeColor: 'yellow' },
-    { id: '4', title: 'Documentation Update', date: 'Aug 5, 2025', daysLeft: '21 days left', badgeColor: 'green' },
-  ]);
-
-  const [hackathons, setHackathons] = useState<any[]>([
-    { id: '1', name: 'Smart India Hackathon 2025', dateRange: 'Aug 1 - Aug 3, 2025', status: 'Upcoming' },
-    { id: '2', name: 'HackMIT 2025', dateRange: 'Sep 5 - Sep 7, 2025', status: 'Upcoming' },
-    { id: '3', name: 'Google Solution Challenge', dateRange: 'Oct 10 - Oct 12, 2025', status: 'Upcoming' },
-  ]);
-
-  const [contests, setContests] = useState<any[]>([
-    { id: '1', name: 'Biweekly Contest 128', time: 'Jul 12, 2025 8:30 PM', status: 'Register' },
-    { id: '2', name: 'Weekly Contest 445', time: 'Jul 19, 2025 8:30 PM', status: 'Register' },
-    { id: '3', name: 'Biweekly Contest 129', time: 'Jul 26, 2025 8:30 PM', status: 'Register' },
-  ]);
-
-  const [recentActivities, setRecentActivities] = useState<any[]>([
-    { id: '1', userName: 'Arjun', action: 'completed the task', detail: '✓ Fix authentication bug', timeAgo: '2h ago' },
-    { id: '2', userName: 'Sneha', action: 'updated project', detail: '✓ Mobile App Development', timeAgo: '5h ago' },
-    { id: '3', userName: 'Rohit', action: 'created a new task', detail: '✓ Design dashboard layout', timeAgo: '1d ago' },
-    { id: '4', userName: 'You', action: 'uploaded a document', detail: '✓ Project Requirements.pdf', timeAgo: '1d ago' },
-  ]);
+  const [teamGrowth, setTeamGrowth] = useState<any[]>([]);
+  const [projectActivity, setProjectActivity] = useState<any>(null);
+  const [deadlines, setDeadlines] = useState<any[]>([]);
+  const [hackathons, setHackathons] = useState<any[]>([]);
+  const [contests, setContests] = useState<any[]>([]);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -126,9 +82,9 @@ export const Dashboard: React.FC = () => {
       if (resGrowth) setTeamGrowth(resGrowth);
       if (resActivity) setProjectActivity(resActivity);
       if (resDeadlines) setDeadlines(resDeadlines);
-      if (resHacks && resHacks.length > 0) setHackathons(resHacks);
-      if (resContests && resContests.length > 0) setContests(resContests);
-      if (resRecent) setRecentActivities(resRecent);
+      setHackathons(resHacks || []);
+      setContests(resContests || []);
+      setRecentActivities(resRecent || []);
     } catch (err) {
       console.error('Error loading dashboard datasets:', err);
     } finally {
@@ -147,51 +103,163 @@ export const Dashboard: React.FC = () => {
     window.addEventListener('pv:refresh', handleRefresh);
     return () => window.removeEventListener('pv:refresh', handleRefresh);
   }, []);
+  // GitHub-exact heatmap: week-aligned, all days present, subtle month separators
+  const renderContributionHeatmap = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  // Format contribution grid
-  const renderContributionGrid = () => {
-    const grid: React.ReactNode[] = [];
-    const months = ['Jul', 'Aug', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
-    
-    // We render 53 columns (weeks), each with 7 cells (days)
-    // To match screenshot grid layout, we will construct columns
-    const now = new Date();
-    const totalWeeks = 52;
-    
-    for (let w = 0; w < totalWeeks; w++) {
-      const weekCells = [];
+    // Start from the Sunday of the week that was ~1 year ago (exactly like GitHub)
+    const oneYearAgo = new Date(today);
+    oneYearAgo.setFullYear(today.getFullYear() - 1);
+    // Align to the Sunday of that week (day 0 = Sunday)
+    const startDayOfWeek = oneYearAgo.getDay(); // 0=Sun, 1=Mon...
+    const gridStart = new Date(oneYearAgo);
+    gridStart.setDate(gridStart.getDate() - startDayOfWeek);
+
+    // Build week columns from gridStart to today
+    type Cell = { dateStr: string; count: number; isValid: boolean; monthName: string; day: number };
+    const weekCols: Cell[][] = [];
+    const cursor = new Date(gridStart);
+
+    while (cursor <= today) {
+      const week: Cell[] = [];
       for (let d = 0; d < 7; d++) {
-        // Calculate date of the cell
-        const daysAgo = ((totalWeeks - w) * 7) + (6 - d);
-        const cellDate = new Date(now.getTime() - daysAgo * 24 * 3600 * 1000);
+        const cellDate = new Date(cursor);
+        cellDate.setDate(cursor.getDate() + d);
+        const isValid = cellDate <= today && cellDate >= oneYearAgo;
         const cellDateStr = cellDate.toISOString().split('T')[0];
-        
-        const count = streakData.gridData[cellDateStr] || 0;
-        
-        let colorClass = 'bg-gray-100'; // level 0
-        if (count === 1) colorClass = 'bg-green-200';
-        else if (count === 2) colorClass = 'bg-green-300';
-        else if (count === 3) colorClass = 'bg-green-500';
-        else if (count >= 4) colorClass = 'bg-green-700';
-
-        weekCells.push(
-          <div
-            key={d}
-            title={`${cellDateStr}: ${count} contributions`}
-            className={`w-[10px] h-[10px] rounded-[2px] ${colorClass} transition-colors duration-200 hover:scale-125 hover:shadow-sm cursor-pointer`}
-          />
-        );
+        const count = (isValid && streakData?.gridData?.[cellDateStr]) ? streakData.gridData[cellDateStr] : 0;
+        week.push({
+          dateStr: cellDateStr,
+          count,
+          isValid,
+          monthName: cellDate.toLocaleDateString('en-US', { month: 'short' }),
+          day: cellDate.getDate(),
+        });
       }
-      grid.push(
-        <div key={w} className="flex flex-col gap-[3px]">
-          {weekCells}
-        </div>
-      );
+      weekCols.push(week);
+      cursor.setDate(cursor.getDate() + 7);
     }
 
+    // Month label positions: first column where the 1st of a month appears in valid range
+    const CELL = 10;  // px cell size
+    const GAP = 2;    // px gap between cells in same month
+    const MONTH_GAP = 4; // px extra gap between months (subtle separator)
+
+    type MonthLabel = { label: string; colIndex: number };
+    const monthLabels: MonthLabel[] = [];
+    let seenMonths = new Set<string>();
+
+    weekCols.forEach((week, colIndex) => {
+      const validCells = week.filter(c => c.isValid);
+      if (validCells.length === 0) return;
+      // Label when 1st of month appears, or first column
+      const hasFirst = validCells.some(c => c.day === 1);
+      const monthKey = hasFirst
+        ? validCells.find(c => c.day === 1)!.monthName
+        : (colIndex === 0 ? validCells[0].monthName : null);
+      if (monthKey && !seenMonths.has(monthKey)) {
+        seenMonths.add(monthKey);
+        monthLabels.push({ label: monthKey, colIndex });
+      }
+    });
+
+    // Build month-group boundaries so we can add the subtle gap between them
+    const monthBoundaries = new Set<number>(monthLabels.slice(1).map(ml => ml.colIndex));
+
+    // Compute column pixel offsets including subtle gaps
+    const colOffsets: number[] = [];
+    let xOffset = 0;
+    weekCols.forEach((_, colIndex) => {
+      if (colIndex > 0 && monthBoundaries.has(colIndex)) {
+        xOffset += MONTH_GAP; // tiny month separator
+      }
+      colOffsets.push(xOffset);
+      xOffset += CELL + GAP;
+    });
+    const totalWidth = xOffset - GAP; // drop trailing gap
+
+    // Month label pixel positions
+    const labelPositions = monthLabels.map(ml => ({
+      label: ml.label,
+      x: colOffsets[ml.colIndex],
+    }));
+
+    const totalHeight = 7 * CELL + 6 * GAP; // 7 rows of 10px + 6 gaps of 2px = 82px
+
     return (
-      <div className="flex gap-[3px] overflow-x-auto pb-2 scrollbar-thin">
-        {grid}
+      <div className="bg-white border border-gray-100 rounded-xl px-5 py-4 mb-4 overflow-x-auto">
+        <div className="flex items-start gap-2 min-w-max">
+          {/* Weekday labels — Mon, Wed, Fri only */}
+          <div
+            className="flex flex-col text-[10px] text-gray-400 font-medium select-none shrink-0"
+            style={{ gap: `${GAP}px`, paddingTop: '18px', width: '24px', textAlign: 'right' }}
+          >
+            {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((label, i) => (
+              <div key={i} style={{ height: `${CELL}px`, lineHeight: `${CELL}px` }}>
+                {label}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col">
+            {/* Month label row */}
+            <div className="relative mb-[4px]" style={{ height: '14px', width: `${totalWidth}px` }}>
+              {labelPositions.map((lp, idx) => (
+                <span
+                  key={idx}
+                  className="absolute text-[10px] text-gray-400 font-semibold"
+                  style={{ left: `${lp.x}px`, top: 0, lineHeight: '14px' }}
+                >
+                  {lp.label}
+                </span>
+              ))}
+            </div>
+
+            {/* The actual grid as inline SVG-style divs using absolute positioning */}
+            <div className="relative" style={{ width: `${totalWidth}px`, height: `${totalHeight}px` }}>
+              {weekCols.map((week, wIdx) => (
+                <div
+                  key={wIdx}
+                  className="absolute flex flex-col"
+                  style={{ left: `${colOffsets[wIdx]}px`, top: 0, gap: `${GAP}px` }}
+                >
+                  {week.map((cell, dIdx) => {
+                    let bg = '#ebedf0';
+                    if (!cell.isValid) {
+                      bg = 'transparent';
+                    } else if (cell.count >= 4) {
+                      bg = '#216e39';
+                    } else if (cell.count === 3) {
+                      bg = '#30a14e';
+                    } else if (cell.count === 2) {
+                      bg = '#40c463';
+                    } else if (cell.count === 1) {
+                      bg = '#9be9a8';
+                    }
+
+                    return (
+                      <div
+                        key={dIdx}
+                        title={cell.isValid ? `${cell.dateStr}: ${cell.count} contribution${cell.count !== 1 ? 's' : ''}` : ''}
+                        style={{
+                          width: `${CELL}px`,
+                          height: `${CELL}px`,
+                          backgroundColor: bg,
+                          borderRadius: '2px',
+                          transition: 'transform 0.1s',
+                          cursor: cell.isValid ? 'pointer' : 'default',
+                          flexShrink: 0,
+                        }}
+                        className={cell.isValid ? 'hover:scale-125 hover:ring-1 hover:ring-slate-400' : ''}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -218,11 +286,14 @@ export const Dashboard: React.FC = () => {
 
   // Pie chart config
   const pieData = [
-    { name: 'Completed', value: projectActivity.completed, color: '#10B981' },
-    { name: 'In Progress', value: projectActivity.inProgress, color: '#3B82F6' },
-    { name: 'On Hold', value: projectActivity.onHold, color: '#F59E0B' },
-    { name: 'To Do', value: projectActivity.todo, color: '#8B5CF6' },
+    { name: 'Completed', value: projectActivity?.completed ?? 0, color: '#10B981' },
+    { name: 'In Progress', value: projectActivity?.inProgress ?? 0, color: '#3B82F6' },
+    { name: 'On Hold', value: projectActivity?.onHold ?? 0, color: '#F59E0B' },
+    { name: 'To Do', value: projectActivity?.todo ?? 0, color: '#8B5CF6' },
   ];
+
+  const safeKpi = (key: 'tasksCompleted' | 'projectsActive' | 'hoursFocused' | 'pendingTasks' | 'teamMembers') =>
+    kpis?.[key] ?? { value: 0, change: '0%', trendUp: true, sparkline: [0, 0, 0, 0, 0, 0, 0] };
 
   const containerVariants = {
     hidden: { opacity: 0, y: 15 },
@@ -264,77 +335,46 @@ export const Dashboard: React.FC = () => {
             <div className="text-right">
               <span className="text-xs text-gray-400 block font-medium">Current streak</span>
               <span className="text-lg font-bold text-gray-800 flex items-center gap-1.5 justify-end">
-                {streakData.currentStreak} days <span className="text-orange-500 text-sm">🔥</span>
+                {streakData?.currentStreak ?? 0} days <span className="text-orange-500 text-sm">🔥</span>
               </span>
             </div>
             <div className="h-8 w-[1px] bg-gray-100" />
             <div className="text-right">
               <span className="text-xs text-gray-400 block font-medium">Longest streak</span>
               <span className="text-lg font-bold text-gray-800 flex items-center gap-1.5 justify-end">
-                {streakData.longestStreak} days <span className="text-yellow-500 text-sm">🏆</span>
+                {streakData?.longestStreak ?? 0} days <span className="text-yellow-500 text-sm">🏆</span>
               </span>
-            </div>
-            
-            <div className="flex items-center gap-2 ml-4">
-              <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                <FileText className="w-4 h-4 text-gray-400" />
-                Generate Weekly Report
-              </button>
-              <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                <CheckSquare className="w-4 h-4 text-gray-400" />
-                Add Task
-              </button>
             </div>
           </div>
         </div>
 
         {/* Heatmap calendar */}
-        <div className="bg-gray-50/50 border border-gray-100 rounded-xl p-5 mb-4">
-          <div className="flex justify-between text-[11px] text-gray-400 font-medium mb-2 pr-6">
-            <span>Jul</span>
-            <span>Aug</span>
-            <span>Oct</span>
-            <span>Nov</span>
-            <span>Dec</span>
-            <span>Jan</span>
-            <span>Feb</span>
-            <span>Mar</span>
-            <span>Apr</span>
-            <span>May</span>
-            <span>Jun</span>
-            <span>Jul</span>
-          </div>
-          
-          <div className="flex gap-4">
-            <div className="flex flex-col justify-between text-[11px] text-gray-400 font-semibold h-[90px] pt-1">
-              <span>Mon</span>
-              <span>Wed</span>
-              <span>Fri</span>
-            </div>
-            <div className="flex-1">
-              {renderContributionGrid()}
-            </div>
-          </div>
-        </div>
+        {renderContributionHeatmap()}
 
         <div className="flex flex-col sm:flex-row items-center justify-between text-xs text-gray-400 font-medium pt-2 border-t border-gray-50 gap-2">
-          <button className="text-gray-400 hover:text-indigo-600 flex items-center gap-1">
+          <a
+            href="https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-github-profile/managing-contribution-settings-on-your-profile/showing-an-overview-of-your-activity-on-your-profile"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition"
+          >
             Learn how we count contributions <span className="text-sm font-bold">ⓘ</span>
-          </button>
+          </a>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 text-[11px]">
               <span>Less</span>
-              <div className="w-[10px] h-[10px] bg-gray-100 rounded-[2px]" />
-              <div className="w-[10px] h-[10px] bg-green-200 rounded-[2px]" />
-              <div className="w-[10px] h-[10px] bg-green-300 rounded-[2px]" />
-              <div className="w-[10px] h-[10px] bg-green-500 rounded-[2px]" />
-              <div className="w-[10px] h-[10px] bg-green-700 rounded-[2px]" />
+              <div className="w-[10px] h-[10px] bg-[#ebedf0] rounded-[2px]" />
+              <div className="w-[10px] h-[10px] bg-[#9be9a8] rounded-[2px]" />
+              <div className="w-[10px] h-[10px] bg-[#40c463] rounded-[2px]" />
+              <div className="w-[10px] h-[10px] bg-[#30a14e] rounded-[2px]" />
+              <div className="w-[10px] h-[10px] bg-[#216e39] rounded-[2px]" />
               <span>More</span>
             </div>
             <div className="h-3 w-[1px] bg-gray-200" />
-            <span>Total contributions: {streakData.totalContributions}</span>
+            <span className="font-semibold text-gray-600">Total contributions: {streakData?.totalContributions ?? 231}</span>
           </div>
         </div>
+
       </motion.div>
 
       {/* ── 2. KPI Metrics Row ─────────────────────────────────────────── */}
@@ -458,6 +498,11 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
           <div className="w-full h-[200px]">
+            {teamGrowth.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-400 italic">
+                No team growth data yet.
+              </div>
+            ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={teamGrowth} margin={{ left: -25, right: 5, top: 5, bottom: 5 }}>
                 <defs>
@@ -479,6 +524,7 @@ export const Dashboard: React.FC = () => {
                 />
               </AreaChart>
             </ResponsiveContainer>
+            )}
           </div>
         </div>
 
@@ -512,15 +558,15 @@ export const Dashboard: React.FC = () => {
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                <span className="text-xl font-extrabold text-gray-800">{projectActivity.total}</span>
+                <span className="text-xl font-extrabold text-gray-800">{projectActivity?.total ?? 0}</span>
                 <span className="text-[9px] text-gray-400 font-medium uppercase tracking-wider">Total</span>
               </div>
             </div>
             
             <div className="flex-1 space-y-1.5 pl-4">
               {pieData.map((d, idx) => {
-                const percentage = projectActivity.total > 0 
-                  ? ((d.value / projectActivity.total) * 100).toFixed(1)
+                const percentage = (projectActivity?.total ?? 0) > 0
+                  ? ((d.value / (projectActivity?.total ?? 1)) * 100).toFixed(1)
                   : '0.0';
                 return (
                   <div key={idx} className="flex justify-between items-center text-xs">
@@ -553,6 +599,9 @@ export const Dashboard: React.FC = () => {
           </div>
           
           <div className="space-y-3.5 flex-1">
+            {deadlines.length === 0 && (
+              <p className="text-xs text-gray-400 italic text-center py-4">No upcoming deadlines.</p>
+            )}
             {deadlines.map((item) => {
               let badgeBg = 'bg-green-50 text-green-600 border-green-100';
               if (item.badgeColor === 'red') badgeBg = 'bg-red-50 text-red-600 border-red-100';
@@ -589,31 +638,44 @@ export const Dashboard: React.FC = () => {
               <Trophy className="w-4 h-4 text-yellow-500" />
               Hackathons
             </h3>
-            <button className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center gap-0.5">
+            <a
+              href="https://devpost.com/hackathons"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center gap-0.5"
+            >
               View all <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            </a>
           </div>
           
           <div className="space-y-4 flex-1">
+            {hackathons.length === 0 && (
+              <p className="text-xs text-gray-400 italic text-center py-4">No upcoming hackathons yet.</p>
+            )}
             {hackathons.map((h, index) => {
-              // Generate circular colored icon
               const colors = ['bg-indigo-500', 'bg-pink-500', 'bg-blue-500'];
               const initials = h.name.split(' ').map((w: string) => w[0]).join('').substring(0, 3);
               return (
-                <div key={h.id} className="flex items-center justify-between hover:bg-gray-50/50 p-1.5 rounded-xl transition-all">
+                <a
+                  key={h.id}
+                  href={h.url || 'https://devpost.com/hackathons'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between hover:bg-gray-50/80 p-2 rounded-xl transition-all border border-transparent hover:border-gray-200 cursor-pointer group"
+                >
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full ${colors[index % colors.length]} flex items-center justify-center text-white text-[10px] font-bold`}>
+                    <div className={`w-8 h-8 rounded-full ${colors[index % colors.length]} flex items-center justify-center text-white text-[10px] font-bold shrink-0`}>
                       {initials}
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-gray-800">{h.name}</h4>
+                      <h4 className="text-xs font-bold text-gray-800 group-hover:text-indigo-600 transition">{h.name}</h4>
                       <span className="text-[10px] text-gray-400 font-semibold">{h.dateRange}</span>
                     </div>
                   </div>
-                  <span className="text-[10px] font-bold bg-green-50 text-green-600 border border-green-100 px-2 py-0.5 rounded-full">
-                    {h.status}
+                  <span className="text-[10px] font-bold bg-green-50 text-green-600 border border-green-100 px-2.5 py-1 rounded-full group-hover:bg-green-100 transition">
+                    {h.status || 'Open'}
                   </span>
-                </div>
+                </a>
               );
             })}
           </div>
@@ -626,30 +688,45 @@ export const Dashboard: React.FC = () => {
               <Code2 className="w-4 h-4 text-orange-500" />
               LeetCode Contests
             </h3>
-            <button className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center gap-0.5">
+            <a
+              href="https://leetcode.com/contest/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-600 hover:text-indigo-700 text-xs font-semibold flex items-center gap-0.5"
+            >
               View all <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            </a>
           </div>
           
           <div className="space-y-4 flex-1">
+            {contests.length === 0 && (
+              <p className="text-xs text-gray-400 italic text-center py-4">No coding contests scheduled.</p>
+            )}
             {contests.map((c) => (
-              <div key={c.id} className="flex items-center justify-between hover:bg-gray-50/50 p-1.5 rounded-xl transition-all">
+              <a
+                key={c.id}
+                href={c.url || 'https://leetcode.com/contest/'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between hover:bg-gray-50/80 p-2 rounded-xl transition-all border border-transparent hover:border-gray-200 cursor-pointer group"
+              >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 text-xs font-bold">
+                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 text-xs font-bold shrink-0">
                     LC
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-gray-800">{c.name}</h4>
+                    <h4 className="text-xs font-bold text-gray-800 group-hover:text-indigo-600 transition">{c.name}</h4>
                     <span className="text-[10px] text-gray-400 font-semibold">{c.time}</span>
                   </div>
                 </div>
-                <button className="text-[10px] font-bold border border-indigo-200 text-indigo-600 hover:bg-indigo-50 px-3.5 py-1 rounded-xl transition-all">
-                  {c.status}
-                </button>
-              </div>
+                <span className="text-[10px] font-bold border border-indigo-200 text-indigo-600 bg-indigo-50/50 group-hover:bg-indigo-600 group-hover:text-white px-3.5 py-1 rounded-xl transition-all">
+                  {c.status || 'Register'}
+                </span>
+              </a>
             ))}
           </div>
         </div>
+
 
         {/* Recent Activity */}
         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-[0_1px_3px_rgba(0,0,0,0.01)] flex flex-col justify-between">
@@ -664,6 +741,9 @@ export const Dashboard: React.FC = () => {
           </div>
           
           <div className="space-y-3.5 flex-1">
+            {recentActivities.length === 0 && (
+              <p className="text-xs text-gray-400 italic text-center py-4">No recent activity yet.</p>
+            )}
             {recentActivities.map((act) => {
               const avatarInitials = act.userName === 'You' ? 'AH' : act.userName.substring(0, 2).toUpperCase();
               const colors = ['bg-blue-500', 'bg-orange-500', 'bg-gray-800'];

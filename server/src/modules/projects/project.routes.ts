@@ -26,13 +26,14 @@ router.post('/recommend-technology', projectController.recommendTechnology);
 router.post('/recommend-catalog', projectController.recommendCatalog);
 router.post('/', projectController.createProject);
 
-// Features
-router.get('/:projectId/features', projectController.getProjectFeatures);
-router.post('/:projectId/features', projectController.addProjectFeature);
-router.delete('/:projectId/features/:featureId', projectController.deleteProjectFeature);
+// Note: project-feature CRUD lives at /api/lifecycle/:projectId/features — it's the
+// complete, audited implementation (AI re-scoring via rescoreFeature + ProjectLogEvent
+// history). See lifecycle.routes.ts / lifecycle.controller.ts.
 
 // Reviews
 router.post('/:projectId/reviews', projectController.addProjectReview);
-router.get('/:projectId/reviews', projectController.getProjectReviews);
+// Withdrawal
+router.post('/:projectId/withdraw', projectController.withdrawProject);
 
 export const projectRoutes = router;
+

@@ -9,6 +9,21 @@ import { MAX_TEAMS_PER_STATEMENT, APPROACH_OVERLAP_THRESHOLD, availability } fro
 import { getTeamSelectionReadiness } from './selection.readiness';
 import { computeFit, DOMAIN_REQUIRED_SKILLS } from '../metrics/selectionFit';
 import { validateIdea, extractFeaturesForCombinedStatement, generatePhasePlan, MIN_PROPOSAL_LENGTH } from '../intelligence/ideaIntelligence.service';
+import { IdeaValidation } from '../intelligence/ideaIntelligence.schemas';
+
+// Full audit snapshot of why the AI scored/decided what it did — stored in
+// ProblemStatementProposal.scores (Json). Previously only `rubrics` was kept,
+// silently dropping the 5-perspective "strengths" scoring, hardware
+// constraints, and duplicate detail after the one-shot API response.
+function buildEvaluationSnapshot(evaluation: IdeaValidation) {
+  return {
+    overallScore: evaluation.overallScore,
+    rubrics: evaluation.rubrics,
+    perspectives: evaluation.perspectives,
+    hardwareConstraints: evaluation.hardwareConstraints,
+    duplicate: evaluation.duplicate,
+  };
+}
 
 const ApproachCheckSchema = z.object({
   uniquenessScore: z.number().min(0).max(100),
@@ -480,7 +495,7 @@ export const catalogController = {
           data: {
             submitterId: user.id,
             rawText: proposalText,
-            scores: evaluation.rubrics,
+            scores: buildEvaluationSnapshot(evaluation),
             verdict: evaluation.verdict,
             reasons: evaluation.reasons,
             improvementHints: evaluation.improvementHints,
@@ -508,6 +523,22 @@ export const catalogController = {
           .status(StatusCodes.BAD_REQUEST)
           .json({ message: 'You must belong to an organization to propose a problem statement.' });
       }
+
+      // Resolve the phase plan (an LLM/network call) before opening the
+      // transaction below — awaiting an external HTTP call while holding a DB
+      // transaction open risks exhausting the connection pool / hitting the
+      // transaction timeout. `weeks` mirrors the `publishedProject.suggestedDurationWeeks
+      // || 14` fallback that used to run post-creation: the create() below never
+      // sets suggestedDurationWeeks, so that field is always null and the
+      // fallback of 14 always applied anyway.
+      const featureTotal = evaluation.features.reduce((sum, f) => sum + f.points, 0);
+      const weeks = 14;
+      const phasePlan = await generatePhasePlan({
+        problemStatement: proposalText,
+        projectType: extracted.type || 'Software',
+        featureTotal,
+        weeks,
+      });
 
       // Publish the catalog entry and its audit row together so a failure can't
       // leave a template with no proposal record behind it.
@@ -540,7 +571,7 @@ export const catalogController = {
         data: {
           submitterId: user.id,
           rawText: proposalText,
-          scores: evaluation.rubrics,
+          scores: buildEvaluationSnapshot(evaluation),
           verdict: evaluation.verdict,
           reasons: evaluation.reasons,
           improvementHints: evaluation.improvementHints,
@@ -565,14 +596,6 @@ export const catalogController = {
         });
       }
 
-      const featureTotal = evaluation.features.reduce((sum, f) => sum + f.points, 0);
-      const weeks = publishedProject.suggestedDurationWeeks || 14;
-      const phasePlan = await generatePhasePlan({
-        problemStatement: proposalText,
-        projectType: extracted.type || 'Software',
-        featureTotal,
-        weeks,
-      });
       await tx.projectPhase.createMany({
         data: phasePlan.map((p) => ({
           projectId: publishedProject.id,

@@ -1,8 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, Bot, LayoutDashboard, BarChart3, Zap, Shield, Sparkles, Activity, Layers } from 'lucide-react';
+import { ArrowRight, Bot, LayoutDashboard, BarChart3, Zap, Shield, Sparkles, Activity, Layers, Trophy, Code2, ExternalLink, Calendar, Tag } from 'lucide-react';
 import { useAppSelector } from '../app/hooks';
+import { landingService, PublicHackathon, PublicLeetCodeContest } from '../services/landing.service';
 
 export const Landing: React.FC = () => {
   const navigate = useNavigate();
@@ -59,12 +60,47 @@ export const Landing: React.FC = () => {
     rotateX: useTransform(scrollYProgress, [0.30, 0.40], [15, 0]),
   };
 
-  // CTA Section
-  const ctaOpacity = useTransform(scrollYProgress, [0.7, 0.85], [0, 1]);
-  const ctaScale = useTransform(scrollYProgress, [0.7, 0.85], [0.8, 1]);
+  // CTA Section — pushed down to scroll past the inserted Hackathons / Contests
+  // sections (each ~1 viewport tall). The container is min-h-[300vh] so the
+  // new sections shift every subsequent range downward.
+  const ctaOpacity = useTransform(scrollYProgress, [0.85, 1.0], [0, 1]);
+  const ctaScale = useTransform(scrollYProgress, [0.85, 1.0], [0.8, 1]);
+
+  // Public landing content — fetched from /api/public/* so unauthenticated
+  // visitors see them too. Empty arrays just hide the section, no errors.
+  const [hackathons, setHackathons] = useState<PublicHackathon[]>([]);
+  const [contests, setContests] = useState<PublicLeetCodeContest[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([landingService.getHackathons(), landingService.getLeetCodeContests()])
+      .then(([h, c]) => {
+        if (cancelled) return;
+        setHackathons(h);
+        setContests(c);
+      })
+      .catch((err) => console.error('Failed to load landing opportunities:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statusTone = (status: string) => {
+    const s = status.toLowerCase();
+    if (s.includes('live') || s.includes('ongoing')) {
+      return 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30';
+    }
+    if (s.includes('register') || s.includes('upcoming')) {
+      return 'bg-amber-500/15 text-amber-300 border-amber-400/30';
+    }
+    if (s.includes('closed') || s.includes('over') || s.includes('past')) {
+      return 'bg-slate-500/15 text-slate-300 border-slate-400/30';
+    }
+    return 'bg-indigo-500/15 text-indigo-300 border-indigo-400/30';
+  };
 
   return (
-    <div ref={containerRef} className="bg-slate-950 min-h-[300vh] text-slate-100 overflow-clip font-sans selection:bg-indigo-500/30">
+    <div ref={containerRef} className="bg-slate-950 min-h-[500vh] text-slate-100 overflow-clip font-sans selection:bg-indigo-500/30">
       
       {/* Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 md:px-12 backdrop-blur-md bg-slate-950/50 border-b border-white/5">
@@ -210,6 +246,118 @@ export const Landing: React.FC = () => {
           </div>
         </motion.div>
       </div>
+
+      {/* Opportunities Section — Hackathons */}
+      {hackathons.length > 0 && (
+        <div className="relative z-10 px-4 md:px-8 py-24 max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium mb-4">
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Hackathons</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Build. Compete. Ship.</h2>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              Curated hackathons across the campus — solve real problems, win prizes, and grow your network.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {hackathons.map((h) => (
+              <div
+                key={h.id}
+                className="bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:border-amber-400/40 transition-colors group flex flex-col"
+              >
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Trophy className="w-6 h-6 text-amber-300" />
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${statusTone(h.status)}`}>
+                    <Tag className="w-3 h-3" />
+                    {h.status}
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-bold text-white mb-2 line-clamp-2">{h.name}</h3>
+                {h.description && (
+                  <p className="text-sm text-slate-400 mb-4 line-clamp-3 leading-relaxed">{h.description}</p>
+                )}
+
+                <div className="flex items-center gap-2 text-xs text-slate-300 mb-5">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{h.dateRange}</span>
+                </div>
+
+                {h.url && (
+                  <a
+                    href={h.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/30 text-amber-200 text-xs font-semibold transition-colors"
+                  >
+                    View Hackathon <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Opportunities Section — Coding Contests */}
+      {contests.length > 0 && (
+        <div className="relative z-10 px-4 md:px-8 py-12 max-w-6xl mx-auto">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-medium mb-4">
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Coding Contests</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Sharpen your skills.</h2>
+            <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+              Weekly LeetCode-style contests recommended for your campus. Practice DSA, climb the leaderboard.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {contests.map((c) => (
+              <div
+                key={c.id}
+                className="bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 hover:border-indigo-400/40 transition-colors group flex flex-col"
+              >
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Code2 className="w-6 h-6 text-indigo-300" />
+                  </div>
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold border ${statusTone(c.status)}`}>
+                    <Tag className="w-3 h-3" />
+                    {c.status}
+                  </span>
+                </div>
+
+                <h3 className="text-lg font-bold text-white mb-2 line-clamp-2">{c.name}</h3>
+                {c.description && (
+                  <p className="text-sm text-slate-400 mb-4 line-clamp-3 leading-relaxed">{c.description}</p>
+                )}
+
+                <div className="flex items-center gap-2 text-xs text-slate-300 mb-5">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>{c.time}</span>
+                </div>
+
+                {c.url && (
+                  <a
+                    href={c.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold transition-colors"
+                  >
+                    Join Contest <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* CTA Section */}
       <div className="h-screen flex items-center justify-center relative z-10 px-4">

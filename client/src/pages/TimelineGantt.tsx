@@ -61,25 +61,6 @@ function fmtISO(d: Date) {
   return d.toISOString().split('T')[0];
 }
 
-// ── Seed tasks (pre-populate when empty) ──────────────────────────────────────
-function buildSeedTasks(projectId: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = (daysAgo: number) => fmtISO(addDays(today, -daysAgo));
-  const end = (daysAhead: number) => fmtISO(addDays(today, daysAhead));
-
-  return [
-    { projectId, title: 'Literature Review', category: 'Research', status: 'completed', startDate: start(25), dueDate: end(-10), progress: 100 },
-    { projectId, title: 'User Surveys', category: 'Research', status: 'on-track', startDate: start(18), dueDate: end(-4), progress: 80 },
-    { projectId, title: 'Wireframing', category: 'Design', status: 'on-track', startDate: start(10), dueDate: end(13), progress: 60 },
-    { projectId, title: 'UI Prototype', category: 'Design', status: 'at-risk', startDate: start(3), dueDate: end(50), progress: 30 },
-    { projectId, title: 'Backend API', category: 'Development', status: 'on-track', startDate: start(5), dueDate: end(25), progress: 45 },
-    { projectId, title: 'Frontend Dev', category: 'Development', status: 'todo', startDate: end(5), dueDate: end(35), progress: 10 },
-    { projectId, title: 'Unit Testing', category: 'Testing', status: 'todo', startDate: end(10), dueDate: end(37), progress: 0 },
-    { projectId, title: 'Final Presentation', category: 'Presentation', status: 'todo', startDate: end(20), dueDate: end(47), progress: 0 },
-  ];
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 export const TimelineGantt: React.FC = () => {
   const [tasks, setTasks] = useState<GanttTask[]>([]);
@@ -106,22 +87,7 @@ export const TimelineGantt: React.FC = () => {
     setLoading(true);
     try {
       const data = await ganttService.getTasks();
-      if (data.length === 0) {
-        // Seed: need a project first
-        const token = localStorage.getItem('pv_token');
-        const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
-        const projRes = await axios.get(`${apiBase}/projects`, { headers: { Authorization: `Bearer ${token}` } });
-        const projs = projRes.data ?? [];
-        if (projs.length > 0) {
-          for (const seed of buildSeedTasks(projs[0].id)) {
-            await ganttService.createTask(seed);
-          }
-          const refreshed = await ganttService.getTasks();
-          setTasks(refreshed);
-        }
-      } else {
-        setTasks(data);
-      }
+      setTasks(data);
     } catch (e) {
       console.error(e);
     } finally {

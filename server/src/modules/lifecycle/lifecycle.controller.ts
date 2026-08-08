@@ -749,6 +749,82 @@ export class LifecycleController {
     }
   }
 
+  async updatePhase(req: Request, res: Response): Promise<void> {
+    try {
+      const projectId = req.params.projectId as string;
+      const phaseId = req.params.phaseId as string;
+      const userId = (req as any).user?.id || 'SYSTEM';
+      const { title, expectedDeliverables, weekTarget, points, reason } = req.body as {
+        title?: string;
+        expectedDeliverables?: string;
+        weekTarget?: number;
+        points?: number;
+        reason?: string;
+      };
+
+      const phase = await prisma.projectPhase.findFirst({ where: { id: phaseId, projectId } });
+      if (!phase) {
+        res.status(StatusCodes.NOT_FOUND).json({ message: 'Phase not found' });
+        return;
+      }
+
+      // Once a phase has been submitted/reviewed, editing its target
+      // retroactively would undermine that review — only PLANNED phases
+      // (not yet acted on) can be edited.
+      if (phase.status !== 'PLANNED') {
+        res.status(StatusCodes.CONFLICT).json({
+          message: `Phase ${phase.phaseNumber} is ${phase.status.toLowerCase()} and can no longer be edited.`,
+        });
+        return;
+      }
+
+      if (points !== undefined) {
+        // Mirrors the soft cap generatePhasePlan itself enforces at creation
+        // time (Math.max(featureTotal * 2.5, 500)) — re-derived here so an
+        // edit can't push the project's total phase points past what the
+        // feature scope actually supports.
+        const [otherPhases, features] = await Promise.all([
+          prisma.projectPhase.findMany({ where: { projectId, id: { not: phaseId } }, select: { points: true } }),
+          prisma.projectFeature.findMany({ where: { projectId, status: 'ACTIVE' }, select: { points: true } }),
+        ]);
+        const featureTotal = features.reduce((sum, f) => sum + f.points, 0);
+        const softCap = Math.max(featureTotal * 2.5, 500);
+        const otherTotal = otherPhases.reduce((sum, p) => sum + p.points, 0);
+        if (otherTotal + points > softCap) {
+          res.status(StatusCodes.BAD_REQUEST).json({
+            message: `Points exceed the project's phase budget (${Math.round(softCap)} total across all phases).`,
+          });
+          return;
+        }
+      }
+
+      const updated = await prisma.projectPhase.update({
+        where: { id: phaseId },
+        data: {
+          ...(title !== undefined && { title }),
+          ...(expectedDeliverables !== undefined && { expectedDeliverables }),
+          ...(weekTarget !== undefined && { weekTarget }),
+          ...(points !== undefined && { points }),
+        },
+      });
+
+      await projectLogService.appendEvent(projectId, {
+        type: 'PHASE_UPDATED',
+        actorUserId: userId,
+        data: {
+          phaseId,
+          phaseNumber: phase.phaseNumber,
+          changes: { title, expectedDeliverables, weekTarget, points },
+          reason: reason || null,
+        },
+      });
+
+      res.status(StatusCodes.OK).json({ phase: updated });
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  }
+
   async submitPhase(req: Request, res: Response): Promise<void> {
     try {
       const projectId = req.params.projectId as string;

@@ -20,6 +20,7 @@ import {
   featureUpdateSchema,
   phaseSubmitSchema,
   phaseReviewSchema,
+  phaseUpdateSchema,
 } from './lifecycle.schemas';
 import { lifecycleController } from './lifecycle.controller';
 
@@ -63,6 +64,7 @@ router.delete('/:projectId/features/:featureId', requireProjectAccess, lifecycle
 
 // Phase execution & faculty/admin review endpoints
 router.get('/:projectId/phases', requireProjectAccess, lifecycleController.getPhases as any);
+router.patch('/:projectId/phases/:phaseId', requireProjectAccess, validateBody(phaseUpdateSchema), lifecycleController.updatePhase as any);
 router.post('/:projectId/phases/:phaseId/submit', requireProjectAccess, validateBody(phaseSubmitSchema), lifecycleController.submitPhase as any);
 router.post('/:projectId/phases/:phaseId/review', requireRole(['ADMIN', 'FACULTY']) as any, validateBody(phaseReviewSchema), lifecycleController.reviewPhase as any);
 

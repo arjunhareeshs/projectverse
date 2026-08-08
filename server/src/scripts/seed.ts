@@ -780,15 +780,57 @@ async function runSeed() {
   await prisma.userStreak.deleteMany().catch(() => null);
 
   const hackathonsToCreate = [
-    { name: 'Smart India Hackathon 2025', dateRange: 'Aug 1 - Aug 3, 2025', status: 'Upcoming' },
-    { name: 'HackMIT 2025', dateRange: 'Sep 5 - Sep 7, 2025', status: 'Upcoming' },
-    { name: 'Google Solution Challenge', dateRange: 'Oct 10 - Oct 12, 2025', status: 'Upcoming' }
+    {
+      organizationId: org.id,
+      name: 'Smart India Hackathon 2025',
+      dateRange: 'Aug 1 - Aug 3, 2025',
+      status: 'Upcoming',
+      url: 'https://www.sih.gov.in/',
+      description: "India's national-level hackathon for solving real-world problems.",
+    },
+    {
+      organizationId: org.id,
+      name: 'HackMIT 2025',
+      dateRange: 'Sep 5 - Sep 7, 2025',
+      status: 'Upcoming',
+      url: 'https://hackmit.org/',
+      description: "MIT's premier hackathon for high-school and college students.",
+    },
+    {
+      organizationId: org.id,
+      name: 'Google Solution Challenge',
+      dateRange: 'Oct 10 - Oct 12, 2025',
+      status: 'Upcoming',
+      url: 'https://developers.google.com/community/gsc',
+      description: 'Build a Google App, Google Workspace, or Action that solves a local problem aligned with UN SDGs.',
+    },
   ];
 
   const contestsToCreate = [
-    { name: 'Biweekly Contest 128', startTime: new Date('2025-07-12T20:30:00Z'), status: 'Register' },
-    { name: 'Weekly Contest 445', startTime: new Date('2025-07-19T20:30:00Z'), status: 'Register' },
-    { name: 'Biweekly Contest 129', startTime: new Date('2025-07-26T20:30:00Z'), status: 'Register' }
+    {
+      organizationId: org.id,
+      name: 'Biweekly Contest 128',
+      startTime: new Date('2025-07-12T20:30:00Z'),
+      status: 'Register',
+      url: 'https://leetcode.com/contest/biweekly-contest-128',
+      description: 'LeetCode biweekly coding contest — 4 problems, 90 minutes.',
+    },
+    {
+      organizationId: org.id,
+      name: 'Weekly Contest 445',
+      startTime: new Date('2025-07-19T20:30:00Z'),
+      status: 'Register',
+      url: 'https://leetcode.com/contest/weekly-contest-445',
+      description: 'LeetCode weekly coding contest — 4 problems, 90 minutes.',
+    },
+    {
+      organizationId: org.id,
+      name: 'Biweekly Contest 129',
+      startTime: new Date('2025-07-26T20:30:00Z'),
+      status: 'Register',
+      url: 'https://leetcode.com/contest/biweekly-contest-129',
+      description: 'LeetCode biweekly coding contest — 4 problems, 90 minutes.',
+    },
   ];
 
   await prisma.hackathon.createMany({ data: hackathonsToCreate });

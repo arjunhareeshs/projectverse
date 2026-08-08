@@ -32,6 +32,27 @@ export const adminController = {
     }
   },
 
+  // ── Proposals ────────────────────────────────────────────────────────────
+
+  getProposals: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { verdict, studentId, page, limit } = req.query as {
+        verdict?: string;
+        studentId?: string;
+        page?: string;
+        limit?: string;
+      };
+      const result = await AdminService.getProposals(
+        { verdict, studentId },
+        page ? parseInt(page, 10) : 1,
+        limit ? parseInt(limit, 10) : 50,
+      );
+      res.json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
   // ── Students ─────────────────────────────────────────────────────────────
 
   createStudent: async (req: AuthenticatedRequest, res: Response) => {

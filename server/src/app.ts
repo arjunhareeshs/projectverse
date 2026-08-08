@@ -8,6 +8,7 @@ import { corsOptions } from './config/cors';
 import { authRoutes } from './modules/auth/auth.routes';
 import { projectRoutes } from './modules/projects/project.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
+import { publicOpportunitiesRoutes } from './modules/dashboard/public.routes';
 import { teamRoutes } from './modules/teams/team.routes';
 import { taskRoutes } from './modules/tasks/task.routes';
 import { documentRoutes } from './modules/documents/document.routes';
@@ -49,6 +50,7 @@ export function createApp() {
 
   app.use('/api', healthRoutes);
   app.use('/api/auth', authRoutes);
+  app.use('/api/public', publicOpportunitiesRoutes);
   app.use('/api/projects', projectRoutes);
   app.use('/api/proposals', proposalRoutes);
   app.use('/api/dashboard', dashboardRoutes);

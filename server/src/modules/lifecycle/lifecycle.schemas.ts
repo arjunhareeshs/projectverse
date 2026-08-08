@@ -96,3 +96,11 @@ export const phaseReviewSchema = z.object({
   decision: z.enum(['APPROVED', 'CHANGES_REQUESTED']),
   reviewNote: z.string().optional(),
 });
+
+export const phaseUpdateSchema = z.object({
+  title: z.string().min(2).optional(),
+  expectedDeliverables: z.string().min(5).optional(),
+  weekTarget: z.number().int().min(1).optional(),
+  points: z.number().int().min(0).optional(),
+  reason: z.string().min(3, 'A reason is required so the edit is auditable').optional(),
+});

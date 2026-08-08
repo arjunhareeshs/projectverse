@@ -4,28 +4,6 @@ import { useSelector } from 'react-redux';
 import { Users, UserCheck, Mail, Search, ArrowLeft, Award, PieChart as PieIcon, X } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { teamService } from '../services/team.service';
-export const MEMBER_MOCK_DETAILS: Record<string, { regNo: string; project: string; skills: string[] }> = {
-  'priya.sharma@projectverse.com': {
-    regNo: '2021CSE0087',
-    project: 'Smart Campus Management System',
-    skills: ['React', 'TypeScript', 'CSS Modules', 'State Management']
-  },
-  'karthik.m@projectverse.com': {
-    regNo: '2021CSE0056',
-    project: 'Mobile App',
-    skills: ['Docker', 'Kubernetes', 'CI/CD', 'AWS', 'GitHub Actions']
-  },
-  'student@projectverse.com': {
-    regNo: '2021CSE0102',
-    project: 'Smart Campus Management System',
-    skills: ['Full Stack Dev', 'Next.js', 'Node.js', 'PostgreSQL', 'TypeScript']
-  },
-  'admin@projectverse.com': {
-    regNo: '2021CSE0001',
-    project: 'Smart Campus Management System',
-    skills: ['Project Management', 'System Architecture', 'Agile', 'Scrum']
-  }
-};
 
 const ROLE_COLOR: Record<string, { color: string; bg: string }> = {
   'Team Leader': { color: '#7C3AED', bg: '#F0EBFF' },
@@ -212,7 +190,7 @@ export const TeamMembers: React.FC = () => {
                   {members.map((tm: any) => {
                     const style = roleStyle(tm.roleLabel);
                     const stat = memberStats.get(tm.user.id) || { contributions: 0, xp: 0 };
-                    const skills = tm.user.skills || ['HTML', 'CSS', 'JavaScript'];
+                    const skills = tm.user.skills || [];
                     return (
                       <div
                         key={tm.id}
