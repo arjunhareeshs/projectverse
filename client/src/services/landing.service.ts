@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { getApiBaseUrl } from './api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_URL = getApiBaseUrl();
 
 // Landing-page service hits the unauthenticated /public endpoints. No JWT
 // header, no 401 interceptor — this service must work on the public landing

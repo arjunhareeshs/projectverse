@@ -1,15 +1,33 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server, Socket } from 'socket.io';
 import { verifyAccessToken } from '../../config/jwt';
+import { buildAllowedOrigins } from '../../config/network';
 
 // Map of userId to an array of socketIds to handle multiple connections per user
 const userSockets: Map<string, Set<string>> = new Map();
 let ioInstance: Server | null = null;
 
 export function bootstrapSocket(httpServer: HttpServer) {
+  // Auto-detect every LAN IPv4 address on this machine and build the same
+  // allowed-origins list used by the HTTP CORS middleware.
+  const allowedOrigins = buildAllowedOrigins([process.env.CLIENT_ORIGIN || 'http://localhost:7333']);
+
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+        // Fallback for dev: allow any origin whose hostname is in the detected list
+        if (process.env.NODE_ENV === 'development') {
+          try {
+            const { hostname } = new URL(origin);
+            const detected = allowedOrigins.some((o) => {
+              try { return new URL(o).hostname === hostname; } catch { return false; }
+            });
+            if (detected) return callback(null, true);
+          } catch { /* invalid URL */ }
+        }
+        callback(new Error(`Socket CORS: origin ${origin} not allowed`));
+      },
       credentials: true,
     },
   });

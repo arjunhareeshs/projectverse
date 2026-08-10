@@ -61,7 +61,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    const newSocket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:4000', {
+    const socketHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || `http://${socketHost}:4000`;
+
+    const newSocket = io(socketUrl, {
       auth: { token },
       withCredentials: true,
     });

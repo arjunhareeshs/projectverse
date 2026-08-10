@@ -21,7 +21,7 @@ export interface LlmResult<T> {
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 function groqEnabled(): boolean {
-  return Boolean(process.env.GROQ_API_KEY);
+  return Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim().length > 0);
 }
 
 async function callGroq(
@@ -48,7 +48,7 @@ async function callGroq(
         },
         {
           headers: {
-            Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+            Authorization: `Bearer ${process.env.GROQ_API_KEY?.trim()}`,
             'Content-Type': 'application/json',
           },
           timeout: 20000,

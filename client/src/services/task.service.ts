@@ -1,7 +1,7 @@
 import axios from 'axios';
-import { add401Interceptor } from './api';
+import { add401Interceptor, getApiBaseUrl } from './api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_URL = getApiBaseUrl();
 
 const api = axios.create({
   baseURL: `${API_URL}/tasks`,

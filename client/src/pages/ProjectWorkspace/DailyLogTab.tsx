@@ -18,6 +18,8 @@ import { DailyLogEntry } from '../../types/projectLog';
 import { lifecycleService } from '../../services/lifecycle.service';
 import { useAppSelector } from '../../app/hooks';
 
+import { getBackendHostUrl } from '../../services/api';
+
 interface DailyLogTabProps {
   projectId: string;
 }
@@ -26,7 +28,7 @@ const formatAssetUrl = (url: string) => {
   if (!url) return '';
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.startsWith('/uploads/')) {
-    return `http://localhost:4000${url}`;
+    return `${getBackendHostUrl()}${url}`;
   }
   return url;
 };

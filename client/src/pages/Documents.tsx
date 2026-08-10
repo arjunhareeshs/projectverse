@@ -10,6 +10,7 @@ import {
 import { cn } from '../utils/cn';
 import { documentService } from '../services/document.service';
 import { projectService } from '../services/project.service';
+import { getBackendHostUrl } from '../services/api';
 
 interface DocumentItem {
   id: string;
@@ -62,7 +63,7 @@ export const Documents: React.FC = () => {
   const [ingestError, setIngestError] = useState('');
   const [ingesting, setIngesting] = useState(false);
 
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4000';
+  const BACKEND_URL = getBackendHostUrl();
 
   // Preview Drawer
   const [previewDoc, setPreviewDoc] = useState<DocumentItem | null>(null);

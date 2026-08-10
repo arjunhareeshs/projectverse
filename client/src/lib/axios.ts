@@ -1,9 +1,13 @@
 import axios from 'axios';
 
-const baseURL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api';
+const getApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+  return `http://${host}:4000/api`;
+};
 
 export const apiClient = axios.create({
-  baseURL,
+  baseURL: getApiUrl(),
   withCredentials: true,
   timeout: 15000,
 });

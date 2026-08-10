@@ -18,3 +18,6 @@ __pycache__/
 ai-service/.venv/
 ai-service/venv/
 ai-service/data/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+graft/
