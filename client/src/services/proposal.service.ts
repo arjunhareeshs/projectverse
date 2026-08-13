@@ -69,27 +69,32 @@ export interface ProposalEvaluationResult {
   features?: ExtractedFeaturePreview[];
 }
 
+/** Lifecycle of a submitted proposal. PENDING means the AI analysis is still
+ *  running server-side; it continues even if the student leaves the page. */
+export type ProposalStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'NEEDS_IMPROVEMENT'
+  | 'FAILED';
+
+/** Student-facing proposal shape. Deliberately carries no numeric scoring —
+ *  the backend only returns rubric/overall scores to admins. */
 export interface ProposalListItem {
   id: string;
-  verdict: 'ACCEPTED' | 'REJECTED' | 'NEEDS_IMPROVEMENT';
+  title: string;
+  status: ProposalStatus;
   reasons: string[];
-  scores: {
-    overallScore: number;
-    rubrics: ProposalEvaluationResult['rubrics'];
-    perspectives?: ProposalEvaluationResult['perspectives'];
-    hardwareConstraints?: ProposalEvaluationResult['hardwareConstraints'];
-    duplicate?: ProposalEvaluationResult['duplicate'];
-  } | null;
+  improvementHints: string[];
   publishedProjectId: string | null;
-  duplicateOfId: string | null;
+  claimed: boolean;
+  canClaim: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface PersistedProposal extends ProposalListItem {
-  submitterId: string;
   rawText: string;
-  improvementHints: string[];
-  extracted: ProposalEvaluationResult['extracted'] | null;
 }
 
 export interface ApproachCheckResult {
@@ -101,30 +106,10 @@ export interface ApproachCheckResult {
   keywords: string[];
 }
 
-/** Adapts a persisted proposal row (submission-time snapshot) into the shape
- * AiEvaluationPanel renders. `features` is omitted — feature reasoning lives
- * on the published project's ProjectFeature rows once accepted, so it's read
- * live from there rather than duplicated into this immutable audit record. */
-export function proposalToEvaluationResult(proposal: PersistedProposal): ProposalEvaluationResult {
-  return {
-    verdict: proposal.verdict,
-    reasons: proposal.reasons,
-    improvementHints: proposal.improvementHints,
-    overallScore: proposal.scores?.overallScore ?? 0,
-    rubrics: proposal.scores?.rubrics as ProposalEvaluationResult['rubrics'],
-    duplicate: proposal.scores?.duplicate ?? { isDuplicate: false },
-    extracted: proposal.extracted || undefined,
-    perspectives: proposal.scores?.perspectives,
-    hardwareConstraints: proposal.scores?.hardwareConstraints,
-  };
-}
+export const MIN_PROPOSAL_LENGTH = 40;
+export const MAX_PROPOSAL_LENGTH = 8000;
 
 export const proposalService = {
-  async evaluateProposal(rawText: string): Promise<ProposalEvaluationResult> {
-    const res = await api.post('/proposals/evaluate', { rawText });
-    return res.data;
-  },
-
   async getMyProposals(): Promise<ProposalListItem[]> {
     const res = await api.get('/proposals/mine');
     return res.data.proposals;
@@ -135,11 +120,10 @@ export const proposalService = {
     return res.data.proposal;
   },
 
-  async submitProposal(payload: {
-    rawText: string;
-    evaluation: ProposalEvaluationResult;
-  }) {
-    const res = await api.post('/proposals', payload);
+  /** Submits once and returns immediately — analysis continues server-side,
+   *  so the caller polls getProposal(id) for the outcome. */
+  async submitProposal(rawText: string): Promise<{ proposalId: string; status: ProposalStatus }> {
+    const res = await api.post('/proposals', { rawText });
     return res.data;
   },
 

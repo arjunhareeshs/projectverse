@@ -1,0 +1,69 @@
+{
+    "username": "arjunhareesh",
+    "profile_url": "https://leetcode.com/u/arjunhareesh/",
+    "profile": {
+        "real_name": "arjunhareesh",
+        "ranking": 2306055,
+        "country": null
+    },
+    "problems": {
+        "accepted": [
+            {
+                "difficulty": "All",
+                "count": 62,
+                "submissions": 104
+            },
+            {
+                "difficulty": "Easy",
+                "count": 35,
+                "submissions": 60
+            },
+            {
+                "difficulty": "Medium",
+                "count": 24,
+                "submissions": 36
+            },
+            {
+                "difficulty": "Hard",
+                "count": 3,
+                "submissions": 8
+            }
+        ],
+        "submissions": [
+            {
+                "difficulty": "All",
+                "count": 66,
+                "submissions": 209
+            },
+            {
+                "difficulty": "Easy",
+                "count": 35,
+                "submissions": 86
+            },
+            {
+                "difficulty": "Medium",
+                "count": 28,
+                "submissions": 112
+            },
+            {
+                "difficulty": "Hard",
+                "count": 3,
+                "submissions": 11
+            }
+        ],
+        "beats": [
+            {
+                "difficulty": "Easy",
+                "percentage": 67.2
+            },
+            {
+                "difficulty": "Medium",
+                "percentage": 59.6
+            },
+            {
+                "difficulty": "Hard",
+                "percentage": 32.17
+            }
+        ]
+    }
+}

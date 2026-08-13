@@ -24,7 +24,7 @@ export const projectController = {
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
       }
 
-      const projects = await projectService.getActiveProjects(user.organizationId);
+      const projects = await projectService.getActiveProjects(user.organizationId, user.id);
       res.json(projects);
     } catch (error) {
       console.error('Error fetching active projects:', error);

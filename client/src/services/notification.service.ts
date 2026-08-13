@@ -36,8 +36,13 @@ export const notificationService = {
     return response.data;
   },
 
-  createMockNotification: async (title?: string, body?: string) => {
-    const response = await api.post('/mock', { title, body });
+  createNotification: async (title: string, body: string) => {
+    const response = await api.post('/', { title, body });
+    return response.data;
+  },
+
+  createDeadlineAlert: async () => {
+    const response = await api.post('/deadline-alert');
     return response.data;
   },
 };

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   Bell, CheckCheck, AlertTriangle, MessageSquare,
-  GitPullRequest, UserPlus, FileText, Check, Plus
+  GitPullRequest, UserPlus, FileText, Check, Plus, X, BellRing
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { notificationService } from '../services/notification.service';
+import axios from 'axios';
 
 interface NotificationItem {
   id: string;
@@ -54,6 +55,12 @@ function formatTimeAgo(dateStr: string) {
 export const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createBody, setCreateBody] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [alerting, setAlerting] = useState(false);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -101,28 +108,40 @@ export const Notifications: React.FC = () => {
     }
   };
 
-  const triggerMockNotification = async () => {
-    const titles = [
-      'Task assigned to you',
-      'Sprint Review Scheduled',
-      'Milestone Achieved',
-      'System Audit Completed',
-      'Database Sync Error',
-    ];
-    const bodies = [
-      'Sarah Manager assigned you "Ingest Documents backend routes".',
-      'Review scheduled for Falcon Squad next Monday at 2:00 PM.',
-      'Phase 1 Coordination dashboard is 100% complete.',
-      'Global security settings audited — 0 vulnerabilities found.',
-      'Failed to replicate database node. Retrying connection...',
-    ];
+  const handleCreateNotification = async () => {
+    const title = createTitle.trim();
+    const body = createBody.trim();
+    if (!title || !body) return;
 
-    const idx = Math.floor(Math.random() * titles.length);
+    setCreating(true);
     try {
-      const newNotif = await notificationService.createMockNotification(titles[idx], bodies[idx]);
+      const newNotif = await notificationService.createNotification(title, body);
+      setNotifications((prev) => [newNotif, ...prev]);
+      setCreateTitle('');
+      setCreateBody('');
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error('Failed to create notification:', err);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeadlineAlert = async () => {
+    setAlerting(true);
+    setAlertMessage(null);
+    try {
+      const newNotif = await notificationService.createDeadlineAlert();
       setNotifications((prev) => [newNotif, ...prev]);
     } catch (err) {
-      console.error('Failed to create mock notification:', err);
+      if (axios.isAxiosError(err) && err.response?.status === 404) {
+        setAlertMessage('No upcoming task deadlines found.');
+      } else {
+        console.error('Failed to create deadline alert:', err);
+        setAlertMessage('Failed to check deadlines.');
+      }
+    } finally {
+      setAlerting(false);
     }
   };
 
@@ -140,11 +159,19 @@ export const Notifications: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={triggerMockNotification}
-            title="Send a sample notification to verify the in-app notification flow"
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/90 text-white transition-colors shadow-sm"
+            onClick={() => setShowCreateModal(true)}
+            title="Write your own notification"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
           >
-            <Plus className="h-3.5 w-3.5" /> Send Test Notification
+            <Plus className="h-3.5 w-3.5" /> Create
+          </button>
+          <button
+            onClick={handleDeadlineAlert}
+            disabled={alerting}
+            title="Alert me about my nearest upcoming task deadline"
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg bg-secondary hover:bg-secondary/90 text-white transition-colors shadow-sm disabled:opacity-60"
+          >
+            <BellRing className="h-3.5 w-3.5" /> {alerting ? 'Checking...' : 'Alert'}
           </button>
           {unreadCount > 0 && (
             <button
@@ -156,6 +183,15 @@ export const Notifications: React.FC = () => {
           )}
         </div>
       </div>
+
+      {alertMessage && (
+        <div className="flex items-center justify-between rounded-xl border border-border bg-muted/50 px-4 py-2.5 text-xs text-muted-foreground">
+          <span>{alertMessage}</span>
+          <button onClick={() => setAlertMessage(null)} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-20 text-muted-foreground">
@@ -213,6 +249,55 @@ export const Notifications: React.FC = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-lg">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-foreground">New Notification</h2>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              <input
+                type="text"
+                value={createTitle}
+                onChange={(e) => setCreateTitle(e.target.value)}
+                placeholder="Title"
+                maxLength={120}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/40"
+              />
+              <textarea
+                value={createBody}
+                onChange={(e) => setCreateBody(e.target.value)}
+                placeholder="Message"
+                rows={3}
+                maxLength={500}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-xs font-semibold rounded-lg border border-border hover:bg-muted text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateNotification}
+                disabled={creating || !createTitle.trim() || !createBody.trim()}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors disabled:opacity-50"
+              >
+                {creating ? 'Sending...' : 'Send'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

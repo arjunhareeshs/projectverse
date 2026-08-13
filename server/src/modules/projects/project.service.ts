@@ -21,17 +21,30 @@ export const projectService = {
     return grouped;
   },
 
-  async getActiveProjects(organizationId: string) {
+  async getActiveProjects(organizationId: string, userId: string) {
+    const requester = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { teamId: true },
+    });
+
     const projects = await prisma.project.findMany({
       where: {
         organizationId,
+        OR: [
+          { members: { some: { userId } } },
+          ...(requester?.teamId ? [{ teamId: requester.teamId }] : []),
+        ],
       },
       include: {
-        team: true,
-        tasks: true,
+        team: {
+          include: {
+            members: { select: { id: true, fullName: true, email: true } },
+          },
+        },
+        tasks: { select: { id: true, status: true, dueDate: true } },
         members: {
           include: {
-            user: true,
+            user: { select: { id: true, fullName: true, email: true } },
           },
         },
       },
@@ -61,6 +74,12 @@ export const projectService = {
         ? Math.max(0, Math.ceil((earliestDue.getTime() - Date.now()) / 86_400_000))
         : null;
 
+      // Assignable members: ProjectMember records plus the project's own team roster
+      // (many auto-created per-team "Workspace" projects have no ProjectMember rows).
+      const memberMap = new Map<string, { id: string; fullName: string; email: string }>();
+      project.members.forEach((m) => memberMap.set(m.user.id, m.user));
+      (project.team?.members ?? []).forEach((u) => memberMap.set(u.id, u));
+
       return {
         id: project.id,
         name: project.name,
@@ -74,6 +93,7 @@ export const projectService = {
         status: project.status,
         color: 'bg-primary',
         initials: project.name.substring(0, 2).toUpperCase(),
+        members: Array.from(memberMap.values()),
       };
     });
   },
@@ -349,7 +369,6 @@ export const projectService = {
 
       await tx.meeting.deleteMany({ where: { projectId } });
       await tx.report.deleteMany({ where: { projectId } });
-      await tx.document.deleteMany({ where: { projectId } });
       await tx.sprint.deleteMany({ where: { projectId } });
       await tx.milestone.deleteMany({ where: { projectId } });
       await tx.phaseSubmission.deleteMany({ where: { projectId } });

@@ -25,10 +25,6 @@ export const dashboardService = {
     const response = await api.get('/kpis');
     return response.data;
   },
-  getInsights: async () => {
-    const response = await api.get('/insights');
-    return response.data;
-  },
   getStreakData: async () => {
     const response = await api.get('/streak');
     return response.data;

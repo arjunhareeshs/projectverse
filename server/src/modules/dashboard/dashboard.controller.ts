@@ -25,7 +25,7 @@ export const dashboardController = {
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
       }
 
-      const metrics = await dashboardService.getKpiDetails(user.id, user.teamId, user.organizationId);
+      const metrics = await dashboardService.getKpiDetails(user.id, user.teamId);
       res.json(metrics);
     } catch (error) {
       console.error('Error fetching KPI metrics:', error);

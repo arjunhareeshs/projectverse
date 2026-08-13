@@ -1,6 +1,59 @@
 import { prisma } from '../../shared/database';
+import { notificationService } from '../notifications/notification.service';
+
+async function notifyTaskAdded(
+  projectId: string,
+  taskId: string,
+  taskTitle: string,
+  assigneeId: string | null,
+  source: 'board' | 'timeline',
+) {
+  try {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { name: true, teamId: true },
+    });
+    if (!project) return;
+
+    const surface = source === 'board' ? 'Kanban board' : 'timeline/Gantt chart';
+
+    if (project.teamId) {
+      await notificationService.broadcastToTeam(
+        project.teamId,
+        'New Task Added',
+        `"${taskTitle}" was added to the ${surface} for "${project.name}".`,
+      );
+    }
+
+    if (assigneeId) {
+      await notificationService.createForUser(
+        assigneeId,
+        'Task Assigned',
+        `You were assigned "${taskTitle}" in "${project.name}".`,
+      );
+    }
+  } catch (err) {
+    console.error(`Failed sending task-added notification for task ${taskId}:`, err);
+  }
+}
 
 export const taskService = {
+  async canAccessProject(userId: string, projectId: string) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { teamId: true },
+    });
+    if (!project) return false;
+
+    if (project.teamId) {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { teamId: true } });
+      if (user?.teamId && user.teamId === project.teamId) return true;
+    }
+
+    const membership = await prisma.projectMember.findFirst({ where: { projectId, userId } });
+    return !!membership;
+  },
+
   async getTasksByProject(projectId: string) {
     return prisma.task.findMany({
       where: { projectId },
@@ -58,7 +111,7 @@ export const taskService = {
     progress?: number;
   }) {
     const isDone = data.status === 'done' || data.status === 'completed';
-    return prisma.task.create({
+    const task = await prisma.task.create({
       data: {
         projectId: data.projectId,
         title: data.title,
@@ -78,6 +131,9 @@ export const taskService = {
         },
       },
     });
+
+    await notifyTaskAdded(data.projectId, task.id, task.title, task.assigneeId, 'board');
+    return task;
   },
 
   // ── Gantt-specific methods ─────────────────────────────────────────────────
@@ -114,7 +170,7 @@ export const taskService = {
     assigneeId?: string;
     description?: string;
   }) {
-    return prisma.task.create({
+    const task = await prisma.task.create({
       data: {
         projectId: data.projectId,
         title: data.title,
@@ -126,13 +182,16 @@ export const taskService = {
         assigneeId: data.assigneeId || null,
         description: data.description || null,
         priority: 'medium',
-        completedAt: data.status === 'completed' ? new Date() : null,
+        completedAt: data.status === 'completed' || data.status === 'done' ? new Date() : null,
       },
       include: {
         assignee: { select: { id: true, fullName: true, email: true } },
         project: { select: { id: true, name: true } },
       },
     });
+
+    await notifyTaskAdded(data.projectId, task.id, task.title, task.assigneeId, 'timeline');
+    return task;
   },
 
   async updateGanttTask(taskId: string, data: {
@@ -154,7 +213,7 @@ export const taskService = {
         ...(data.dueDate !== undefined && { dueDate: new Date(data.dueDate) }),
         ...(data.progress !== undefined && { progress: data.progress }),
         ...(data.assigneeId !== undefined && { assigneeId: data.assigneeId || null }),
-        completedAt: data.status === 'completed' ? new Date() : undefined,
+        completedAt: data.status === 'completed' || data.status === 'done' ? new Date() : undefined,
       },
       include: {
         assignee: { select: { id: true, fullName: true, email: true } },

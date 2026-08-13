@@ -10,6 +10,13 @@ export interface NearestEntry {
 // schema" without stating it makes the model invent its own wrapper object, Zod
 // rejects it, and chatJSON silently returns the fallback — which looked like the
 // evaluator ignoring the LLM entirely (see project.catalog.controller.ts history).
+//
+// overallScore in the response is READ ONLY for context — ideaIntelligence.service
+// recomputes it deterministically from the rubric/industryRubric scores and never
+// trusts the model's own arithmetic. Likewise hardFeasibilityBlocker is enforced
+// server-side: if blocked is true the verdict is forced to REJECTED regardless of
+// score. Call this with temperature 0 — the whole point of a rubric-scored gate is
+// that the same proposal text produces the same verdict every time.
 export function buildIdeaValidationPrompt(rawText: string, nearest: NearestEntry[]): ChatMessage[] {
   const system =
     'You are an expert evaluator and technical architect for student engineering project ' +
@@ -52,27 +59,70 @@ export function buildIdeaValidationPrompt(rawText: string, nearest: NearestEntry
     '- Total points across all features MUST NOT exceed 1000. If your natural scoring would exceed it, ' +
     'scale the weaker features down rather than every feature uniformly — the standout feature should ' +
     'stay near its true value.\n\n' +
-    'If the project type is Hardware, IoT, or Hybrid, ALSO fill hardwareConstraints — and use this ' +
-    'block, not budget, as the basis for hardware feature points:\n' +
-    '- componentAvailability: are the implied components (sensors, actuators, MCUs, etc.) realistically ' +
-    'sourceable by a student team, or exotic/hard to obtain?\n' +
-    '- integrationComplexity: soldering/PCB design/firmware/real-time/sensor-fusion demands the team ' +
-    'should be warned about — this is the main driver of how hard the feature actually is to build.\n' +
-    '- problemSolutionComplexity: independent of parts and budget, how conceptually/technically hard is ' +
-    'the underlying problem this hardware feature solves (e.g. closed-loop control, sensor fusion, ' +
-    'real-time scheduling vs a single sensor read-and-display)? A feature can use cheap, easy-to-source ' +
-    'parts and still be high-complexity because the problem it solves is hard, and vice versa.\n' +
-    'For pure Software proposals, hardwareConstraints must be null — do not invent hardware concerns. ' +
-    'Hardware feature points are set from feasibility + integrationComplexity + problemSolutionComplexity ' +
-    'ONLY. Do not factor budget/cost into a hardware feature\'s point value — a feature that is hard to ' +
-    'integrate or solves a genuinely complex problem is scored high regardless of how cheap or expensive ' +
-    'its parts are.\n\n' +
-    'You are ALSO scoring the proposal on 7 rubrics, each 0-100, and extracting catalog metadata, ' +
-    'exactly as before.\n\n' +
+    'DISCIPLINE-SPECIFIC CONSTRAINT CHECKING — determine the engineering discipline from the ' +
+    'proposal\'s domain/sector/type (not from a fixed list you output), and apply the matching checklist ' +
+    'below when filling hardwareConstraints or softwareRigor:\n' +
+    '- Software: architecture clarity, data model/API feasibility, security & privacy handling, a real ' +
+    'testing plan, deployment feasibility. Actively down-score proposals that are a thin CRUD app dressed ' +
+    'up in project language — say so plainly in trivialCrudRisk rather than being polite about it.\n' +
+    '- Electrical / Electronics / IoT hardware: component availability to a student in a normal market, ' +
+    'realistic budget for the stated scope, power draw and electrical safety, sensor/actuator integration ' +
+    'complexity, and whether the number/value of I/O the student promises is realistic at their budget.\n' +
+    '- Mechanical: fabrication feasibility (can a student machine shop / 3D printer / vendor actually ' +
+    'make this), material availability, tolerance and assembly complexity, mechanical safety, maintenance, ' +
+    'and how they plan to test/validate the physical build.\n' +
+    '- Mechatronics: everything mechanical AND electrical above, PLUS mechanical-electrical-software ' +
+    'integration risk, control-loop feasibility, calibration effort, real-time constraints, and failure ' +
+    'handling (what happens when a sensor drops out or an actuator jams).\n' +
+    '- Automobile: safety and regulatory awareness (this is not optional for anything vehicle-adjacent), ' +
+    'sensor/diagnostic feasibility, how they integrate with or simulate the vehicle without full factory ' +
+    'access, testability without a real vehicle, and cost/durability of any physical add-on.\n' +
+    '- Agriculture: field deployability (dust, water, sun, power access), robustness to weather/soil ' +
+    'variability, usability by a non-technical farmer, low-cost maintenance, and whether the promised ' +
+    'yield/water/labor impact is actually measurable with what they\'re building.\n' +
+    '- Biotech: lab feasibility with equipment a student can access, biosafety and ethics (never wave ' +
+    'this away), a concrete non-clinical validation method, reagent/equipment availability, and whether ' +
+    'any clinical or diagnostic claim is appropriately scoped down for a student project.\n\n' +
+    'For a Software-type proposal, fill softwareRigor and set hardwareConstraints to null. For Hardware, ' +
+    'IoT, or Hybrid, fill hardwareConstraints (using the matching discipline checklist above for its ' +
+    'four text fields — componentAvailability, integrationComplexity, problemSolutionComplexity, ' +
+    'budgetRealism, safetyRisk) and set softwareRigor to null. Never invent hardware concerns for a pure ' +
+    'software proposal, and never invent software-architecture concerns for a pure hardware proposal. ' +
+    'Hardware feature points are driven by feasibility + integrationComplexity + problemSolutionComplexity ' +
+    'ONLY — do not factor budget/cost into a hardware feature\'s point value; a feature that is hard to ' +
+    'integrate or solves a genuinely complex problem scores high regardless of how cheap or expensive its ' +
+    'parts are. budgetRealism and safetyRisk inform hardFeasibilityBlocker, not feature points.\n\n' +
+    'HARD FEASIBILITY BLOCKER — set hardFeasibilityBlocker.blocked = true (with a one-sentence reason) ' +
+    'ONLY for a genuine dealbreaker a strong score elsewhere cannot excuse: unsafe for a student to build ' +
+    'as described (e.g. high-voltage/high-current work with no isolation plan, a biosafety violation), ' +
+    'requires access/approval a student team realistically cannot obtain (e.g. full vehicle CAN bus access, ' +
+    'a hospital IRB, a clinical trial), or a budget/component requirement that is impossible at the scale ' +
+    'described (e.g. promising 20 precision actuators on a "low-cost" budget with no path to affording ' +
+    'them). Do NOT set this for ordinary difficulty, ambition, or "this is hard" — it exists for proposals ' +
+    'that cannot be built as described, not proposals that are merely challenging.\n\n' +
+    'You are ALSO scoring the proposal on 7 core rubrics AND 7 industry-standard rubrics, each 0-100, and ' +
+    'extracting catalog metadata, exactly as before:\n' +
+    '- Core rubrics (unchanged): relevance, clarity, feasibility, novelty, expectedOutcome, ' +
+    'featureCompleteness, industryImpact.\n' +
+    '- Industry rubrics (new — score these as rigorously as the core ones, not as an afterthought):\n' +
+    '    * implementationDepth — how much real engineering work this actually requires vs. gluing ' +
+    'together existing tools with no original work.\n' +
+    '    * userValue — would a real target user actually want and use the finished thing.\n' +
+    '    * scalabilityOrDeployability — could this run for more than a demo (more users, more data, real ' +
+    'field conditions) without a rewrite.\n' +
+    '    * safetyAndRisk — physical, data, or financial risk the finished thing could pose if used as ' +
+    'intended (this is broader than hardFeasibilityBlocker — most proposals score fine here even with no ' +
+    'blocker).\n' +
+    '    * maintainability — could someone other than the original team understand and extend this.\n' +
+    '    * costRealism — is the described budget/resource plan realistic for a student team, whether or ' +
+    'not hardware is involved.\n' +
+    '    * testingAndValidation — is there a credible plan to verify the thing actually works, not just ' +
+    'that it runs.\n\n' +
     'Respond with ONLY a JSON object in EXACTLY this shape — no wrapper key, no extra keys:\n' +
     '{\n' +
     '  "verdict": "ACCEPTED" | "REJECTED" | "NEEDS_IMPROVEMENT",\n' +
-    '  "overallScore": number (0-100, the weighted average of the rubric scores),\n' +
+    '  "overallScore": number (0-100, your best-effort weighted average — the backend recomputes this ' +
+    'deterministically, so this value is advisory only),\n' +
     '  "reasons": string[],\n' +
     '  "improvementHints": string[],\n' +
     '  "rubrics": {\n' +
@@ -84,6 +134,16 @@ export function buildIdeaValidationPrompt(rawText: string, nearest: NearestEntry
     '    "featureCompleteness": { "score": number, "rationale": string },\n' +
     '    "industryImpact":      { "score": number, "rationale": string }\n' +
     '  },\n' +
+    '  "industryRubrics": {\n' +
+    '    "implementationDepth":         { "score": number, "rationale": string },\n' +
+    '    "userValue":                   { "score": number, "rationale": string },\n' +
+    '    "scalabilityOrDeployability":  { "score": number, "rationale": string },\n' +
+    '    "safetyAndRisk":               { "score": number, "rationale": string },\n' +
+    '    "maintainability":             { "score": number, "rationale": string },\n' +
+    '    "costRealism":                 { "score": number, "rationale": string },\n' +
+    '    "testingAndValidation":        { "score": number, "rationale": string }\n' +
+    '  },\n' +
+    '  "hardFeasibilityBlocker": { "blocked": boolean, "reason": string | null },\n' +
     '  "duplicate": { "isDuplicate": boolean, "similarProjectTitle": string, "similarityScore": number },\n' +
     '  "extracted": {\n' +
     '    "title": string, "soul": string (one-line essence), "domain": string, "sector": string,\n' +
@@ -100,17 +160,21 @@ export function buildIdeaValidationPrompt(rawText: string, nearest: NearestEntry
     '    "projectPotential":  { "score": number, "rationale": string }\n' +
     '  },\n' +
     '  "hardwareConstraints": { "componentAvailability": string, "integrationComplexity": string, ' +
-    '"problemSolutionComplexity": string } | null,\n' +
+    '"problemSolutionComplexity": string, "budgetRealism": string, "safetyRisk": string } | null,\n' +
+    '  "softwareRigor": { "architectureClarity": string, "dataModelAndApiFeasibility": string, ' +
+    '"securityAndPrivacy": string, "testingAndDeploymentPlan": string, "trivialCrudRisk": string } | null,\n' +
     '  "features": [ { "name": string, "description": string, "importance": "High"|"Medium"|"Low", ' +
     '"implementationMethod": string, "points": 50|100|150|200|250|300, "aiRationale": string } ]\n' +
     '}\n\n' +
-    'Grading guidance: verdict is ACCEPTED when overallScore >= 70 and the proposal is not a ' +
-    'near-copy of an existing catalog entry. Use NEEDS_IMPROVEMENT for a real but under-specified ' +
-    'idea (50-69). Reserve REJECTED for vague, trivial, or duplicate submissions. ' +
-    'A detailed, well-scoped proposal with a clear industry problem, defined users, a concrete ' +
-    'deliverable and a realistic stack should score highly — do not mark it down for length. ' +
-    'nearestCatalogEntries are provided for duplicate judgement only: sharing a broad domain ' +
-    '(e.g. both are "smart city" projects) is NOT duplication. Set isDuplicate only if the ' +
+    'Grading guidance: a proposal is ACCEPTED when its recomputed overall score is >= 70, it is not a ' +
+    'near-copy of an existing catalog entry, and hardFeasibilityBlocker.blocked is false. Use ' +
+    'NEEDS_IMPROVEMENT for a real but under-specified idea (50-69). Reserve REJECTED for vague, trivial, ' +
+    'or duplicate submissions, or a genuine hard feasibility blocker. A detailed, well-scoped proposal ' +
+    'with a clear industry problem, defined users, a concrete deliverable and a realistic stack should ' +
+    'score highly across BOTH rubric sets — do not mark it down for length, and do not let a strong core-' +
+    'rubric score paper over a weak industry-rubric score (e.g. high novelty but no realistic testing plan ' +
+    'is still a real gap). nearestCatalogEntries are provided for duplicate judgement only: sharing a ' +
+    'broad domain (e.g. both are "smart city" projects) is NOT duplication. Set isDuplicate only if the ' +
     'proposal solves substantially the same problem in substantially the same way.';
 
   return [

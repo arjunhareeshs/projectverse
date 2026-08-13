@@ -29,6 +29,48 @@ export const HardwareConstraintsSchema = z.object({
   componentAvailability: z.string(),
   integrationComplexity: z.string(),
   problemSolutionComplexity: z.string(),
+  // Discipline-agnostic on purpose: the same two fields cover electrical/IoT
+  // (power draw, certification), mechanical (fabrication tolerance, material
+  // sourcing), mechatronics (control-loop/calibration), automobile (vehicle
+  // integration, regulatory), agriculture (field deployability, weather
+  // variability), and biotech (biosafety, reagent availability) — the model
+  // is instructed to reason about whichever discipline the domain/sector
+  // implies rather than the schema hard-coding a discipline enum.
+  budgetRealism: z.string(),
+  safetyRisk: z.string(),
+});
+
+// Software-only counterpart to hardwareConstraints — null for Hardware/IoT/Hybrid.
+export const SoftwareRigorSchema = z.object({
+  architectureClarity: z.string(),
+  dataModelAndApiFeasibility: z.string(),
+  securityAndPrivacy: z.string(),
+  testingAndDeploymentPlan: z.string(),
+  // Explicit anti-grade-inflation field: the model must name the CRUD-triviality
+  // risk directly instead of quietly scoring a glorified to-do list as novel.
+  trivialCrudRisk: z.string(),
+});
+
+const industryRubricField = z.object({ score: z.number().min(0).max(100), rationale: z.string() });
+
+export const IndustryRubricsSchema = z.object({
+  implementationDepth: industryRubricField,
+  userValue: industryRubricField,
+  scalabilityOrDeployability: industryRubricField,
+  safetyAndRisk: industryRubricField,
+  maintainability: industryRubricField,
+  costRealism: industryRubricField,
+  testingAndValidation: industryRubricField,
+});
+
+// A single non-negotiable blocker (unsafe hardware, budget impossible at the
+// stated scale, requires access/approval a student team cannot get) that must
+// force rejection regardless of how high every other score comes in. Kept as
+// its own field rather than inferred from rubric text so the backend can gate
+// on it deterministically instead of re-parsing prose.
+export const HardFeasibilityBlockerSchema = z.object({
+  blocked: z.boolean(),
+  reason: z.string().nullable(),
 });
 
 // The rubric/duplicate/extracted shape from the existing ProposalEvaluationSchema
@@ -79,6 +121,9 @@ export const IdeaValidationSchema = ProposalEvaluationSchema.extend({
     projectPotential: PerspectiveScoreSchema,
   }),
   hardwareConstraints: HardwareConstraintsSchema.nullable(),
+  softwareRigor: SoftwareRigorSchema.nullable(),
+  industryRubrics: IndustryRubricsSchema,
+  hardFeasibilityBlocker: HardFeasibilityBlockerSchema,
   features: z.array(ExtractedFeatureSchema).min(1).max(8),
 });
 
@@ -87,6 +132,9 @@ export type IdeaValidation = z.infer<typeof IdeaValidationSchema>;
 export type ExtractedFeature = z.infer<typeof ExtractedFeatureSchema>;
 export type PerspectiveScore = z.infer<typeof PerspectiveScoreSchema>;
 export type HardwareConstraints = z.infer<typeof HardwareConstraintsSchema>;
+export type SoftwareRigor = z.infer<typeof SoftwareRigorSchema>;
+export type IndustryRubrics = z.infer<typeof IndustryRubricsSchema>;
+export type HardFeasibilityBlocker = z.infer<typeof HardFeasibilityBlockerSchema>;
 
 export const FeatureChangeSchema = z.object({
   points: pointsLiteral,

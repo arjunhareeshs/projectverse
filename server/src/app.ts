@@ -11,7 +11,6 @@ import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { publicOpportunitiesRoutes } from './modules/dashboard/public.routes';
 import { teamRoutes } from './modules/teams/team.routes';
 import { taskRoutes } from './modules/tasks/task.routes';
-import { documentRoutes } from './modules/documents/document.routes';
 import { notificationRoutes } from './modules/notifications/notification.routes';
 import { healthRoutes } from './routes/health.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
@@ -56,7 +55,6 @@ export function createApp() {
   app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/teams', teamRoutes);
   app.use('/api/tasks', taskRoutes);
-  app.use('/api/documents', documentRoutes);
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/internal', internalRoutes);

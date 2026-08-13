@@ -19,7 +19,6 @@ import {
 import { cn } from '../utils/cn';
 import { projectService } from '../services/project.service';
 import { taskService } from '../services/task.service';
-import { authService } from '../services/auth.service';
 
 interface TaskCard {
   id: string;
@@ -35,11 +34,18 @@ interface TaskCard {
   projectName?: string;
 }
 
+interface ProjectMemberOption {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
 interface Project {
   id: string;
   name: string;
   initials: string;
   color: string;
+  members?: ProjectMemberOption[];
 }
 
 type KanbanStatus = 'todo' | 'in-progress' | 'in-review' | 'done';
@@ -81,7 +87,6 @@ export const KanbanBoard: React.FC = () => {
   const [dragOverCol, setDragOverCol] = useState<KanbanStatus | null>(null);
 
   // Task creation states
-  const [users, setUsers] = useState<any[]>([]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDesc, setTaskDesc] = useState('');
@@ -93,7 +98,10 @@ export const KanbanBoard: React.FC = () => {
   const [createError, setCreateError] = useState('');
 
   const loadTasks = useCallback(async () => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const data = await taskService.getProjectTasks(selectedProjectId);
@@ -138,18 +146,6 @@ export const KanbanBoard: React.FC = () => {
     window.addEventListener('pv:refresh', handleRefresh);
     return () => window.removeEventListener('pv:refresh', handleRefresh);
   }, [loadTasks]);
-
-  useEffect(() => {
-    const loadUsers = async () => {
-      try {
-        const u = await authService.getUsers();
-        setUsers(u);
-      } catch (err) {
-        console.error('Failed to load users for assignment:', err);
-      }
-    };
-    loadUsers();
-  }, []);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -233,6 +229,7 @@ export const KanbanBoard: React.FC = () => {
   };
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
+  const assignableUsers = selectedProject?.members ?? [];
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden">
@@ -502,7 +499,7 @@ export const KanbanBoard: React.FC = () => {
                     className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   >
                     <option value="">Unassigned</option>
-                    {users.map((u) => (
+                    {assignableUsers.map((u) => (
                       <option key={u.id} value={u.id}>{u.fullName}</option>
                     ))}
                   </select>

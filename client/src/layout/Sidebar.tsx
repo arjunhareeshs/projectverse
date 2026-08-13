@@ -105,7 +105,6 @@ export const Sidebar: React.FC = () => {
     {
       title: 'WORKSPACE',
       items: [
-        { icon: FileText, label: 'Documents', to: '/documents' },
         { icon: Bell, label: 'Notifications', to: '/notifications' },
       ],
     },

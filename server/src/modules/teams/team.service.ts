@@ -774,7 +774,7 @@ export const teamService = {
       throw new Error('This person is already part of another team.');
     }
 
-    return prisma.teamInvite.create({
+    const invite = await prisma.teamInvite.create({
       data: {
         teamId,
         email: data.email,
@@ -787,6 +787,17 @@ export const teamService = {
       },
       include: { user: { select: userSelect } },
     });
+
+    if (existingUser?.id) {
+      const projectNote = team.currentProjectLabel ? ` working on "${team.currentProjectLabel}"` : '';
+      notificationService.createForUser(
+        existingUser.id,
+        'Team Invitation',
+        `You've been invited to join team "${team.name}"${projectNote} as ${data.roleLabel || 'Member'}.`
+      ).catch((err) => logger.error('Failed sending team invite notification', err));
+    }
+
+    return invite;
   },
 
   async requestToJoin(organizationId: string, teamId: string, userId: string) {
@@ -808,7 +819,7 @@ export const teamService = {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error('User not found');
 
-    return prisma.teamInvite.create({
+    const request = await prisma.teamInvite.create({
       data: {
         teamId,
         email: user.email,
@@ -818,6 +829,16 @@ export const teamService = {
         invitedBy: userId,
       },
     });
+
+    if (team.leadId) {
+      notificationService.createForUser(
+        team.leadId,
+        'New Join Request',
+        `${user.fullName} requested to join team "${team.name}".`
+      ).catch((err) => logger.error('Failed sending join-request notification', err));
+    }
+
+    return request;
   },
 
   async respondToInvite(

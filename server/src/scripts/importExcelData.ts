@@ -58,7 +58,6 @@ async function main() {
   await prisma.teamInvite.deleteMany().catch(() => null);
   await prisma.teamMessage.deleteMany().catch(() => null);
   await prisma.teamCollaboration.deleteMany().catch(() => null);
-  await prisma.document.deleteMany().catch(() => null);
   await prisma.fileAsset.deleteMany().catch(() => null);
   await prisma.meeting.deleteMany().catch(() => null);
   await prisma.report.deleteMany().catch(() => null);

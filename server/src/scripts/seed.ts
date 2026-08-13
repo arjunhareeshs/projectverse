@@ -79,7 +79,6 @@ async function runSeed() {
     await prisma.task.deleteMany().catch(() => null);
     await prisma.projectMember.deleteMany().catch(() => null);
     await prisma.project.deleteMany().catch(() => null);
-    await prisma.document.deleteMany().catch(() => null);
     await prisma.fileAsset.deleteMany().catch(() => null);
     await prisma.meeting.deleteMany().catch(() => null);
     await prisma.report.deleteMany().catch(() => null);
@@ -571,12 +570,6 @@ async function runSeed() {
   const boardNames = ['Sprint Kanban Board', 'Backlog Board'];
   const columnNames = ['Todo', 'In Progress', 'In Review', 'Done'];
 
-  const docTitles = [
-    'Software Requirements Specification',
-    'System Architecture Design',
-    'API Documentation Reference',
-    'Weekly Status Report',
-  ];
 
   const meetingTitles = [
     'Sprint Planning Sync',
@@ -599,7 +592,6 @@ async function runSeed() {
   const tasksToCreate: any[] = [];
   const teamMessagesToCreate: any[] = [];
   const activityLogsToCreate: any[] = [];
-  const documentsToCreate: any[] = [];
   const meetingsToCreate: any[] = [];
 
   const genId = (prefix: string, idx: number, projId: string) => {
@@ -690,21 +682,6 @@ async function runSeed() {
       }
     }
 
-    // Documents
-    if (primaryMemberId) {
-      for (let dIdx = 0; dIdx < 2; dIdx++) {
-        documentsToCreate.push({
-          projectId: project.id,
-          userId: primaryMemberId,
-          title: docTitles[dIdx % docTitles.length],
-          fileName: docTitles[dIdx % docTitles.length] + '.pdf',
-          fileSize: 1024 * 256 * (dIdx + 1),
-          fileUrl: 'https://projectverse-assets.s3.amazonaws.com/mock-doc.pdf',
-          mimeType: 'application/pdf',
-        });
-      }
-    }
-
     // Meetings
     for (let mtIdx = 0; mtIdx < 2; mtIdx++) {
       meetingsToCreate.push({
@@ -763,10 +740,6 @@ async function runSeed() {
         skipDuplicates: true,
       });
     }
-  }
-  if (documentsToCreate.length > 0) {
-    console.log(`📁 Creating ${documentsToCreate.length} Documents...`);
-    await prisma.document.createMany({ data: documentsToCreate, skipDuplicates: true });
   }
   if (meetingsToCreate.length > 0) {
     console.log(`📅 Creating ${meetingsToCreate.length} Meetings...`);

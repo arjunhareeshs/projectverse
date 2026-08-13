@@ -31,7 +31,6 @@ import { TeamPage } from './pages/TeamPage';
 import { TeamDetailPage } from './pages/TeamDetailPage';
 import { TeamMembers } from './pages/TeamMembers';
 import { TeamCollaborate } from './pages/TeamCollaborate';
-import { Documents } from './pages/Documents';
 import { FileManager } from './pages/FileManager';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { Notifications } from './pages/Notifications';
@@ -82,7 +81,6 @@ function App() {
               <Route path="/teams/:id" element={<TeamDetailPage />} />
               <Route path="/teams/:teamId/members" element={<TeamMembers />} />
               <Route path="/teams/:id/collaborate" element={<TeamCollaborate />} />
-              <Route path="/documents" element={<Documents />} />
               <Route path="/files" element={<FileManager />} />
               <Route path="/analytics" element={<AnalyticsPage />} />
               <Route path="/notifications" element={<Notifications />} />

@@ -10,7 +10,7 @@ import {
   ChevronRight,
   Filter,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProjectCard, ProjectCardData } from '../components/projects/ProjectCard';
 import { ProjectDetailModal, ProjectDetailPayload } from '../components/projects/ProjectDetailModal';
 
@@ -36,6 +36,8 @@ export const ProjectCatalogPage: React.FC = () => {
 
   const token = useAppSelector((s) => s.auth.token);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkedProjectId = searchParams.get('project');
 
   const fetchCatalog = async () => {
     try {
@@ -63,24 +65,37 @@ export const ProjectCatalogPage: React.FC = () => {
     return Array.from(set).sort();
   }, [projects]);
 
+  // Subdomains are scoped to the selected domain — picking a domain must not
+  // leave subdomains from other domains selectable (they'd filter to zero results).
   const sectors = useMemo(() => {
     const set = new Set<string>();
     projects.forEach((p) => {
-      if (p.sector) set.add(p.sector);
+      if (!p.sector) return;
+      if (selectedDomain !== 'all' && p.domain !== selectedDomain) return;
+      set.add(p.sector);
     });
     return Array.from(set).sort();
-  }, [projects]);
+  }, [projects, selectedDomain]);
 
   // Filtered projects
   const filteredProjects = useMemo(() => {
     return projects.filter((p) => {
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchesName = (p.name || '').toLowerCase().includes(query);
-        const matchesSoul = (p.soul || '').toLowerCase().includes(query);
-        const matchesStatement = (p.problemStatement || '').toLowerCase().includes(query);
-        const matchesTech = (p.technologies || []).some((t) => t.toLowerCase().includes(query));
-        if (!matchesName && !matchesSoul && !matchesStatement && !matchesTech) return false;
+        const haystack = [
+          p.name,
+          p.shortName,
+          p.soul,
+          p.problemStatement,
+          p.description,
+          p.domain,
+          p.sector,
+          p.type,
+          p.difficultyLevel,
+          ...(p.technologies || []),
+        ];
+        const matches = haystack.some((field) => (field || '').toLowerCase().includes(query));
+        if (!matches) return false;
       }
       if (selectedDomain !== 'all' && p.domain !== selectedDomain) return false;
       if (selectedSector !== 'all' && p.sector !== selectedSector) return false;
@@ -107,6 +122,34 @@ export const ProjectCatalogPage: React.FC = () => {
     }
     setIsModalOpen(true);
   };
+
+  // ?project=<id> deep link — used by the "Claim Project" action on an accepted
+  // proposal, which needs to land directly on that statement's claim flow.
+  useEffect(() => {
+    if (!token || !deepLinkedProjectId) return;
+
+    let cancelled = false;
+    api
+      .get(`/projects/catalog/${deepLinkedProjectId}`)
+      .then((res) => {
+        if (cancelled) return;
+        setSelectedProject(res.data);
+        setIsModalOpen(true);
+      })
+      .catch(() => {
+        if (!cancelled) setError('That problem statement could not be opened.');
+      })
+      .finally(() => {
+        if (cancelled) return;
+        // Drop the param so a later close/reopen isn't fought by this effect.
+        searchParams.delete('project');
+        setSearchParams(searchParams, { replace: true });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, deepLinkedProjectId]);
 
   return (
     <div className="min-h-screen bg-slate-50/50 p-6 md:p-8">
@@ -155,6 +198,7 @@ export const ProjectCatalogPage: React.FC = () => {
             value={selectedDomain}
             onChange={(e) => {
               setSelectedDomain(e.target.value);
+              setSelectedSector('all'); // previous subdomain may not exist under the new domain
               setCurrentPage(1);
             }}
             className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 font-medium outline-none focus:border-blue-500 cursor-pointer"

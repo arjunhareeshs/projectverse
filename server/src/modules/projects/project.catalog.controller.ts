@@ -8,22 +8,14 @@ import { wordOverlapRatio, jaccardSimilarity } from '../../shared/stringUtils';
 import { MAX_TEAMS_PER_STATEMENT, APPROACH_OVERLAP_THRESHOLD, availability } from './selection.constants';
 import { getTeamSelectionReadiness } from './selection.readiness';
 import { computeFit, DOMAIN_REQUIRED_SKILLS } from '../metrics/selectionFit';
-import { validateIdea, extractFeaturesForCombinedStatement, generatePhasePlan, MIN_PROPOSAL_LENGTH } from '../intelligence/ideaIntelligence.service';
-import { IdeaValidation } from '../intelligence/ideaIntelligence.schemas';
-
-// Full audit snapshot of why the AI scored/decided what it did — stored in
-// ProblemStatementProposal.scores (Json). Previously only `rubrics` was kept,
-// silently dropping the 5-perspective "strengths" scoring, hardware
-// constraints, and duplicate detail after the one-shot API response.
-function buildEvaluationSnapshot(evaluation: IdeaValidation) {
-  return {
-    overallScore: evaluation.overallScore,
-    rubrics: evaluation.rubrics,
-    perspectives: evaluation.perspectives,
-    hardwareConstraints: evaluation.hardwareConstraints,
-    duplicate: evaluation.duplicate,
-  };
-}
+import {
+  validateIdea,
+  extractFeaturesForCombinedStatement,
+  generatePhasePlan,
+  MIN_PROPOSAL_LENGTH,
+  MAX_PROPOSAL_LENGTH,
+} from '../intelligence/ideaIntelligence.service';
+import { queueProposalAnalysis, PROPOSAL_PENDING } from './proposal.worker';
 
 const ApproachCheckSchema = z.object({
   uniquenessScore: z.number().min(0).max(100),
@@ -33,6 +25,53 @@ const ApproachCheckSchema = z.object({
   suggestions: z.array(z.string()).default([]),
   keywords: z.array(z.string()).default([]),
 });
+
+/** Same input, same verdict — a differentiation approach shouldn't flip
+ *  ACCEPT/REJECT on a retry with identical text. */
+const APPROACH_CHECK_TEMPERATURE = 0;
+
+// Generic phrases that carry no actual technical content. A "first claimer"
+// approach used to skip quality checking entirely (see checkApproachUniqueness
+// history) — this heuristic is the AI-unavailable fallback for that path, so a
+// vague approach can't sail through untouched just because no one else has
+// claimed the statement yet.
+const VAGUE_APPROACH_PATTERNS = [
+  /\bwe will (use|make|build|create|develop)\b/i,
+  /\b(use|using) ai\b.*\b(app|application|system|platform)\b/i,
+  /\bmake an? (app|application|website|system|platform)\b/i,
+  /\bbuild an? (app|application|website|system|platform)\b/i,
+];
+
+/** Heuristic-only vagueness check (no LLM): flags text that is generic
+ *  filler with no concrete architecture, method, or target-user detail. */
+function looksVague(text: string): { vague: boolean; reason: string } {
+  const trimmed = text.trim();
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+
+  if (wordCount < 12) {
+    return {
+      vague: true,
+      reason:
+        'This is too short to describe a real technical approach — it reads as a placeholder rather ' +
+        'than a plan. Name the architecture, method, or target-user angle that makes your approach ' +
+        'concrete.',
+    };
+  }
+
+  const matchesGenericPattern = VAGUE_APPROACH_PATTERNS.some((pattern) => pattern.test(trimmed));
+  if (matchesGenericPattern) {
+    return {
+      vague: true,
+      reason:
+        'This describes what the project is (e.g. "an app" or "using AI") without saying HOW your team ' +
+        'will build it — no architecture, algorithm, data source, or target-user angle. Replace the ' +
+        'generic description with specifics: what tech stack, what makes your implementation different, ' +
+        'and who exactly you\'re building it for.',
+    };
+  }
+
+  return { vague: false, reason: '' };
+}
 
 const VALID_CATEGORIES: ProjectCategory[] = ['MINI', 'FINAL_YEAR', 'RESEARCH'];
 function coerceCategory(value: unknown): ProjectCategory | undefined {
@@ -85,25 +124,6 @@ type MentorReportResult = {
   report: string;
   extracted: ExtractedPlan;
 };
-
-async function generateProblemId(prefix: 'H' | 'S' | 'HS') {
-  const existing = await prisma.project.findMany({
-    where: { problemId: { startsWith: prefix } },
-    select: { problemId: true },
-  });
-  let max = 0;
-  for (const e of existing) {
-    const num = parseInt((e.problemId || '').replace(prefix, ''), 10);
-    if (!Number.isNaN(num) && num > max) max = num;
-  }
-  return `${prefix}${String(max + 1).padStart(4, '0')}`;
-}
-
-function typeToPrefix(type: string): 'H' | 'S' | 'HS' {
-  if (type === 'Hardware' || type === 'IoT') return 'H';
-  if (type === 'Hardware & Software' || type === 'Hybrid' || type === 'Combination') return 'HS';
-  return 'S';
-}
 
 export const catalogController = {
   async getReadiness(req: Request, res: Response) {
@@ -305,17 +325,6 @@ export const catalogController = {
         }))
         .filter((c: any) => Boolean(c.approach));
 
-      if (existingClaims.length === 0) {
-        return res.json({
-          uniquenessScore: 95,
-          verdict: 'ACCEPT',
-          overlapsWith: null,
-          reason: 'You are the first team claiming this project statement! Your approach is unique.',
-          suggestions: ['Ensure your architecture addresses system reliability and edge cases.'],
-          keywords: proposedApproach.toLowerCase().split(/\s+/).slice(0, 5),
-        });
-      }
-
       // Jaccard, NOT wordOverlapRatio — wordOverlapRatio divides by the smaller
       // word set, so a long, detailed approach trivially "contains" every word
       // of a short one and scores as a near-duplicate. This same bug was fixed
@@ -331,33 +340,54 @@ export const catalogController = {
         }
       }
 
-      // uniquenessScore is derived from the SAME threshold selectProject enforces
-      // (APPROACH_OVERLAP_THRESHOLD), so a heuristic ACCEPT here can never be
-      // followed by a surprise 409 at claim time when the LLM is unavailable.
+      const vagueness = looksVague(proposedApproach);
+
+      // Heuristic (AI-unavailable) fallback. Vagueness is checked FIRST and
+      // independent of distinctness — a vague approach is rejected even when
+      // it's the first claim on this statement, since "unique" and "specific"
+      // are different qualities and both are required.
+      // uniquenessScore for the distinctness case is derived from the SAME
+      // threshold selectProject enforces (APPROACH_OVERLAP_THRESHOLD), so a
+      // heuristic ACCEPT here can never be followed by a surprise 409 at claim
+      // time when the LLM is unavailable.
       const heuristicScore = Math.max(10, Math.min(100, Math.round((1 - maxOverlap) * 100)));
-      const heuristicVerdict: 'ACCEPT' | 'REJECT' =
-        maxOverlap <= APPROACH_OVERLAP_THRESHOLD ? 'ACCEPT' : 'REJECT';
+      const heuristicVerdict: 'ACCEPT' | 'REJECT' = vagueness.vague
+        ? 'REJECT'
+        : maxOverlap <= APPROACH_OVERLAP_THRESHOLD
+        ? 'ACCEPT'
+        : 'REJECT';
       const heuristicFallback = {
-        uniquenessScore: heuristicScore,
+        uniquenessScore: vagueness.vague ? 20 : heuristicScore,
         verdict: heuristicVerdict,
-        overlapsWith: maxOverlap > 0.25 ? mostSimilarTeam : null,
-        reason:
-          heuristicVerdict === 'ACCEPT'
-            ? `Your approach shares only ${Math.round(maxOverlap * 100)}% vocabulary overlap with the ` +
+        overlapsWith: !vagueness.vague && maxOverlap > 0.25 ? mostSimilarTeam : null,
+        reason: vagueness.vague
+          ? vagueness.reason
+          : heuristicVerdict === 'ACCEPT'
+          ? existingClaims.length === 0
+            ? 'You are the first team claiming this project statement, and your approach names a ' +
+              'concrete technical angle rather than restating the problem — it reads as a genuine plan.'
+            : `Your approach shares only ${Math.round(maxOverlap * 100)}% vocabulary overlap with the ` +
               `nearest existing claim (${mostSimilarTeam || 'the other teams'}), which is well within the ` +
               `${Math.round(APPROACH_OVERLAP_THRESHOLD * 100)}% similarity limit — it reads as a distinct ` +
               'technical angle on this problem statement.'
-            : `Your approach overlaps ${Math.round(maxOverlap * 100)}% with ${mostSimilarTeam}'s claim, ` +
-              `above the ${Math.round(APPROACH_OVERLAP_THRESHOLD * 100)}% similarity limit allowed for this ` +
-              'problem statement. Note: this is an automated fallback check (the AI evaluator was ' +
-              'unavailable), so it only compares shared vocabulary, not underlying architecture.',
+          : `Your approach overlaps ${Math.round(maxOverlap * 100)}% with ${mostSimilarTeam}'s claim, ` +
+            `above the ${Math.round(APPROACH_OVERLAP_THRESHOLD * 100)}% similarity limit allowed for this ` +
+            'problem statement. Note: this is an automated fallback check (the AI evaluator was ' +
+            'unavailable), so it only compares shared vocabulary, not underlying architecture.',
         suggestions:
           heuristicVerdict === 'REJECT'
-            ? [
-                'Swap the tech stack, algorithm, or core architecture pattern you plan to use.',
-                'Target a different user group or use case within the same problem statement.',
-                'Lead with a specific feature or constraint the other team\'s claim does not mention.',
-              ]
+            ? vagueness.vague
+              ? [
+                  'Name the specific architecture, algorithm, or data source you\'ll use — not just the ' +
+                  'category of technology (e.g. "AI").',
+                  'State who the target user is and what makes your approach fit them specifically.',
+                  'Describe one implementation detail a reviewer could actually evaluate for feasibility.',
+                ]
+              : [
+                  'Swap the tech stack, algorithm, or core architecture pattern you plan to use.',
+                  'Target a different user group or use case within the same problem statement.',
+                  'Lead with a specific feature or constraint the other team\'s claim does not mention.',
+                ]
             : [],
         keywords: proposedApproach.toLowerCase().split(/\s+/).slice(0, 5),
       };
@@ -366,26 +396,42 @@ export const catalogController = {
         {
           role: 'system',
           content:
-            'You are an AI evaluator checking if a student team\'s proposed technical approach is ' +
-            'meaningfully distinct from other teams already claiming the same problem statement, and ' +
-            'you are writing your verdict directly for the student to read and act on.\n\n' +
+            'You are an AI evaluator gatekeeping whether a student team\'s proposed technical approach ' +
+            'is good enough to claim this problem statement, and you are writing your verdict directly ' +
+            'for the student to read and act on. You are checking TWO independent things, and BOTH must ' +
+            'pass for ACCEPT:\n\n' +
+            '1. QUALITY / DEPTH — is this a real, specific technical plan, or a vague restatement of the ' +
+            'problem? A real approach names at least one of: the concrete architecture or method, the ' +
+            'specific algorithm/model/technique, the data source, or the exact target-user angle that ' +
+            'makes this team\'s execution distinct. REJECT generic filler like "we will use AI and make ' +
+            'an app for this" or "we will build a website to solve the problem" — restating what the ' +
+            'project is, without saying HOW the team will build it, is not an approach. This check ' +
+            'applies even if this is the FIRST team to claim the statement — being first does not excuse ' +
+            'vagueness.\n' +
+            '2. DISTINCTNESS — if other teams have already claimed this statement, is this approach ' +
+            'meaningfully different from theirs (different architecture, method, target-user angle, or ' +
+            'implementation depth), or is it a near-duplicate with cosmetic wording changes?\n\n' +
             'Respond ONLY with a JSON object matching this schema: {"uniquenessScore": number (0-100), ' +
             '"verdict": "ACCEPT"|"REJECT", "overlapsWith": string|null, "reason": string, ' +
             '"suggestions": string[], "keywords": string[]}.\n\n' +
-            'If uniquenessScore < 55, set verdict to REJECT.\n\n' +
+            'uniquenessScore reflects BOTH checks: score low (< 55, verdict REJECT) if the approach is ' +
+            'vague regardless of distinctness, AND score low if it is distinct-but-vague or specific-but-' +
+            'duplicate. Only score high if it is both specific AND (when other claims exist) distinct.\n\n' +
             'WRITING THE "reason" FIELD — this is read by a student deciding whether to submit, so it ' +
             'must be clear enough to act on, not a one-line label:\n' +
             '- 3-5 sentences, plain language, no jargon left unexplained.\n' +
-            '- Name the SPECIFIC overlapping elements if rejecting (e.g. "both use a Flutter app with ' +
-            'BLE sensor polling and a shared Firebase backend"), not just "too similar".\n' +
-            '- Name the SPECIFIC differentiating elements if accepting (e.g. "your use of solar-thermal ' +
-            'storage instead of battery storage, and your focus on postnatal wards specifically, sets ' +
-            'this apart").\n' +
+            '- If rejecting for vagueness, say plainly that no concrete architecture/method/data-source/' +
+            'target-user angle was given — do not soften this into "could be more detailed".\n' +
+            '- If rejecting for overlap, name the SPECIFIC overlapping elements (e.g. "both use a Flutter ' +
+            'app with BLE sensor polling and a shared Firebase backend"), not just "too similar".\n' +
+            '- If accepting, name the SPECIFIC elements that make it concrete and (if applicable) ' +
+            'differentiating (e.g. "your use of solar-thermal storage instead of battery storage, and ' +
+            'your focus on postnatal wards specifically, sets this apart").\n' +
             '- If overlapsWith is set, explain concretely what is shared with that team\'s approach.\n\n' +
-            'WRITING "suggestions" (only when rejecting): give 2-3 concrete, specific pivots grounded in ' +
-            'this exact problem statement and this exact overlap — not generic advice like "be more ' +
-            'unique". Each suggestion should name an actual technology, user group, or feature the ' +
-            'student could change to.',
+            'WRITING "suggestions" (only when rejecting): give 2-3 concrete, specific next steps grounded ' +
+            'in this exact problem statement — not generic advice like "be more unique" or "add more ' +
+            'detail". Each suggestion should name an actual technology, user group, or feature the ' +
+            'student could add or change to.',
         },
         {
           role: 'user',
@@ -402,6 +448,7 @@ export const catalogController = {
         schema: ApproachCheckSchema,
         retries: 2,
         maxTokens: 900,
+        temperature: APPROACH_CHECK_TEMPERATURE,
       });
 
       res.json(result);
@@ -468,11 +515,25 @@ export const catalogController = {
     }
   },
 
+  // Accepts the proposal, records it as PENDING, and returns immediately. The
+  // AI scoring and (on acceptance) catalog publication run detached in
+  // proposal.worker, so the student can navigate away without cancelling the
+  // analysis — they poll GET /proposals/:id for the outcome.
+  //
+  // Any `evaluation` sent by the client is deliberately ignored: trusting it
+  // would let a submitter forge an ACCEPTED verdict and publish arbitrary text
+  // into the shared catalog.
   async proposeProblemStatement(req: Request, res: Response) {
     try {
       const user = req.user;
       if (!user) {
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+
+      if (!user.organizationId) {
+        return res
+          .status(StatusCodes.BAD_REQUEST)
+          .json({ message: 'You must belong to an organization to propose a problem statement.' });
       }
 
       const { rawText, statement } = req.body;
@@ -484,137 +545,28 @@ export const catalogController = {
         });
       }
 
-      // Re-score server-side. The client's `evaluation` is a preview only and is
-      // deliberately ignored — trusting it would let a submitter forge an
-      // ACCEPTED verdict and publish arbitrary text into the shared catalog.
-      const evaluation = await validateIdea(proposalText);
-
-      if (evaluation.verdict !== 'ACCEPTED') {
-        // Keep the rejection on record so repeat/duplicate submissions are auditable.
-        await prisma.problemStatementProposal.create({
-          data: {
-            submitterId: user.id,
-            rawText: proposalText,
-            scores: buildEvaluationSnapshot(evaluation),
-            verdict: evaluation.verdict,
-            reasons: evaluation.reasons,
-            improvementHints: evaluation.improvementHints,
-            duplicateOfId: evaluation.duplicate?.similarProjectId || null,
-            extracted: evaluation.extracted,
-          },
-        });
-
-        return res.status(StatusCodes.UNPROCESSABLE_ENTITY).json({
-          message:
-            evaluation.verdict === 'REJECTED'
-              ? 'This proposal did not meet the catalog acceptance criteria.'
-              : 'This proposal needs improvement before it can be added to the catalog.',
-          evaluation,
+      if (proposalText.length > MAX_PROPOSAL_LENGTH) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          message: `Proposal text must be ${MAX_PROPOSAL_LENGTH} characters or fewer.`,
         });
       }
 
-      const extracted = evaluation.extracted;
-
-      const prefix = typeToPrefix(extracted.type || 'Software');
-      const problemId = await generateProblemId(prefix);
-
-      if (!user.organizationId) {
-        return res
-          .status(StatusCodes.BAD_REQUEST)
-          .json({ message: 'You must belong to an organization to propose a problem statement.' });
-      }
-
-      // Resolve the phase plan (an LLM/network call) before opening the
-      // transaction below — awaiting an external HTTP call while holding a DB
-      // transaction open risks exhausting the connection pool / hitting the
-      // transaction timeout. `weeks` mirrors the `publishedProject.suggestedDurationWeeks
-      // || 14` fallback that used to run post-creation: the create() below never
-      // sets suggestedDurationWeeks, so that field is always null and the
-      // fallback of 14 always applied anyway.
-      const featureTotal = evaluation.features.reduce((sum, f) => sum + f.points, 0);
-      const weeks = 14;
-      const phasePlan = await generatePhasePlan({
-        problemStatement: proposalText,
-        projectType: extracted.type || 'Software',
-        featureTotal,
-        weeks,
-      });
-
-      // Publish the catalog entry and its audit row together so a failure can't
-      // leave a template with no proposal record behind it.
-      const { publishedProject, proposalRow } = await prisma.$transaction(async (tx) => {
-      const publishedProject = await tx.project.create({
-        data: {
-          organizationId: user.organizationId as string,
-          name: extracted.title || proposalText.slice(0, 50),
-          shortName: extracted.title || proposalText.slice(0, 30),
-          soul: extracted.soul || proposalText.slice(0, 120),
-          problemStatement: proposalText,
-          description: proposalText,
-          domain: extracted.domain || 'Engineering',
-          sector: extracted.sector || 'General',
-          type: extracted.type || 'Software',
-          difficultyLevel: String(extracted.difficultyLevel || '3'),
-          technologies: extracted.technologies || [],
-          deliverables: extracted.outcomes || [],
-          outOfScope: extracted.outOfScope || null,
-          skillsGained: extracted.skillsGained || [],
-          prerequisites: extracted.prerequisites || [],
-          problemId,
-          status: 'CATALOG',
-          isTemplate: true,
-          maxTeams: 1, // Restricted to single team slot for proposed statements
-        },
-      });
-
-      const proposalRow = await tx.problemStatementProposal.create({
+      const proposalRow = await prisma.problemStatementProposal.create({
         data: {
           submitterId: user.id,
           rawText: proposalText,
-          scores: buildEvaluationSnapshot(evaluation),
-          verdict: evaluation.verdict,
-          reasons: evaluation.reasons,
-          improvementHints: evaluation.improvementHints,
-          duplicateOfId: evaluation.duplicate?.similarProjectId || null,
-          extracted,
-          publishedProjectId: publishedProject.id,
+          verdict: PROPOSAL_PENDING,
         },
+        select: { id: true, createdAt: true },
       });
 
-      if (evaluation.features.length > 0) {
-        await tx.projectFeature.createMany({
-          data: evaluation.features.map((f) => ({
-            projectId: publishedProject.id,
-            name: f.name,
-            description: f.description,
-            importance: f.importance,
-            implementationMethod: f.implementationMethod,
-            points: f.points,
-            aiRationale: f.aiRationale,
-            addedBy: 'AI',
-          })),
-        });
-      }
+      queueProposalAnalysis(proposalRow.id);
 
-      await tx.projectPhase.createMany({
-        data: phasePlan.map((p) => ({
-          projectId: publishedProject.id,
-          phaseNumber: p.phaseNumber,
-          title: p.title,
-          expectedDeliverables: p.expectedDeliverables,
-          weekTarget: p.weekTarget,
-          points: p.points,
-          hardwareNote: p.hardwareNote,
-        })),
-      });
-
-        return { publishedProject, proposalRow };
-      });
-
-      res.status(StatusCodes.CREATED).json({
+      res.status(StatusCodes.ACCEPTED).json({
         success: true,
         proposalId: proposalRow.id,
-        publishedProject,
+        status: PROPOSAL_PENDING,
+        createdAt: proposalRow.createdAt,
       });
     } catch (error) {
       console.error('Error proposing problem statement:', error);

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   X,
-  Target,
   Users,
   Code2,
   Clock,
@@ -102,9 +101,6 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
     project.description ||
     project.backgroundContext ||
     'No problem statement provided.';
-
-  /* Static outcome */
-  const STATIC_OUTCOME = 'Deliver a functional prototype ready for demonstration and evaluation.';
 
   /* ------------------------------------------------------------------ */
   const handleAnalyse = async () => {
@@ -241,18 +237,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
             </div>
           </section>
 
-          {/* ② Expected Outcome (static) */}
-          <section>
-            <SectionLabel icon={<Target className="h-4 w-4" />} text="Expected Outcome" />
-            <div className="mt-3 p-4 rounded-2xl bg-blue-50/60 border border-blue-100 flex items-start gap-3">
-              <div className="p-2.5 rounded-xl bg-blue-100 text-blue-600 shrink-0 mt-0.5">
-                <Target className="h-4 w-4" />
-              </div>
-              <p className="text-sm text-slate-700 leading-relaxed">{STATIC_OUTCOME}</p>
-            </div>
-          </section>
-
-          {/* ③ Claim — text field + AI analysis */}
+          {/* ② Claim — text field + AI analysis */}
           <section className="pt-2">
             <SectionLabel icon={<Lightbulb className="h-4 w-4" />} text="Claim This Project" />
             <p className="mt-1 text-xs text-slate-500">
@@ -354,10 +339,13 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
             </div>
           </section>
 
-          {/* ④ Other teams' claims (read-only, if any) */}
+          {/* ③ Other teams' claims on THIS problem statement (read-only, if any) */}
           {project.claims && project.claims.length > 0 && (
             <section className="pt-2">
-              <SectionLabel icon={<Users className="h-4 w-4" />} text="Approaches Already Claimed" />
+              <SectionLabel
+                icon={<Users className="h-4 w-4" />}
+                text="Approaches Claimed On This Problem Statement"
+              />
               <div className="mt-3 space-y-2">
                 {project.claims.map((c, i) => (
                   <div key={i} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">

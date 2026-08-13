@@ -5,7 +5,15 @@ import { taskService } from './task.service';
 export const taskController = {
   async getTasksByProject(req: Request, res: Response) {
     try {
+      const user = req.user;
+      if (!user) return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+
       const projectId = req.params.projectId as string;
+      const allowed = await taskService.canAccessProject(user.id, projectId);
+      if (!allowed) {
+        return res.status(StatusCodes.FORBIDDEN).json({ message: 'You are not a member of this project' });
+      }
+
       const tasks = await taskService.getTasksByProject(projectId);
       res.json(tasks);
     } catch (error) {

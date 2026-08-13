@@ -32,7 +32,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 function getStatus(task: GanttTask) {
   if (task.status === 'completed' || task.status === 'done') return 'completed';
   if (task.status === 'at-risk') return 'at-risk';
-  if (task.status === 'in-progress' || task.status === 'on-track') return 'on-track';
+  if (task.status === 'in-progress' || task.status === 'on-track' || task.status === 'in-review' || task.status === 'progress') return 'on-track';
   return 'todo';
 }
 
@@ -719,10 +719,9 @@ export const TimelineGantt: React.FC = () => {
                     className="w-full px-3 py-2 text-xs rounded-lg border border-[#EEEDF8] bg-[#FCFCFF] text-[#1A1740] focus:outline-none focus:ring-1 focus:ring-[#7C3AED]"
                   >
                     <option value="todo">Not Started</option>
-                    <option value="on-track">On Track</option>
                     <option value="in-progress">In Progress</option>
-                    <option value="at-risk">At Risk</option>
-                    <option value="completed">Completed</option>
+                    <option value="in-review">In Review</option>
+                    <option value="done">Completed</option>
                   </select>
                 </div>
               </div>

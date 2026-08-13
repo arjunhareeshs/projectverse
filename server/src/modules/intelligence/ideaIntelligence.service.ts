@@ -17,6 +17,30 @@ import {
 } from './ideaIntelligence.schemas';
 
 export const MIN_PROPOSAL_LENGTH = 40;
+/** Upper bound on submitted proposal text — enforced on both the composer and
+ *  the submit endpoint so they can't drift apart. */
+export const MAX_PROPOSAL_LENGTH = 8000;
+
+/** Same input must produce the same verdict — a proposal shouldn't flip
+ *  ACCEPTED/REJECTED between the preview and the publish re-score, or between
+ *  two students who happen to write near-identical proposals. */
+const SCORING_TEMPERATURE = 0;
+
+/** overallScore is NEVER trusted from the model — recomputed here from the two
+ *  rubric sets so the accept/reject gate can't be swayed by the model's own
+ *  (possibly inconsistent) arithmetic. Core rubrics carry more weight since
+ *  they gate baseline quality; industry rubrics catch depth/realism gaps a
+ *  surface-level idea can still score well on for the core set. */
+function computeOverallScore(
+  rubrics: IdeaValidation['rubrics'],
+  industryRubrics: IdeaValidation['industryRubrics'],
+): number {
+  const coreScores = Object.values(rubrics).map((r) => r.score);
+  const industryScores = Object.values(industryRubrics).map((r) => r.score);
+  const coreAvg = coreScores.reduce((sum, s) => sum + s, 0) / coreScores.length;
+  const industryAvg = industryScores.reduce((sum, s) => sum + s, 0) / industryScores.length;
+  return Math.round(coreAvg * 0.6 + industryAvg * 0.4);
+}
 
 function clampToBucket(points: number): number {
   let nearest: number = FEATURE_POINT_BUCKET[0];
@@ -143,7 +167,18 @@ export async function validateIdea(rawText: string): Promise<IdeaValidation> {
       businessPotential: { score: 65, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
       projectPotential: { score: 70, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
     },
+    industryRubrics: {
+      implementationDepth: { score: 70, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+      userValue: { score: 70, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+      scalabilityOrDeployability: { score: 70, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+      safetyAndRisk: { score: 80, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+      maintainability: { score: 70, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+      costRealism: { score: 75, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+      testingAndValidation: { score: 65, rationale: 'Heuristic fallback — AI evaluator unavailable.' },
+    },
+    hardFeasibilityBlocker: { blocked: false, reason: null },
     hardwareConstraints: null,
+    softwareRigor: null,
     features: fallbackFeatures,
   };
 
@@ -152,7 +187,8 @@ export async function validateIdea(rawText: string): Promise<IdeaValidation> {
     feature: 'validateIdea',
     schema: IdeaValidationSchema,
     retries: 2,
-    maxTokens: 3000,
+    maxTokens: 3600,
+    temperature: SCORING_TEMPERATURE,
   });
 
   if (degraded) {
@@ -162,9 +198,37 @@ export async function validateIdea(rawText: string): Promise<IdeaValidation> {
   // Deterministic post-processing — never trust the model to self-enforce these.
   const isHardwareType = ['Hardware', 'IoT', 'Hybrid'].includes(result.extracted?.type || '');
   const hardwareConstraints = isHardwareType ? result.hardwareConstraints : null;
+  const softwareRigor = isHardwareType ? null : result.softwareRigor;
   const features = normalizeFeaturePoints(result.features.map((f) => ({ ...f, points: clampToBucket(f.points) })));
 
-  const withGuardrails: IdeaValidation = { ...result, hardwareConstraints, features };
+  // overallScore is recomputed here, never taken from the model's own arithmetic.
+  const overallScore = computeOverallScore(result.rubrics, result.industryRubrics);
+  const blocked = result.hardFeasibilityBlocker?.blocked === true;
+
+  let verdict = result.verdict;
+  if (blocked) {
+    verdict = 'REJECTED';
+  } else if (overallScore >= 70) {
+    verdict = 'ACCEPTED';
+  } else if (overallScore >= 50) {
+    verdict = 'NEEDS_IMPROVEMENT';
+  } else {
+    verdict = 'REJECTED';
+  }
+
+  const reasons = blocked
+    ? Array.from(new Set([...(result.reasons || []), result.hardFeasibilityBlocker.reason || 'Not feasible as described.']))
+    : result.reasons;
+
+  const withGuardrails: IdeaValidation = {
+    ...result,
+    verdict,
+    overallScore,
+    reasons,
+    hardwareConstraints,
+    softwareRigor,
+    features,
+  };
 
   if (isDuplicate) {
     return {

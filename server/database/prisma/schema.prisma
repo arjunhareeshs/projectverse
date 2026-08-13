@@ -57,7 +57,6 @@ model User {
   files                 FileAsset[]
   notifications         Notification[]
   activityLogs          ActivityLog[]
-  documents             Document[]
   auditLogs             AuditLog[]
   teamMessages          TeamMessage[]
   teamInvites           TeamInvite[]
@@ -234,7 +233,6 @@ model Project {
   reports                   Report[]
   sprints                   Sprint[]
   milestones                Milestone[]
-  documents                 Document[]
   category                  ProjectCategory? // null for legacy projects
   reviews                   ProjectReview[]
   githubRepo                GithubRepository?
@@ -391,24 +389,6 @@ model ActivityLog {
   entityId   String
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id])
-}
-
-model Document {
-  id           String   @id @default(cuid())
-  projectId    String?
-  userId       String
-  title        String
-  content      String?
-  fileName     String?
-  fileSize     Int?
-  mimeType     String?
-  fileUrl      String?
-  documentType String? // "ipr", "report", etc.
-  version      Int      @default(1)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  project      Project? @relation(fields: [projectId], references: [id])
-  user         User     @relation(fields: [userId], references: [id])
 }
 
 model Sprint {

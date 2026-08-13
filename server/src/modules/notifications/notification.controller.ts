@@ -43,21 +43,38 @@ export const notificationController = {
     }
   },
 
-  async createMockNotification(req: Request, res: Response) {
+  async createNotification(req: Request, res: Response) {
     try {
       const user = req.user;
       if (!user) return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
 
-      const { title, body } = req.body;
-      const notification = await notificationService.createMockNotification(
-        user.id,
-        title || 'New Alert',
-        body || 'Someone shared a document with you.'
-      );
+      const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+      const body = typeof req.body?.body === 'string' ? req.body.body.trim() : '';
+      if (!title || !body) {
+        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Title and body are required' });
+      }
+
+      const notification = await notificationService.createForUser(user.id, title, body);
       res.status(StatusCodes.CREATED).json(notification);
     } catch (error) {
-      console.error('Error creating mock notification:', error);
+      console.error('Error creating notification:', error);
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to create notification' });
+    }
+  },
+
+  async createDeadlineAlert(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+
+      const notification = await notificationService.createNearestDeadlineAlert(user.id);
+      if (!notification) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'No upcoming task deadlines found' });
+      }
+      res.status(StatusCodes.CREATED).json(notification);
+    } catch (error) {
+      console.error('Error creating deadline alert:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to create deadline alert' });
     }
   },
 };
