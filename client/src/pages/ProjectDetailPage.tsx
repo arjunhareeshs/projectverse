@@ -1,64 +1,75 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
-import {
-  FileText,
-  Calendar,
-  Users,
-  Layers,
-  ChevronDown,
-  Check,
-  Folder,
-  LogOut,
-} from 'lucide-react';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
 import { useAppSelector } from '../app/hooks';
 import { ProjectReviewerPanel } from '../components/projects/ProjectReviewerPanel';
-import { ProjectExecutionTemplate } from '../components/projects/ProjectExecutionTemplate';
 import { DailyLogTab } from './ProjectWorkspace/DailyLogTab';
 import { IntakeWizard } from '../components/lifecycle/IntakeWizard';
 import { WithdrawProjectModal } from '../components/projects/WithdrawProjectModal';
 import { lifecycleService } from '../services/lifecycle.service';
 import { teamService } from '../services/team.service';
 import { ProjectLogState } from '../types/projectLog';
+import {
+  useProjectWorkspace,
+  WorkspaceHeader,
+  WorkspaceTabs,
+  TeamFeaturesTab,
+  ExecutionPlanTab,
+  WorkspaceTabId,
+} from '../components/projects/workspace';
 
 export const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const user = useAppSelector((state) => state.auth.user);
-  const switcherRef = useRef<HTMLDivElement>(null);
 
-  const initialTabParam = searchParams.get('tab') as 'log' | 'team-features' | 'execution-plan' | null;
-  const [activeTab, setActiveTabState] = useState<'log' | 'team-features' | 'execution-plan'>(
-    initialTabParam || 'log'
+  const initialTabParam = searchParams.get('tab') as WorkspaceTabId | null;
+  const [activeTab, setActiveTabState] = useState<WorkspaceTabId>(
+    initialTabParam && ['log', 'team-features', 'execution-plan'].includes(initialTabParam)
+      ? initialTabParam
+      : 'log'
   );
   const [logState, setLogState] = useState<ProjectLogState | null>(null);
-  const [unresolvedFlagsCount, setUnresolvedFlagsCount] = useState(0);
+  const [, setUnresolvedFlagsCount] = useState(0);
   const [showWizard, setShowWizard] = useState(false);
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [justGeneratedFallback, setJustGeneratedFallback] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [, setJustGeneratedFallback] = useState(false);
   const [teamProjects, setTeamProjects] = useState<any[]>([]);
-  const [switcherOpen, setSwitcherOpen] = useState(false);
 
-  const projectId = id || '1';
+  const projectId = id || '';
 
-  const setActiveTab = (tab: 'log' | 'team-features' | 'execution-plan') => {
+  // Synchronize state with URL search params
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as WorkspaceTabId | null;
+    if (tabParam && ['log', 'team-features', 'execution-plan'].includes(tabParam)) {
+      setActiveTabState(tabParam);
+    }
+  }, [searchParams]);
+
+  const setActiveTab = (tab: WorkspaceTabId) => {
     setActiveTabState(tab);
     setSearchParams({ tab }, { replace: true });
   };
 
   const fetchLogState = async () => {
-    if (!id) return;
+    if (!projectId) {
+      setError('Invalid project ID specified in URL.');
+      return;
+    }
     setLoading(true);
+    setError(null);
     try {
-      const state = await lifecycleService.getLogState(id);
+      const state = await lifecycleService.getLogState(projectId);
       setLogState(state);
       if (state && state.flags) {
         const count = state.flags.filter((f) => !f.resolved).length;
         setUnresolvedFlagsCount(count);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load project log state', err);
+      setError(err?.response?.data?.message || 'Could not load this project workspace.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +77,8 @@ export const ProjectDetailPage: React.FC = () => {
 
   useEffect(() => {
     fetchLogState();
-  }, [id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   const teamId = logState?.team?.teamId || user?.teamId;
 
@@ -81,136 +93,91 @@ export const ProjectDetailPage: React.FC = () => {
       .catch((err) => console.error('Failed to load team projects', err));
   }, [teamId]);
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (switcherRef.current && !switcherRef.current.contains(event.target as Node)) {
-        setSwitcherOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // Hoisted workspace state
+  const ws = useProjectWorkspace({
+    projectId,
+    logState,
+    onSaved: fetchLogState,
+  });
 
-  const tabs = [
-    { id: 'log', label: 'Daily Log', icon: Calendar },
-    { id: 'team-features', label: 'Team & Features Allocation', icon: Users },
-    { id: 'execution-plan', label: 'Phase Execution Plan & Reviews', icon: FileText },
-  ];
-
-  return (
-    <div className="p-6 max-w-7xl mx-auto w-full space-y-6 bg-[#FAFAFC] min-h-screen">
-      {/* Workspace Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
-            {logState?.title || 'Untitled Project'}
-          </h1>
+  // Guard for missing project ID or load error
+  if (!projectId || error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-6 text-center space-y-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-danger/10 text-danger">
+          <AlertTriangle className="h-6 w-6" />
         </div>
-
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="relative" ref={switcherRef}>
-            <button
-              onClick={() => setSwitcherOpen((v) => !v)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200/90 text-[#0F172A] text-xs font-bold rounded-xl hover:bg-gray-50 transition shadow-2xs"
-            >
-              <Layers className="w-4 h-4 text-gray-600" /> Switch Project
-              <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
-            </button>
-            {switcherOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 max-h-80 overflow-y-auto">
-                {teamProjects.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setSwitcherOpen(false);
-                      navigate(`/projects/${p.id}`);
-                    }}
-                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs hover:bg-gray-50"
-                  >
-                    <span className="truncate">
-                      <span className="font-semibold text-gray-900 block truncate">{p.name}</span>
-                      {p.domain && <span className="text-gray-400">{p.domain}</span>}
-                    </span>
-                    {p.id === projectId && <Check className="w-3.5 h-3.5 text-[#4F46E5] shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
+        <h2 className="text-lg font-semibold text-foreground">
+          {error || 'Project Not Found'}
+        </h2>
+        <p className="text-xs text-muted-foreground max-w-sm">
+          We couldn't retrieve the project details. Please check the URL or try reloading.
+        </p>
+        <div className="flex items-center gap-3 pt-2">
           <button
             onClick={() => navigate('/projects')}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-xl transition shadow-xs"
+            className="px-4 py-2 border border-border text-foreground hover:bg-surface-subtle text-xs font-semibold rounded-btn transition interactive-tap"
           >
-            <Folder className="w-4 h-4" /> All Projects
+            All Projects
           </button>
-
           <button
-            onClick={() => setShowWithdrawModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition shadow-2xs"
-            title="Withdraw from this project"
+            onClick={fetchLogState}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-btn shadow-sm transition interactive-tap"
           >
-            <LogOut className="w-4 h-4 text-rose-600" /> Withdraw Project
+            <RotateCcw className="w-3.5 h-3.5" /> Retry
           </button>
         </div>
       </div>
+    );
+  }
 
+  // Shimmer skeleton loading state
+  if (loading && !logState) {
+    return (
+      <div className="space-y-6 pb-16 animate-pulse">
+        <div className="h-24 rounded-card skeleton-shimmer" />
+        <div className="h-16 rounded-card skeleton-shimmer" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="h-64 rounded-card skeleton-shimmer" />
+          <div className="h-64 rounded-card skeleton-shimmer" />
+          <div className="h-64 rounded-card skeleton-shimmer" />
+        </div>
+      </div>
+    );
+  }
 
-      {/* Tabs Navigation Container */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl p-2 shadow-2xs flex items-center gap-2 overflow-x-auto">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                isActive
-                  ? 'bg-[#EEF2FF] text-[#4F46E5] shadow-2xs'
-                  : 'text-[#64748B] hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-[#4F46E5]' : 'text-gray-500'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+  return (
+    <div className="space-y-6 pb-16 font-sans">
+      {/* ─── 1. Sticky Action Header & Meta Strip ──────────────────────────────── */}
+      <div className="rounded-card border border-border bg-card shadow-card overflow-hidden">
+        <WorkspaceHeader
+          ws={ws}
+          logState={logState}
+          teamProjects={teamProjects}
+        />
       </div>
 
-      {/* Main Workspace Content Area */}
-      <div className="pt-2">
+      {/* ─── 2. Prominent Workspace Tabs Navigation ────────────────────────────── */}
+      <WorkspaceTabs
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+      />
+
+      {/* ─── 3. Active Tab Body Content ────────────────────────────────────────── */}
+      <div className="pt-1">
         {activeTab === 'log' && <DailyLogTab projectId={projectId} />}
-        {activeTab === 'team-features' && (
-          <ProjectExecutionTemplate
-            projectId={projectId}
-            logState={logState}
-            initialTab="team-features"
-            hideHeader={true}
-            hideTabs={true}
-            onBack={() => navigate('/projects')}
-          />
-        )}
-        {activeTab === 'execution-plan' && (
-          <ProjectExecutionTemplate
-            projectId={projectId}
-            logState={logState}
-            initialTab="execution-plan"
-            hideHeader={true}
-            hideTabs={true}
-            onBack={() => navigate('/projects')}
-          />
-        )}
+        {activeTab === 'team-features' && <TeamFeaturesTab ws={ws} />}
+        {activeTab === 'execution-plan' && <ExecutionPlanTab ws={ws} />}
       </div>
 
-      {/* Review Panel section for reviewers/admins */}
+      {/* ─── Review Panel (REVIEWER or ADMIN only) ───────────────────────────────── */}
       {((user as any)?.role === 'REVIEWER' || (user as any)?.role === 'ADMIN') && (
-        <div className="pt-8 border-t border-gray-200">
+        <div className="pt-8 border-t border-border">
           <ProjectReviewerPanel projectId={projectId} />
         </div>
       )}
 
-      {/* Intake Wizard Modal */}
+      {/* ─── Intake Wizard Modal ───────────────────────────────────────────────── */}
       {showWizard && (
         <IntakeWizard
           projectId={projectId}
@@ -225,16 +192,14 @@ export const ProjectDetailPage: React.FC = () => {
         />
       )}
 
-      {/* Withdraw Project Modal */}
+      {/* ─── Withdraw Project Modal ────────────────────────────────────────────── */}
       <WithdrawProjectModal
-        isOpen={showWithdrawModal}
+        isOpen={ws.showWithdrawModal}
         projectId={projectId}
-        projectName={logState?.title || 'Current Project'}
-        onClose={() => setShowWithdrawModal(false)}
+        projectName={ws.projectName || logState?.title || 'Current Project'}
+        onClose={() => ws.setShowWithdrawModal(false)}
         onSuccess={() => navigate('/projects')}
       />
     </div>
   );
 };
-
-

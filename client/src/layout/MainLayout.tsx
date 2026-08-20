@@ -25,11 +25,11 @@ export const MainLayout: React.FC = () => {
   }, [dispatch]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground">
       <Sidebar />
       <Navbar />
       <div
-        className="flex min-h-screen flex-col transition-[padding] duration-300 ease-out"
+        className="flex min-h-screen flex-col"
         style={{ paddingLeft: 256, paddingRight: 0 }}
       >
         <main className="flex-1 overflow-x-hidden pt-16">

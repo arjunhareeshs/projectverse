@@ -13,6 +13,10 @@ const config: Config = {
     },
     extend: {
       borderRadius: {
+        card: 'var(--radius-card)',
+        btn: 'var(--radius-btn)',
+        input: 'var(--radius-input)',
+        tag: 'var(--radius-tag)',
         lg: 'var(--radius-card)',
         md: 'var(--radius-input)',
         sm: '10px',
@@ -31,23 +35,37 @@ const config: Config = {
         },
         primary: {
           DEFAULT: 'hsl(var(--primary))',
+          hover: 'hsl(var(--primary-hover))',
+          light: 'hsl(var(--primary-light))',
           foreground: 'hsl(var(--primary-foreground))',
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
           foreground: 'hsl(var(--secondary-foreground))',
         },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          soft: 'hsl(var(--accent-soft))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        'surface-subtle': 'hsl(var(--surface-subtle))',
         success: 'hsl(var(--success))',
         warning: 'hsl(var(--warning))',
         danger: 'hsl(var(--danger))',
         info: 'hsl(var(--info))',
       },
       boxShadow: {
-        card: '0 10px 25px -20px rgba(16, 24, 40, 0.45)',
-        hover: '0 16px 32px -20px rgba(16, 24, 40, 0.6)',
+        sm: 'var(--shadow-sm)',
+        card: 'var(--shadow-card)',
+        hover: 'var(--shadow-hover)',
+        floating: 'var(--shadow-floating)',
+      },
+      transitionTimingFunction: {
+        'spring-snappy': 'cubic-bezier(0.16, 1, 0.3, 1)',
+        'in-out-smooth': 'cubic-bezier(0.4, 0, 0.2, 1)',
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
     },
   },

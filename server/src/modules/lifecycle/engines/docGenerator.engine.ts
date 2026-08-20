@@ -6,6 +6,7 @@ import { projectLogService } from '../projectLog.service';
 import { buildDocGeneratorPrompt } from '../prompts/docGenerator.prompt';
 import { personalizationEngine } from './personalization';
 import { renderDocMarkdown } from '../render/docMarkdown';
+import { persistExecutionDocNormalized } from '../executionDocNormalizer';
 
 const CURATED_RESOURCES: Record<string, { topic: string; resource: string; url: string }> = {
   typescript: { topic: 'TypeScript', resource: 'Official TypeScript Handbook', url: 'https://www.typescriptlang.org/docs/handbook/' },
@@ -102,6 +103,8 @@ export class DocGeneratorEngine {
         markdown,
       },
     });
+
+    await persistExecutionDocNormalized(savedDoc.id, docContent);
 
     // Append log event
     await projectLogService.appendEvent(projectId, {

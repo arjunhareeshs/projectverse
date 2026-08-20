@@ -47,15 +47,15 @@ export const ProjectExecutionTemplatePage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50/50 flex flex-col items-center justify-center p-8 space-y-3">
-        <div className="w-10 h-10 rounded-full border-3 border-indigo-600 border-t-transparent animate-spin" />
-        <p className="text-xs text-slate-500 font-medium">Loading Project Execution & Reward Template...</p>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8 space-y-3">
+        <div className="w-10 h-10 rounded-full border-3 border-primary border-t-transparent animate-spin" />
+        <p className="text-xs text-muted-foreground font-medium">Loading Project Execution & Reward Template...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 md:p-8">
+    <div className="min-h-screen bg-background p-6 md:p-8">
       <ProjectExecutionTemplate
         projectId={projectId}
         logState={logState}

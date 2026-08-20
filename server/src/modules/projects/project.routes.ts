@@ -8,6 +8,7 @@ const router = Router();
 // All project routes are protected
 router.use(authGuard);
 
+router.get('/my', projectController.getMyProjects);
 router.get('/active', projectController.getActiveProjects);
 router.post('/catalog/session/start', catalogController.startCatalogSession);
 router.get('/catalog/readiness', catalogController.getReadiness);

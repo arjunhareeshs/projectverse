@@ -34,6 +34,102 @@ function buildEvaluationSnapshot(evaluation: IdeaValidation) {
   };
 }
 
+async function persistNormalizedProposalData(proposalId: string, evaluation: IdeaValidation) {
+  try {
+    // 1. Normalized ProposalScore
+    const scoreRecord = await prisma.proposalScore.upsert({
+      where: { proposalId },
+      create: {
+        proposalId,
+        overallScore: evaluation.overallScore,
+        feasibility: evaluation.perspectives?.feasibility?.score,
+        impact: evaluation.perspectives?.projectPotential?.score,
+        novelty: evaluation.perspectives?.studentPotential?.score,
+        technicalDepth: evaluation.perspectives?.effectiveness?.score,
+        clarity: evaluation.rubrics?.clarity?.score,
+      },
+      update: {
+        overallScore: evaluation.overallScore,
+        feasibility: evaluation.perspectives?.feasibility?.score,
+        impact: evaluation.perspectives?.projectPotential?.score,
+        novelty: evaluation.perspectives?.studentPotential?.score,
+        technicalDepth: evaluation.perspectives?.effectiveness?.score,
+        clarity: evaluation.rubrics?.clarity?.score,
+      },
+    });
+
+    // 2. Normalized Rubric Scores
+    await prisma.proposalRubricScore.deleteMany({ where: { scoreId: scoreRecord.id } });
+    const rubricRows: Array<{ scoreId: string; family: string; dimension: string; scoreValue: number; rationale: string | null }> = [];
+
+    if (evaluation.rubrics) {
+      for (const [dim, val] of Object.entries(evaluation.rubrics)) {
+        if (val && typeof val === 'object' && 'score' in val) {
+          rubricRows.push({
+            scoreId: scoreRecord.id,
+            family: 'RUBRIC',
+            dimension: dim,
+            scoreValue: Number((val as any).score) || 0,
+            rationale: (val as any).rationale || null,
+          });
+        }
+      }
+    }
+
+    if (evaluation.perspectives) {
+      for (const [dim, val] of Object.entries(evaluation.perspectives)) {
+        if (val && typeof val === 'object' && 'score' in val) {
+          rubricRows.push({
+            scoreId: scoreRecord.id,
+            family: 'PERSPECTIVE',
+            dimension: dim,
+            scoreValue: Number((val as any).score) || 0,
+            rationale: (val as any).rationale || null,
+          });
+        }
+      }
+    }
+
+    if (rubricRows.length > 0) {
+      await prisma.proposalRubricScore.createMany({ data: rubricRows });
+    }
+
+    // 3. Normalized ProposalExtraction
+    const ext = evaluation.extracted;
+    if (ext) {
+      const extractionRecord = await prisma.proposalExtraction.upsert({
+        where: { proposalId },
+        create: {
+          proposalId,
+          problemStatement: ext.soul || null,
+          proposedSolution: ext.title || null,
+          targetAudience: null,
+          domain: ext.domain || null,
+        },
+        update: {
+          problemStatement: ext.soul || null,
+          proposedSolution: ext.title || null,
+          targetAudience: null,
+          domain: ext.domain || null,
+        },
+      });
+
+      await prisma.proposalExtractionItem.deleteMany({ where: { extractionId: extractionRecord.id } });
+      const extractionItems: Array<{ extractionId: string; kind: string; value: string }> = [];
+
+      (ext.technologies || []).forEach((t: string) => extractionItems.push({ extractionId: extractionRecord.id, kind: 'TECH', value: t }));
+      (ext.outcomes || []).forEach((o: string) => extractionItems.push({ extractionId: extractionRecord.id, kind: 'DELIVERABLE', value: o }));
+      (ext.skillsGained || []).forEach((s: string) => extractionItems.push({ extractionId: extractionRecord.id, kind: 'SKILL', value: s }));
+
+      if (extractionItems.length > 0) {
+        await prisma.proposalExtractionItem.createMany({ data: extractionItems });
+      }
+    }
+  } catch (err: any) {
+    logger.warn('Failed to persist normalized proposal data', { proposalId, error: err?.message });
+  }
+}
+
 async function generateProblemId(prefix: 'H' | 'S' | 'HS') {
   const existing = await prisma.project.findMany({
     where: { problemId: { startsWith: prefix } },
@@ -57,10 +153,6 @@ function typeToPrefix(type: string): 'H' | 'S' | 'HS' {
  * Scores one PENDING proposal and, if accepted, publishes the catalog template
  * for it. Terminal state is always written to the proposal row — including on
  * failure — so a student is never left watching a spinner forever.
- *
- * No child Project is created here: the submitter claims their own accepted
- * statement through the normal catalog claim flow, so availability stays 0/1
- * until they do.
  */
 export async function runProposalAnalysis(proposalId: string): Promise<void> {
   const proposal = await prisma.problemStatementProposal.findUnique({
@@ -103,18 +195,14 @@ export async function runProposalAnalysis(proposalId: string): Promise<void> {
           extracted: evaluation.extracted,
         },
       });
+
+      await persistNormalizedProposalData(proposal.id, evaluation);
       return;
     }
 
     const extracted = evaluation.extracted;
     const problemId = await generateProblemId(typeToPrefix(extracted.type || 'Software'));
 
-    // Resolve the phase plan (an LLM/network call) before opening the
-    // transaction — awaiting an external HTTP call while holding a DB
-    // transaction open risks exhausting the connection pool / hitting the
-    // transaction timeout. `weeks` mirrors the historical
-    // `suggestedDurationWeeks || 14` fallback: the create() below never sets
-    // suggestedDurationWeeks, so the fallback of 14 always applied anyway.
     const featureTotal = evaluation.features.reduce((sum, f) => sum + f.points, 0);
     const weeks = 14;
     const phasePlan = await generatePhasePlan({
@@ -124,9 +212,7 @@ export async function runProposalAnalysis(proposalId: string): Promise<void> {
       weeks,
     });
 
-    // Publish the catalog entry and mark the proposal accepted together, so a
-    // failure can't leave a template with no proposal record behind it (or an
-    // accepted proposal pointing at nothing).
+    // Publish the catalog entry and mark the proposal accepted together
     await prisma.$transaction(async (tx) => {
       const publishedProject = await tx.project.create({
         data: {
@@ -151,6 +237,17 @@ export async function runProposalAnalysis(proposalId: string): Promise<void> {
           maxTeams: 1, // Restricted to single team slot for proposed statements
         },
       });
+
+      // Normalized ProjectDeliverable rows
+      if (Array.isArray(extracted.outcomes) && extracted.outcomes.length > 0) {
+        await tx.projectDeliverable.createMany({
+          data: extracted.outcomes.map((text: string, idx: number) => ({
+            projectId: publishedProject.id,
+            text,
+            order: idx,
+          })),
+        });
+      }
 
       await tx.problemStatementProposal.update({
         where: { id: proposal.id },
@@ -192,10 +289,10 @@ export async function runProposalAnalysis(proposalId: string): Promise<void> {
         })),
       });
     });
+
+    await persistNormalizedProposalData(proposal.id, evaluation);
   } catch (error: any) {
     logger.error(`[proposalWorker] Analysis failed for proposal ${proposalId}: ${error?.message}`);
-    // Best-effort terminal state. If this write itself fails the row stays
-    // PENDING and the startup sweep will fail it on the next boot.
     await prisma.problemStatementProposal
       .update({
         where: { id: proposalId },

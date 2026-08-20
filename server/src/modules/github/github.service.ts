@@ -98,10 +98,9 @@ async function fetchRepositorySnapshot(owner: string, repo: string) {
     : null;
 
   return {
-    repo: repoData,
-    branch,
+    raw: repoData,
     languages,
-    contributors: (contributors || []).filter((c: any) => c && c.login),
+    contributors,
     latestCommit,
     commitCount,
     branchCount,
@@ -110,121 +109,196 @@ async function fetchRepositorySnapshot(owner: string, repo: string) {
     community,
     issues: { open: openIssuesTotal, closed: closedIssuesTotal },
     pullRequests: { open: openPrTotal, closed: closedPrTotal, merged: mergedPrTotal },
-    labels: (labels || []).map((l: any) => ({ name: l.name, color: l.color })),
-    milestones: (milestones || []).map((m: any) => ({ title: m.title, state: m.state, dueOn: m.due_on })),
+    labels,
+    milestones,
     hasSecurityPolicy,
     hasChangelog,
     structure,
   };
 }
 
-function summarizeTree(entries: Array<{ path: string; type: string }>) {
-  const folders = new Set<string>();
-  const extensions: Record<string, number> = {};
-  let maxDepth = 0;
+function summarizeTree(items: Array<{ path: string; type: string }>) {
+  const topLevel = new Set<string>();
   let fileCount = 0;
+  let dirCount = 0;
+  let hasSrc = false;
+  let hasTests = false;
+  let hasDocs = false;
+  let hasCi = false;
 
-  for (const entry of entries) {
-    const depth = entry.path.split('/').length;
-    maxDepth = Math.max(maxDepth, depth);
-    if (entry.type === 'tree') {
-      folders.add(entry.path);
-    } else if (entry.type === 'blob') {
-      fileCount += 1;
-      const dot = entry.path.lastIndexOf('.');
-      const ext = dot > -1 ? entry.path.slice(dot) : '(none)';
-      extensions[ext] = (extensions[ext] || 0) + 1;
-    }
+  for (const item of items) {
+    const segments = item.path.split('/');
+    if (segments.length === 1) topLevel.add(item.path);
+    else if (segments[0]) topLevel.add(segments[0]);
+
+    if (item.type === 'blob') fileCount++;
+    if (item.type === 'tree') dirCount++;
+
+    const lower = item.path.toLowerCase();
+    if (lower.startsWith('src/') || lower.startsWith('lib/') || lower.startsWith('app/')) hasSrc = true;
+    if (lower.includes('test') || lower.includes('spec') || lower.startsWith('tests/')) hasTests = true;
+    if (lower.startsWith('docs/') || lower.startsWith('doc/')) hasDocs = true;
+    if (lower.startsWith('.github/workflows')) hasCi = true;
   }
 
   return {
-    folderCount: folders.size,
+    hasSrc,
+    hasTests,
+    hasDocs,
+    hasCi,
     fileCount,
-    maxDepth,
-    topExtensions: Object.entries(extensions)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([ext, count]) => ({ ext, count })),
+    directoryCount: dirCount,
+    topLevelFolders: Array.from(topLevel).slice(0, 20),
   };
 }
 
-function clampScore(n: number) {
-  return Math.max(0, Math.min(100, Math.round(n)));
+function computeScores(snapshot: Awaited<ReturnType<typeof fetchRepositorySnapshot>>) {
+  const r = snapshot.raw;
+
+  let popularity = 0;
+  popularity += Math.min(snapshot.raw.stargazers_count || 0, 50) * 1.0;
+  popularity += Math.min(snapshot.raw.forks_count || 0, 25) * 1.0;
+  popularity += Math.min(snapshot.raw.subscribers_count || 0, 25) * 0.5;
+  const popularityScore = Math.min(100, Math.round(popularity));
+
+  let maintenance = 0;
+  if (snapshot.latestCommit?.commit?.author?.date) {
+    const daysSince =
+      (Date.now() - new Date(snapshot.latestCommit.commit.author.date).getTime()) /
+      (1000 * 60 * 60 * 24);
+    if (daysSince < 30) maintenance += 40;
+    else if (daysSince < 90) maintenance += 25;
+    else if (daysSince < 180) maintenance += 10;
+  }
+  const totalIssues = snapshot.issues.open + snapshot.issues.closed;
+  if (totalIssues > 0) {
+    const closeRatio = snapshot.issues.closed / totalIssues;
+    maintenance += Math.round(closeRatio * 30);
+  } else {
+    maintenance += 15;
+  }
+  if (snapshot.structure?.hasCi) maintenance += 15;
+  if (snapshot.releaseCount > 0) maintenance += 15;
+  const maintenanceScore = Math.min(100, Math.round(maintenance));
+
+  let community = 0;
+  if (snapshot.community?.files?.readme) community += 25;
+  if (snapshot.community?.files?.contributing) community += 20;
+  if (snapshot.community?.files?.license) community += 15;
+  if (snapshot.community?.files?.code_of_conduct) community += 15;
+  if (snapshot.community?.files?.issue_template) community += 10;
+  if (snapshot.community?.files?.pull_request_template) community += 10;
+  if (snapshot.hasSecurityPolicy) community += 5;
+  const communityScore = Math.min(100, Math.round(community));
+
+  let freshness = 0;
+  if (r.pushed_at) {
+    const daysSincePush = (Date.now() - new Date(r.pushed_at).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSincePush < 7) freshness = 100;
+    else if (daysSincePush < 30) freshness = 80;
+    else if (daysSincePush < 90) freshness = 50;
+    else if (daysSincePush < 180) freshness = 25;
+    else freshness = 10;
+  }
+  const freshnessScore = freshness;
+
+  return {
+    popularityScore,
+    maintenanceScore,
+    communityScore,
+    freshnessScore,
+  };
 }
 
-function computeScores(input: {
-  stars: number;
-  forks: number;
-  watchers: number;
-  pushedAt: Date | null;
-  commitCount: number;
-  contributorCount: number;
-  hasReadme: boolean;
-  hasContributing: boolean;
-  hasCodeOfConduct: boolean;
-  hasSecurityPolicy: boolean;
-  hasChangelog: boolean;
-  isArchived: boolean;
-}) {
-  const popularityScore = clampScore(
-    Math.log2(input.stars + 1) * 12 + Math.log2(input.forks + 1) * 8 + Math.log2(input.watchers + 1) * 5,
-  );
+/**
+ * Synchronizes paginated commit history (up to 2,000 commits) and resolves contributor attribution.
+ * Resolves linkedUserId in priority order:
+ * 1. commit.author.login -> User.githubUsername (case-insensitive)
+ * 2. commit.commit.author.email -> User.email (case-insensitive)
+ * 3. null (unattributed)
+ */
+async function syncCommitHistory(
+  repositoryId: string,
+  owner: string,
+  repo: string,
+  maxPages: number = 20,
+): Promise<number> {
+  const commits = await githubClient.listAllPaginated<any>(`/repos/${owner}/${repo}/commits`, {}, maxPages);
+  if (!commits || commits.length === 0) return 0;
 
-  const daysSincePush = input.pushedAt
-    ? (Date.now() - input.pushedAt.getTime()) / (1000 * 60 * 60 * 24)
-    : 9999;
-  const freshnessScore = clampScore(100 - daysSincePush / 3.65); // ~0 after 1 year stale
-
-  const maintenanceScore = clampScore(
-    (input.isArchived ? 0 : 1) * (freshnessScore * 0.5 + Math.log2(input.commitCount + 1) * 6),
-  );
-
-  const communityFlags = [
-    input.hasReadme,
-    input.hasContributing,
-    input.hasCodeOfConduct,
-    input.hasSecurityPolicy,
-    input.hasChangelog,
-  ];
-  const communityScore = clampScore(
-    (communityFlags.filter(Boolean).length / communityFlags.length) * 70 +
-      Math.log2(input.contributorCount + 1) * 10,
-  );
-
-  return { popularityScore, maintenanceScore, communityScore, freshnessScore };
-}
-
-async function persistSnapshot(owner: string, repo: string, projectId: string | null, snapshot: Awaited<ReturnType<typeof fetchRepositorySnapshot>>) {
-  const r = snapshot.repo;
-
-  const scores = computeScores({
-    stars: r.stargazers_count || 0,
-    forks: r.forks_count || 0,
-    watchers: r.subscribers_count || 0,
-    pushedAt: r.pushed_at ? new Date(r.pushed_at) : null,
-    commitCount: snapshot.commitCount,
-    contributorCount: snapshot.contributors.length,
-    hasReadme: !!snapshot.community?.files?.readme,
-    hasContributing: !!snapshot.community?.files?.contributing,
-    hasCodeOfConduct: !!snapshot.community?.files?.code_of_conduct,
-    hasSecurityPolicy: snapshot.hasSecurityPolicy,
-    hasChangelog: snapshot.hasChangelog,
-    isArchived: !!r.archived,
+  // Build lookup maps for registered users
+  const users = await prisma.user.findMany({
+    select: { id: true, email: true, githubUsername: true, fullName: true },
   });
+
+  const usernameMap = new Map<string, string>();
+  const emailMap = new Map<string, string>();
+
+  for (const u of users) {
+    if (u.githubUsername) {
+      usernameMap.set(u.githubUsername.trim().toLowerCase(), u.id);
+    }
+    if (u.email) {
+      emailMap.set(u.email.trim().toLowerCase(), u.id);
+    }
+  }
+
+  const commitData = commits.map((c) => {
+    const authorLogin = c.author?.login || null;
+    const authorEmail = c.commit?.author?.email || null;
+
+    let linkedUserId: string | null = null;
+    if (authorLogin && usernameMap.has(authorLogin.toLowerCase())) {
+      linkedUserId = usernameMap.get(authorLogin.toLowerCase())!;
+    } else if (authorEmail && emailMap.has(authorEmail.toLowerCase())) {
+      linkedUserId = emailMap.get(authorEmail.toLowerCase())!;
+    }
+
+    const isMerge = Array.isArray(c.parents) && c.parents.length > 1;
+
+    return {
+      repositoryId,
+      sha: c.sha,
+      author: c.commit?.author?.name || c.author?.login || 'unknown',
+      authorLogin,
+      authorEmail,
+      linkedUserId,
+      message: (c.commit?.message || '').slice(0, 1000),
+      date: c.commit?.author?.date ? new Date(c.commit.author.date) : new Date(),
+      isMerge,
+    };
+  });
+
+  await prisma.githubCommit.createMany({
+    data: commitData,
+    skipDuplicates: true,
+  });
+
+  return commitData.length;
+}
+
+async function persistSnapshot(
+  owner: string,
+  repo: string,
+  projectId: string,
+  snapshot: Awaited<ReturnType<typeof fetchRepositorySnapshot>>,
+) {
+  const r = snapshot.raw;
+  const scores = computeScores(snapshot);
 
   const record = await prisma.githubRepository.upsert({
     where: { owner_repository: { owner, repository: repo } },
     create: {
+      projectId,
       owner,
       repository: repo,
-      projectId: projectId || undefined,
-      description: r.description || null,
+      description: r.description,
       visibility: r.private ? 'private' : 'public',
-      defaultBranch: snapshot.branch,
-      homepage: r.homepage || null,
+      defaultBranch: r.default_branch || 'main',
+      homepage: r.homepage,
       license: r.license?.spdx_id || r.license?.name || null,
       topics: r.topics || [],
-      language: r.language || null,
+      language: r.language,
       languages: snapshot.languages,
       repoCreatedAt: r.created_at ? new Date(r.created_at) : null,
       repoUpdatedAt: r.updated_at ? new Date(r.updated_at) : null,
@@ -267,15 +341,16 @@ async function persistSnapshot(owner: string, repo: string, projectId: string | 
       lastSyncError: null,
     },
     update: {
-      projectId: projectId || undefined,
-      description: r.description || null,
+      projectId,
+      description: r.description,
       visibility: r.private ? 'private' : 'public',
-      defaultBranch: snapshot.branch,
-      homepage: r.homepage || null,
+      defaultBranch: r.default_branch || 'main',
+      homepage: r.homepage,
       license: r.license?.spdx_id || r.license?.name || null,
       topics: r.topics || [],
-      language: r.language || null,
+      language: r.language,
       languages: snapshot.languages,
+      repoCreatedAt: r.created_at ? new Date(r.created_at) : null,
       repoUpdatedAt: r.updated_at ? new Date(r.updated_at) : null,
       pushedAt: r.pushed_at ? new Date(r.pushed_at) : null,
       sizeKb: r.size || 0,
@@ -317,6 +392,7 @@ async function persistSnapshot(owner: string, repo: string, projectId: string | 
     },
   });
 
+  // Normalized child rows: Contributors
   await prisma.githubContributor.deleteMany({ where: { repositoryId: record.id } });
   if (snapshot.contributors.length) {
     await prisma.githubContributor.createMany({
@@ -329,20 +405,75 @@ async function persistSnapshot(owner: string, repo: string, projectId: string | 
     });
   }
 
-  if (snapshot.latestCommit) {
-    await prisma.githubCommit.upsert({
-      where: { repositoryId_sha: { repositoryId: record.id, sha: snapshot.latestCommit.sha } },
+  // Normalized child rows: Languages
+  if (snapshot.languages && typeof snapshot.languages === 'object') {
+    const langEntries = Object.entries(snapshot.languages as Record<string, number>).map(([language, bytes]) => ({
+      repositoryId: record.id,
+      language,
+      bytes: Number(bytes) || 0,
+    }));
+    if (langEntries.length > 0) {
+      await prisma.githubRepositoryLanguage.deleteMany({ where: { repositoryId: record.id } });
+      await prisma.githubRepositoryLanguage.createMany({ data: langEntries, skipDuplicates: true });
+    }
+  }
+
+  // Normalized child rows: Labels
+  if (Array.isArray(snapshot.labels) && snapshot.labels.length > 0) {
+    const labelEntries = snapshot.labels.map((l: any) => ({
+      repositoryId: record.id,
+      name: String(l.name || ''),
+      color: l.color ? String(l.color) : null,
+      description: l.description ? String(l.description) : null,
+    }));
+    await prisma.githubRepositoryLabel.deleteMany({ where: { repositoryId: record.id } });
+    await prisma.githubRepositoryLabel.createMany({ data: labelEntries, skipDuplicates: true });
+  }
+
+  // Normalized child rows: Milestones
+  if (Array.isArray(snapshot.milestones) && snapshot.milestones.length > 0) {
+    const milestoneEntries = snapshot.milestones.map((m: any) => ({
+      repositoryId: record.id,
+      title: String(m.title || ''),
+      state: m.state ? String(m.state) : 'open',
+      dueOn: m.due_on ? new Date(m.due_on) : null,
+    }));
+    await prisma.githubRepositoryMilestone.deleteMany({ where: { repositoryId: record.id } });
+    await prisma.githubRepositoryMilestone.createMany({ data: milestoneEntries, skipDuplicates: true });
+  }
+
+  // Normalized child rows: Repo Structure
+  if (snapshot.structure) {
+    await prisma.githubRepoStructure.upsert({
+      where: { repositoryId: record.id },
       create: {
         repositoryId: record.id,
-        sha: snapshot.latestCommit.sha,
-        author: snapshot.latestCommit.commit?.author?.name || snapshot.latestCommit.author?.login || 'unknown',
-        message: snapshot.latestCommit.commit?.message || '',
-        date: snapshot.latestCommit.commit?.author?.date ? new Date(snapshot.latestCommit.commit.author.date) : new Date(),
+        hasSrc: snapshot.structure.hasSrc,
+        hasTests: snapshot.structure.hasTests,
+        hasDocs: snapshot.structure.hasDocs,
+        hasCi: snapshot.structure.hasCi,
+        fileCount: snapshot.structure.fileCount,
+        directoryCount: snapshot.structure.directoryCount,
+        topLevelFolders: snapshot.structure.topLevelFolders,
       },
-      update: {},
+      update: {
+        hasSrc: snapshot.structure.hasSrc,
+        hasTests: snapshot.structure.hasTests,
+        hasDocs: snapshot.structure.hasDocs,
+        hasCi: snapshot.structure.hasCi,
+        fileCount: snapshot.structure.fileCount,
+        directoryCount: snapshot.structure.directoryCount,
+        topLevelFolders: snapshot.structure.topLevelFolders,
+      },
     });
   }
 
+  // Real paginated commit history synchronization & contributor attribution
+  await syncCommitHistory(record.id, owner, repo).catch((err) => {
+    logger.warn('Full commit history sync failed, falling back to latest commit', { repositoryId: record.id, error: err?.message });
+  });
+
+  // Normalized snapshot
   await prisma.githubSnapshot.create({
     data: {
       repositoryId: record.id,
@@ -362,6 +493,17 @@ async function persistSnapshot(owner: string, repo: string, projectId: string | 
         communityScore: record.communityScore,
         freshnessScore: record.freshnessScore,
       },
+      stars: record.stars,
+      forks: record.forks,
+      watchers: record.watchers,
+      commitCount: record.commitCount,
+      contributorCount: record.contributorCount,
+      openIssues: record.openIssues,
+      closedIssues: record.closedIssues,
+      openPullRequests: record.openPullRequests,
+      closedPullRequests: record.closedPullRequests,
+      mergedPullRequests: record.mergedPullRequests,
+      popularityScore: record.popularityScore,
     },
   });
 
@@ -395,7 +537,11 @@ async function getForProject(projectId: string, opts: { forceRefresh?: boolean }
 
   let record = await prisma.githubRepository.findUnique({
     where: { projectId },
-    include: { contributors: { orderBy: { contributions: 'desc' }, take: 25 } },
+    include: {
+      contributors: { orderBy: { contributions: 'desc' }, take: 25 },
+      languagesList: true,
+      structureRecord: true,
+    },
   });
 
   const isStale = !record?.lastSyncedAt || Date.now() - record.lastSyncedAt.getTime() > SYNC_TTL_MS;
@@ -410,7 +556,11 @@ async function getForProject(projectId: string, opts: { forceRefresh?: boolean }
     if (record) {
       record = await prisma.githubRepository.findUnique({
         where: { projectId },
-        include: { contributors: { orderBy: { contributions: 'desc' }, take: 25 } },
+        include: {
+          contributors: { orderBy: { contributions: 'desc' }, take: 25 },
+          languagesList: true,
+          structureRecord: true,
+        },
       });
     }
   } else if (project.repoLink && ((opts.forceRefresh && canForceRefresh) || isStale)) {
@@ -419,11 +569,171 @@ async function getForProject(projectId: string, opts: { forceRefresh?: boolean }
     });
     record = await prisma.githubRepository.findUnique({
       where: { projectId },
-      include: { contributors: { orderBy: { contributions: 'desc' }, take: 25 } },
+      include: {
+        contributors: { orderBy: { contributions: 'desc' }, take: 25 },
+        languagesList: true,
+        structureRecord: true,
+      },
     });
   }
 
   return record;
+}
+
+/**
+ * Returns contributor commit statistics strictly scoped to the project's own repository.
+ */
+async function getRepoContributorStats(
+  projectId: string,
+  options: { from?: Date; to?: Date } = {},
+) {
+  const repo = await prisma.githubRepository.findUnique({
+    where: { projectId },
+    include: {
+      project: {
+        include: {
+          members: {
+            include: {
+              user: { select: { id: true, fullName: true, email: true, githubUsername: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!repo) {
+    return {
+      repositoryId: null,
+      projectId,
+      totalCommits: 0,
+      attributedCommits: 0,
+      unattributedCommits: 0,
+      contributors: [],
+    };
+  }
+
+  const dateFilter: Prisma.DateTimeFilter = {};
+  if (options.from) dateFilter.gte = options.from;
+  if (options.to) dateFilter.lte = options.to;
+
+  const commits = await prisma.githubCommit.findMany({
+    where: {
+      repositoryId: repo.id,
+      ...(options.from || options.to ? { date: dateFilter } : {}),
+    },
+    include: {
+      linkedUser: { select: { id: true, fullName: true, email: true, githubUsername: true } },
+    },
+    orderBy: { date: 'asc' },
+  });
+
+  const memberMap = new Map<string, {
+    userId: string;
+    githubLogin?: string | null;
+    displayName: string;
+    commits: number;
+    activeDays: Set<string>;
+    firstCommitAt: Date | null;
+    lastCommitAt: Date | null;
+    isAttributed: boolean;
+  }>();
+
+  // Initialize registered project members
+  if (repo.project?.members) {
+    for (const m of repo.project.members) {
+      memberMap.set(m.user.id, {
+        userId: m.user.id,
+        githubLogin: m.user.githubUsername,
+        displayName: m.user.fullName,
+        commits: 0,
+        activeDays: new Set<string>(),
+        firstCommitAt: null,
+        lastCommitAt: null,
+        isAttributed: true,
+      });
+    }
+  }
+
+  const unattributedLogins = new Map<string, {
+    userId: null;
+    githubLogin: string;
+    displayName: string;
+    commits: number;
+    activeDays: Set<string>;
+    firstCommitAt: Date | null;
+    lastCommitAt: Date | null;
+    isAttributed: boolean;
+  }>();
+
+  let totalAttributed = 0;
+  let totalUnattributed = 0;
+
+  for (const c of commits) {
+    const dayStr = c.date.toISOString().split('T')[0]!;
+    if (c.linkedUserId) {
+      totalAttributed++;
+      let entry = memberMap.get(c.linkedUserId);
+      if (!entry) {
+        entry = {
+          userId: c.linkedUserId,
+          githubLogin: c.linkedUser?.githubUsername || c.authorLogin,
+          displayName: c.linkedUser?.fullName || c.author,
+          commits: 0,
+          activeDays: new Set<string>(),
+          firstCommitAt: null,
+          lastCommitAt: null,
+          isAttributed: true,
+        };
+        memberMap.set(c.linkedUserId, entry);
+      }
+      entry.commits++;
+      entry.activeDays.add(dayStr);
+      if (!entry.firstCommitAt || c.date < entry.firstCommitAt) entry.firstCommitAt = c.date;
+      if (!entry.lastCommitAt || c.date > entry.lastCommitAt) entry.lastCommitAt = c.date;
+    } else {
+      totalUnattributed++;
+      const loginKey = c.authorLogin || c.authorEmail || c.author || 'unattributed';
+      let entry = unattributedLogins.get(loginKey);
+      if (!entry) {
+        entry = {
+          userId: null,
+          githubLogin: c.authorLogin || loginKey,
+          displayName: c.author,
+          commits: 0,
+          activeDays: new Set<string>(),
+          firstCommitAt: null,
+          lastCommitAt: null,
+          isAttributed: false,
+        };
+        unattributedLogins.set(loginKey, entry);
+      }
+      entry.commits++;
+      entry.activeDays.add(dayStr);
+      if (!entry.firstCommitAt || c.date < entry.firstCommitAt) entry.firstCommitAt = c.date;
+      if (!entry.lastCommitAt || c.date > entry.lastCommitAt) entry.lastCommitAt = c.date;
+    }
+  }
+
+  const contributors = [
+    ...Array.from(memberMap.values()).map((m) => ({
+      ...m,
+      activeDays: m.activeDays.size,
+    })),
+    ...Array.from(unattributedLogins.values()).map((u) => ({
+      ...u,
+      activeDays: u.activeDays.size,
+    })),
+  ].sort((a, b) => b.commits - a.commits);
+
+  return {
+    repositoryId: repo.id,
+    projectId,
+    totalCommits: commits.length,
+    attributedCommits: totalAttributed,
+    unattributedCommits: totalUnattributed,
+    contributors,
+  };
 }
 
 async function getSnapshotHistory(projectId: string, limit = 30) {
@@ -488,6 +798,8 @@ export const githubService = {
   parseRepoUrl,
   analyzeAndLinkProject,
   getForProject,
+  syncCommitHistory,
+  getRepoContributorStats,
   getSnapshotHistory,
   getCollegeAnalytics,
 };

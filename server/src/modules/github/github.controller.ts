@@ -59,6 +59,29 @@ export const githubController = {
     }
   },
 
+  async getProjectContributors(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user || !user.organizationId) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+      const { projectId } = req.params;
+      const project = await assertProjectAccess(user.organizationId, projectId as string);
+      if (!project) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Project not found' });
+      }
+
+      const from = req.query.from ? new Date(req.query.from as string) : undefined;
+      const to = req.query.to ? new Date(req.query.to as string) : undefined;
+
+      const stats = await githubService.getRepoContributorStats(projectId as string, { from, to });
+      res.json(stats);
+    } catch (error: any) {
+      console.error('Error fetching project contributors:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to fetch contributor stats' });
+    }
+  },
+
   async refreshProjectGithub(req: Request, res: Response) {
     try {
       const user = req.user;

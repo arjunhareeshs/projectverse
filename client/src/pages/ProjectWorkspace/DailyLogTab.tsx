@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   Calendar,
-  Clock,
   Plus,
   Trash2,
   Send,
@@ -17,7 +16,6 @@ import {
 import { DailyLogEntry } from '../../types/projectLog';
 import { lifecycleService } from '../../services/lifecycle.service';
 import { useAppSelector } from '../../app/hooks';
-
 import { getBackendHostUrl } from '../../services/api';
 
 interface DailyLogTabProps {
@@ -87,6 +85,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
 
   useEffect(() => {
     fetchLogs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const handleAddEvidenceUrl = () => {
@@ -145,7 +144,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
         evidenceUrls: validUrls.length > 0 ? validUrls : undefined,
       });
 
-      setSuccessMsg("Today's work log saved successfully! +20 Reward Points added to DB.");
+      setSuccessMsg("Today's work log saved successfully! +20 Reward Points added.");
       setTimeout(() => setSuccessMsg(null), 4000);
       await fetchLogs();
     } catch (err: any) {
@@ -160,7 +159,20 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
     }
   };
 
-  const totalPointsThisMonth = (logs.length * 20) + 120;
+  const totalPointsThisMonth = logs.length * 20 + 120;
+
+  if (loading && logs.length === 0) {
+    return (
+      <div className="space-y-6 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="h-24 rounded-card skeleton-shimmer" />
+          ))}
+        </div>
+        <div className="h-96 rounded-card skeleton-shimmer" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -173,108 +185,108 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
         onChange={handleImageFileChange}
       />
 
-      {/* ---------------------------------------------------------------- TOP STAT CARDS GRID */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl p-5 shadow-2xs grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-center">
+      {/* ─── Top Stat Cards Grid ─────────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-card p-5 shadow-card grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-center">
         {/* Card 1: Today's Date */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-xl bg-[#F3F0FF] text-[#4F46E5] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-btn bg-primary/10 text-primary flex items-center justify-center shrink-0">
             <Calendar className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] text-gray-400 font-medium block">Today's Date</span>
-            <span className="text-sm font-extrabold text-gray-900 block leading-snug">{formattedDateMonth}</span>
-            <span className="text-[11px] text-gray-400 font-normal block">{formattedDayName}</span>
+            <span className="text-[11px] text-muted-foreground font-medium block">Today's Date</span>
+            <span className="text-sm font-semibold text-foreground block leading-snug">{formattedDateMonth}</span>
+            <span className="text-[11px] text-muted-foreground font-normal block">{formattedDayName}</span>
           </div>
         </div>
 
         {/* Card 2: Points Available */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-full bg-[#FFE4E6] text-[#F43F5E] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-full bg-accent-soft text-accent flex items-center justify-center shrink-0">
             <Target className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] text-gray-400 font-medium block">Points Available</span>
-            <span className="text-sm font-extrabold text-gray-900 block leading-snug">+20 pts</span>
-            <span className="text-[11px] text-gray-400 font-normal block">To DB per submission</span>
+            <span className="text-[11px] text-muted-foreground font-medium block">Points Available</span>
+            <span className="text-sm font-semibold text-foreground block leading-snug">+20 pts</span>
+            <span className="text-[11px] text-muted-foreground font-normal block">Per daily submission</span>
           </div>
         </div>
 
         {/* Card 3: Total Points Earned */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-xl bg-[#F3E8FF] text-[#9333EA] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-btn bg-primary/10 text-primary flex items-center justify-center shrink-0">
             <Award className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] text-gray-400 font-medium block">Total Points Earned</span>
-            <span className="text-sm font-extrabold text-gray-900 block leading-snug">{totalPointsThisMonth} pts</span>
-            <span className="text-[11px] text-gray-400 font-normal block">This Month</span>
+            <span className="text-[11px] text-muted-foreground font-medium block">Total Points Earned</span>
+            <span className="text-sm font-semibold text-foreground block leading-snug tabular-nums">{totalPointsThisMonth} pts</span>
+            <span className="text-[11px] text-muted-foreground font-normal block">This Month</span>
           </div>
         </div>
 
         {/* Card 4: Current Streak */}
         <div className="flex items-center gap-3 pr-2">
-          <div className="w-10 h-10 rounded-xl bg-[#D1FAE5] text-[#10B981] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-btn bg-success/10 text-success flex items-center justify-center shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <span className="text-[11px] text-gray-400 font-medium block">Current Streak</span>
-            <span className="text-sm font-extrabold text-gray-900 block leading-snug">7 Days</span>
-            <span className="text-[11px] text-gray-400 font-normal block">Keep it up!</span>
+            <span className="text-[11px] text-muted-foreground font-medium block">Current Streak</span>
+            <span className="text-sm font-semibold text-foreground block leading-snug">7 Days</span>
+            <span className="text-[11px] text-muted-foreground font-normal block">Keep it up!</span>
           </div>
         </div>
 
         {/* Card 5: Log Consistency */}
-        <div className="bg-[#F0F4FF] border border-[#E0E7FF] rounded-2xl p-4 flex flex-col justify-between space-y-2">
+        <div className="bg-surface-subtle border border-border rounded-btn p-3.5 flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">Log Consistency</span>
-            <span className="text-xs font-extrabold text-[#4F46E5]">92%</span>
+            <span className="text-xs font-semibold text-muted-foreground">Consistency</span>
+            <span className="text-xs font-semibold text-primary tabular-nums">92%</span>
           </div>
-          <div className="w-full h-2 bg-[#C7D2FE]/70 rounded-full overflow-hidden">
-            <div className="h-full bg-[#4F46E5] rounded-full" style={{ width: '92%' }} />
+          <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: '92%' }} />
           </div>
-          <span className="text-[11px] font-bold text-[#10B981]">Excellent</span>
+          <span className="text-[11px] font-semibold text-success">Excellent</span>
         </div>
       </div>
 
-      {/* ---------------------------------------------------------------- TODAY'S WORK LOG FORM */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 shadow-2xs space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+      {/* ─── Today's Work Log Form ──────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-card p-6 shadow-card space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/70 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#EEF2FF] text-[#4F46E5] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-btn bg-primary/10 text-primary flex items-center justify-center shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-gray-900 flex items-center gap-2">
-                Today's Work Log <span className="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-[#F1F5F9] text-[#64748B]">{todayStr}</span>
+              <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                Today's Work Log <span className="text-xs font-medium px-2.5 py-0.5 rounded-md bg-surface-subtle text-muted-foreground">{todayStr}</span>
               </h3>
             </div>
           </div>
-          <span className="px-3.5 py-1.5 rounded-full bg-[#F3E8FF] border border-purple-100 text-[#6D28D9] text-xs font-bold flex items-center gap-1.5 shrink-0">
-            <Award className="w-4 h-4 text-[#6D28D9]" /> +20 Pts to DB
+          <span className="px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold flex items-center gap-1.5 shrink-0">
+            <Award className="w-4 h-4 text-primary" /> +20 Pts Available
           </span>
         </div>
 
         {error && (
-          <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-center gap-2 font-semibold">
+          <div className="p-3.5 rounded-btn bg-danger/10 border border-danger/20 text-xs text-danger flex items-center gap-2 font-semibold">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-2 font-bold">
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+          <div className="p-3.5 rounded-btn bg-success/10 border border-success/20 text-xs text-success flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-success" />
             <span>{successMsg}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold text-gray-800">
-                What did you accomplish today? <span className="text-rose-500">*</span>
+              <label className="block text-xs font-semibold text-foreground">
+                What did you accomplish today? <span className="text-danger">*</span>
               </label>
-              <span className="text-[11px] font-semibold text-gray-400">{workDone.length} / 1500</span>
+              <span className="text-[11px] font-medium text-muted-foreground">{workDone.length} / 1500</span>
             </div>
             <textarea
               required
@@ -283,13 +295,13 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
               value={workDone}
               onChange={(e) => setWorkDone(e.target.value)}
               placeholder="Describe your code commits, design work, hardware setup, research, testing, or tasks completed..."
-              className="w-full p-3.5 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder:text-gray-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+              className="w-full p-3.5 bg-background border border-border rounded-input text-xs text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary/40 outline-none transition resize-none"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-800 mb-1">
+              <label className="block text-xs font-semibold text-foreground mb-1">
                 Hours Spent (optional)
               </label>
               <input
@@ -302,12 +314,12 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                   setHoursSpent(e.target.value ? parseFloat(e.target.value) : undefined)
                 }
                 placeholder="e.g., 4.5"
-                className="w-full px-3.5 py-2.5 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                className="w-full px-3.5 py-2.5 bg-background border border-border rounded-input text-xs text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 outline-none transition"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-800 mb-1">
+              <label className="block text-xs font-semibold text-foreground mb-1">
                 Blockers / Issues (optional)
               </label>
               <input
@@ -315,14 +327,14 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                 value={blockers}
                 onChange={(e) => setBlockers(e.target.value)}
                 placeholder="Any challenges or blockers faced..."
-                className="w-full px-3.5 py-2.5 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                className="w-full px-3.5 py-2.5 bg-background border border-border rounded-input text-xs text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 outline-none transition"
               />
             </div>
           </div>
 
           {/* Evidence & Screenshots Section */}
           <div className="space-y-3">
-            <label className="block text-xs font-bold text-gray-800">
+            <label className="block text-xs font-semibold text-foreground">
               Evidence & Screenshots (Upload Image or Link Commits)
             </label>
 
@@ -331,16 +343,16 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
               {/* Upload Image Card */}
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="p-4 rounded-xl border border-indigo-100 bg-indigo-50/40 hover:bg-indigo-50 text-center cursor-pointer transition flex items-center justify-center gap-3 shadow-2xs group"
+                className="p-4 rounded-btn border border-border bg-surface-subtle/50 hover:bg-surface-subtle text-center cursor-pointer transition flex items-center justify-center gap-3 group interactive-tap"
               >
-                <div className="w-9 h-9 rounded-xl bg-white text-indigo-600 flex items-center justify-center shrink-0 border border-indigo-100 shadow-2xs group-hover:scale-105 transition">
+                <div className="w-9 h-9 rounded-btn bg-card text-primary flex items-center justify-center shrink-0 border border-border shadow-xs group-hover:scale-105 transition">
                   <Upload className="w-4 h-4" />
                 </div>
                 <div className="text-left">
-                  <span className="text-xs font-bold text-indigo-700 block">
+                  <span className="text-xs font-semibold text-foreground block">
                     {uploadingImage ? 'Uploading Image...' : 'Upload Image / Screenshot'}
                   </span>
-                  <span className="text-[10px] font-semibold text-gray-400 block">
+                  <span className="text-[10px] text-muted-foreground block">
                     PNG, JPG, GIF up to 10MB
                   </span>
                 </div>
@@ -349,14 +361,14 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
               {/* Add Link Card */}
               <div
                 onClick={handleAddEvidenceUrl}
-                className="p-4 rounded-xl border border-gray-200 bg-gray-50/40 hover:bg-gray-50 text-center cursor-pointer transition flex items-center justify-center gap-3 shadow-2xs group"
+                className="p-4 rounded-btn border border-border bg-surface-subtle/50 hover:bg-surface-subtle text-center cursor-pointer transition flex items-center justify-center gap-3 group interactive-tap"
               >
-                <div className="w-9 h-9 rounded-xl bg-white text-gray-500 flex items-center justify-center shrink-0 border border-gray-200 shadow-2xs group-hover:scale-105 transition">
+                <div className="w-9 h-9 rounded-btn bg-card text-muted-foreground flex items-center justify-center shrink-0 border border-border shadow-xs group-hover:scale-105 transition">
                   <LinkIcon className="w-4 h-4" />
                 </div>
                 <div className="text-left">
-                  <span className="text-xs font-bold text-gray-700 block">Add Commit / Link</span>
-                  <span className="text-[10px] font-semibold text-gray-400 block">
+                  <span className="text-xs font-semibold text-foreground block">Add Commit / Link</span>
+                  <span className="text-[10px] text-muted-foreground block">
                     Paste commit link, PR, or other evidence...
                   </span>
                 </div>
@@ -373,27 +385,27 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                 return (
                   <div
                     key={idx}
-                    className="relative group rounded-2xl border border-gray-200 p-3.5 bg-gray-50/60 flex items-center justify-between gap-4 shadow-2xs"
+                    className="relative group rounded-card border border-border p-3.5 bg-surface-subtle/40 flex items-center justify-between gap-4 shadow-xs"
                   >
                     <div className="flex items-center gap-4">
                       <img
                         src={formatAssetUrl(url)}
                         alt="Screenshot Preview"
-                        className="w-40 h-28 object-cover rounded-xl border border-gray-200 shadow-xs cursor-pointer hover:scale-102 transition"
+                        className="w-40 h-28 object-cover rounded-btn border border-border shadow-xs cursor-pointer hover:scale-105 transition-transform"
                         onClick={() => window.open(formatAssetUrl(url), '_blank')}
                       />
                       <div className="space-y-1">
-                        <span className="text-xs font-bold text-gray-900 block">
+                        <span className="text-xs font-semibold text-foreground block">
                           Uploaded Screenshot / Evidence
                         </span>
-                        <span className="text-[11px] text-gray-500 font-medium block">
+                        <span className="text-[11px] text-muted-foreground font-medium block">
                           Click image to expand in full window
                         </span>
                         <a
                           href={formatAssetUrl(url)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:underline pt-1"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline pt-1"
                         >
                           <ExternalLink className="w-3 h-3" /> View full resolution image
                         </a>
@@ -403,7 +415,7 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
                     <button
                       type="button"
                       onClick={() => handleRemoveEvidenceUrl(idx)}
-                      className="px-3 py-1.5 text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-xl transition font-bold text-xs flex items-center gap-1 border border-rose-200"
+                      className="px-3 py-1.5 text-danger hover:bg-danger/10 rounded-btn transition font-semibold text-xs flex items-center gap-1 border border-danger/20 interactive-tap"
                       title="Remove Image"
                     >
                       <Trash2 className="w-3.5 h-3.5" /> Remove
@@ -415,20 +427,20 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
               return (
                 <div key={idx} className="flex items-center gap-2">
                   <div className="relative flex-1">
-                    <LinkIcon className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-3" />
+                    <LinkIcon className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-3" />
                     <input
                       type="text"
                       value={url}
                       onChange={(e) => handleEvidenceChange(idx, e.target.value)}
                       placeholder="https://github.com/org/repo/commit/..."
-                      className="w-full pl-9 pr-3 py-2 bg-gray-50/60 border border-gray-200 rounded-xl text-xs text-gray-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition"
+                      className="w-full pl-9 pr-3 py-2 bg-background border border-border rounded-input text-xs text-foreground focus-visible:ring-2 focus-visible:ring-primary/40 outline-none transition"
                     />
                   </div>
                   {evidenceUrls.length > 1 && (
                     <button
                       type="button"
                       onClick={() => handleRemoveEvidenceUrl(idx)}
-                      className="p-2 text-gray-400 hover:text-rose-600 transition"
+                      className="p-2 text-muted-foreground hover:text-danger transition"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -440,22 +452,22 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
             <button
               type="button"
               onClick={handleAddEvidenceUrl}
-              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 pt-1"
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline pt-1"
             >
               <Plus className="w-3.5 h-3.5" /> Add Another Evidence Link
             </button>
           </div>
 
-          <div className="pt-2 flex items-center justify-between border-t border-gray-100">
-            <span className="text-[11px] text-gray-500 font-medium">
-              ★ +20 Points added to your profile in DB upon saving.
+          <div className="pt-3 flex items-center justify-between border-t border-border/70">
+            <span className="text-[11px] text-muted-foreground font-medium">
+              ★ +20 Points added to your profile upon saving.
             </span>
             <button
               type="submit"
               disabled={submitting || !workDone.trim()}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition shadow-xs disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-btn text-xs font-semibold hover:bg-primary/90 transition shadow-sm disabled:opacity-50 interactive-tap"
             >
-              <Send className="w-3.5 h-3.5" /> {submitting ? 'Saving Log & DB Points...' : "Save Today's Log"}
+              <Send className="w-3.5 h-3.5" /> {submitting ? 'Saving Log...' : "Save Today's Log"}
             </button>
           </div>
         </form>

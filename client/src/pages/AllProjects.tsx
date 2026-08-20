@@ -1,693 +1,434 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { api } from '../services/api';
-import { useAppSelector } from '../app/hooks';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Search,
   Plus,
   ChevronLeft,
   ChevronRight,
-  Filter,
   CheckCircle2,
   Radio,
   Ban,
-  MoreVertical,
-  FileText,
-  LayoutGrid,
-  List,
   Wind,
   Trash2,
   Sprout,
   Activity,
   Droplets,
   Layers,
-  ChevronDown,
   LogOut,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { teamService } from '../services/team.service';
+import { projectService } from '../services/project.service';
+import type { MyProjectItem, MyProjectsResponse } from '../services/project.service';
 import { WithdrawProjectModal } from '../components/projects/WithdrawProjectModal';
+import { cn } from '../utils/cn';
 
+const ICON_TYPES = ['wind', 'trash', 'sprout', 'activity', 'droplets'] as const;
 
-export interface MyProjectItem {
-  id: string;
-  name: string;
-  categoryTag?: string; // 'FINAL YEAR' | 'MINI' | 'RESEARCH'
-  domain?: string;
-  subdomain?: string;
-  teamName?: string;
-  memberCount?: number;
-  teamAvatars?: Array<{ initials: string; bg: string }>;
-  moreMembersCount?: number;
-  status: 'In Progress' | 'Review' | 'Completed' | 'On Hold';
-  progressPercent: number;
-  lastUpdated: string;
-  iconType?: 'wind' | 'trash' | 'sprout' | 'activity' | 'droplets' | 'default';
-  iconBg?: string;
-  iconColor?: string;
-}
+/** Stable per-project decoration so a row keeps its icon across refetches and pages. */
+const iconIndex = (id: string) => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % ICON_TYPES.length;
+};
+
+const renderProjectIcon = (type: string) => {
+  switch (type) {
+    case 'wind':
+      return <Wind className="w-5 h-5" />;
+    case 'trash':
+      return <Trash2 className="w-5 h-5" />;
+    case 'sprout':
+      return <Sprout className="w-5 h-5" />;
+    case 'activity':
+      return <Activity className="w-5 h-5" />;
+    case 'droplets':
+      return <Droplets className="w-5 h-5" />;
+    default:
+      return <Layers className="w-5 h-5" />;
+  }
+};
+
+const statusBadgeClass = (label: MyProjectItem['statusLabel']) => {
+  switch (label) {
+    case 'In Progress':
+      return 'bg-primary/10 text-primary border border-primary/20';
+    case 'Completed':
+      return 'bg-success/10 text-success border border-success/20';
+    case 'In Review':
+    case 'Pending Approval':
+      return 'bg-warning/10 text-warning border border-warning/20';
+    case 'On Hold':
+      return 'bg-danger/10 text-danger border border-danger/20';
+    default:
+      return 'bg-surface-subtle text-muted-foreground border border-border';
+  }
+};
+
+const formatLastActivity = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const initialsOf = (name: string) =>
+  (name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2) || 'T').toUpperCase();
 
 export const AllProjects: React.FC = () => {
-  const [projectsList, setProjectsList] = useState<MyProjectItem[]>([]);
+  const [data, setData] = useState<MyProjectsResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [error, setError] = useState<string | null>(null);
 
-  // Filter & Search states
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [sortOption, setSortOption] = useState<string>('recently_updated');
-
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
+  const [pageSize, setPageSize] = useState(5);
 
-  // Withdraw Modal state
   const [withdrawTarget, setWithdrawTarget] = useState<{ id: string; name: string } | null>(null);
-
-  const user = useAppSelector((s) => s.auth.user);
 
   const navigate = useNavigate();
 
-  const fetchUserProjects = async () => {
+  const fetchMyProjects = useCallback(async () => {
     try {
       setLoading(true);
-
-      let rawProjects: any[] = [];
-      if (user?.teamId) {
-        try {
-          const teamProjs = await teamService.getTeamProjects(user.teamId);
-          if (Array.isArray(teamProjs) && teamProjs.length > 0) {
-            rawProjects = teamProjs;
-          }
-        } catch (e) {
-          console.log('Failed to fetch team projects:', e);
-        }
-      }
-
-      if (rawProjects.length === 0) {
-        try {
-          const activeRes = await api.get('/projects/active');
-          if (Array.isArray(activeRes.data) && activeRes.data.length > 0) {
-            rawProjects = activeRes.data;
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      if (rawProjects.length > 0) {
-        const mapped: MyProjectItem[] = rawProjects.map((p: any, idx: number) => {
-          const iconBgs = ['bg-purple-100', 'bg-emerald-100', 'bg-amber-100', 'bg-rose-100', 'bg-blue-100'];
-          const iconColors = [
-            'text-purple-600',
-            'text-emerald-600',
-            'text-amber-600',
-            'text-rose-600',
-            'text-blue-600',
-          ];
-          const iconTypes: MyProjectItem['iconType'][] = ['wind', 'trash', 'sprout', 'activity', 'droplets'];
-
-          const statusVal: MyProjectItem['status'] =
-            p.status === 'COMPLETED' ? 'Completed'
-            : p.status === 'ON_HOLD' ? 'On Hold'
-            : p.status === 'REVIEW' ? 'Review'
-            : 'In Progress';
-
-          const membersList = p.team?.members || p.members || [];
-
-          return {
-            id: p.id,
-            name: p.name || p.title || p.shortName || 'Untitled Project',
-            categoryTag: p.category,
-            domain: p.domain,
-            subdomain: p.sector || p.subdomain,
-            teamName: p.team?.name,
-            memberCount: membersList.length,
-            teamAvatars: membersList.slice(0, 3).map((m: any, i: number) => {
-              const raw = (m.fullName || m.name || 'Member').split(' ');
-              const initials = (raw.map((n: string) => n[0]).join('').slice(0, 2) || 'M').toUpperCase();
-              return {
-                initials,
-                bg: ['bg-indigo-600', 'bg-blue-600', 'bg-sky-600', 'bg-purple-600'][i % 4],
-              };
-            }),
-            moreMembersCount: Math.max(0, membersList.length - 3),
-            status: statusVal,
-            progressPercent: p.progress !== undefined ? p.progress : statusVal === 'Completed' ? 100 : 0,
-            lastUpdated: p.updatedAt
-              ? new Date(p.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-              : '—',
-            iconType: iconTypes[idx % iconTypes.length],
-            iconBg: iconBgs[idx % iconBgs.length],
-            iconColor: iconColors[idx % iconColors.length],
-          };
-        });
-
-        setProjectsList(mapped);
-      }
+      setError(null);
+      const res = await projectService.getMyProjects();
+      setData(res);
     } catch (err) {
-      console.error('Error fetching user projects:', err);
+      console.error('Error fetching my projects:', err);
+      setData(null);
+      setError('We could not load your projects. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchUserProjects();
   }, []);
 
-  // Filtered list calculation
-  const filteredProjects = useMemo(() => {
-    return projectsList.filter((p) => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = p.name.toLowerCase().includes(q);
-        const matchesDomain = (p.domain || '').toLowerCase().includes(q);
-        const matchesSubdomain = (p.subdomain || '').toLowerCase().includes(q);
-        if (!matchesName && !matchesDomain && !matchesSubdomain) return false;
-      }
-      if (statusFilter !== 'all') {
-        if (p.status.toLowerCase().replace(/\s+/g, '_') !== statusFilter.toLowerCase().replace(/\s+/g, '_')) {
-          return false;
-        }
-      }
-      return true;
-    });
-  }, [projectsList, searchQuery, statusFilter]);
+  useEffect(() => {
+    void fetchMyProjects();
+  }, [fetchMyProjects]);
 
-  // Statistics metric calculations
-  const totalCount = projectsList.length;
-  const activeCount = projectsList.filter((p) => p.status === 'In Progress').length;
-  const completedCount = projectsList.filter((p) => p.status === 'Completed').length;
-  const onHoldCount = projectsList.filter((p) => p.status === 'On Hold').length;
+  const projects = data?.projects ?? [];
+  const summary = data?.summary ?? { total: 0, inProgress: 0, completed: 0, onHold: 0 };
 
-  // Pagination calculation
-  const totalPages = Math.ceil(filteredProjects.length / pageSize) || 1;
+  const totalPages = Math.max(1, Math.ceil(projects.length / pageSize));
   const paginatedProjects = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredProjects.slice(start, start + pageSize);
-  }, [filteredProjects, currentPage, pageSize]);
+    return projects.slice(start, start + pageSize);
+  }, [projects, currentPage, pageSize]);
 
-  // Render project icon helper
-  const renderProjectIcon = (type?: string) => {
-    switch (type) {
-      case 'wind':
-        return <Wind className="w-5 h-5" />;
-      case 'trash':
-        return <Trash2 className="w-5 h-5" />;
-      case 'sprout':
-        return <Sprout className="w-5 h-5" />;
-      case 'activity':
-        return <Activity className="w-5 h-5" />;
-      case 'droplets':
-        return <Droplets className="w-5 h-5" />;
-      default:
-        return <Layers className="w-5 h-5" />;
-    }
-  };
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const stats = [
+    {
+      label: 'Total Projects',
+      value: summary.total,
+      hint: 'Projects you are part of',
+      icon: <Radio className="w-5 h-5" />,
+      tone: 'bg-primary/10 text-primary',
+    },
+    {
+      label: 'Active Projects',
+      value: summary.inProgress,
+      hint: 'In progress',
+      icon: <CheckCircle2 className="w-5 h-5" />,
+      tone: 'bg-primary/10 text-primary',
+    },
+    {
+      label: 'Completed Projects',
+      value: summary.completed,
+      hint: 'Successfully completed',
+      icon: <CheckCircle2 className="w-5 h-5" />,
+      tone: 'bg-success/10 text-success',
+    },
+    {
+      label: 'On Hold',
+      value: summary.onHold,
+      hint: 'Temporarily paused',
+      icon: <Ban className="w-5 h-5" />,
+      tone: 'bg-danger/10 text-danger',
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 md:p-8 font-sans space-y-6 max-w-7xl mx-auto">
-      {/* ---------------------------------------------------------------- TOP HEADER BAR */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
+    <div className="min-h-screen bg-background font-sans space-y-6 max-w-7xl mx-auto pb-12">
+      {/* ─── Top Header Bar ──────────────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">My Projects</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">My Projects</h1>
+          <p className="text-xs text-muted-foreground mt-1 font-medium">
             All the projects you are part of. Track progress and manage execution.
           </p>
         </div>
 
         <button
           onClick={() => navigate('/projects/propose')}
-          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-btn bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-sm transition interactive-tap"
         >
           <Plus className="h-4 w-4" />
           New Project
         </button>
       </div>
 
-      {/* ---------------------------------------------------------------- TOP METRIC STAT CARDS */}
+      {/* ─── Top Metric Stat Cards ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Projects */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Radio className="w-6 h-6" />
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className="bg-card border border-border rounded-card p-5 shadow-card flex items-center gap-4 hover-lift"
+          >
+            <div className={`w-11 h-11 rounded-btn ${s.tone} flex items-center justify-center shrink-0`}>
+              {s.icon}
+            </div>
+            <div>
+              <span className="text-xs text-muted-foreground font-medium block">{s.label}</span>
+              <span className="text-2xl font-semibold text-foreground leading-tight block tabular-nums">
+                {loading ? '—' : s.value}
+              </span>
+              <span className="text-[11px] text-muted-foreground font-normal">{s.hint}</span>
+            </div>
           </div>
-          <div>
-            <span className="text-xs text-slate-400 font-semibold block">Total Projects</span>
-            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
-              {totalCount}
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium">All projects</span>
-          </div>
-        </div>
-
-        {/* Active Projects */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-400 font-semibold block">Active Projects</span>
-            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
-              {activeCount}
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium">In progress</span>
-          </div>
-        </div>
-
-        {/* Completed Projects */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-400 font-semibold block">Completed Projects</span>
-            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
-              {completedCount}
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium">Successfully completed</span>
-          </div>
-        </div>
-
-        {/* On Hold */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
-            <Ban className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-slate-400 font-semibold block">On Hold</span>
-            <span className="text-2xl font-extrabold text-slate-900 leading-tight block">
-              {onHoldCount}
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium">Temporarily paused</span>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* ---------------------------------------------------------------- FILTER & CONTROLS STRIP */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
-        {/* Search */}
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="Search projects..."
-            className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition"
-          />
+      {/* ─── Workspace Listing ──────────────────────────────────────────────────── */}
+      {loading ? (
+        <div className="rounded-card border border-border bg-card p-12 text-center shadow-card">
+          <Loader2 className="w-5 h-5 text-primary animate-spin mx-auto" />
+          <p className="text-sm font-semibold text-foreground mt-3">Loading your projects…</p>
         </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-2">
+      ) : error ? (
+        <div className="rounded-card border border-danger/20 bg-danger/10 p-12 text-center">
+          <AlertTriangle className="w-5 h-5 text-danger mx-auto" />
+          <p className="text-sm font-semibold text-danger mt-3">{error}</p>
           <button
-            onClick={() => setStatusFilter('all')}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition"
+            onClick={() => void fetchMyProjects()}
+            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-btn bg-danger hover:bg-danger/90 text-primary-foreground text-xs font-semibold shadow-sm transition interactive-tap"
           >
-            <Filter className="w-3.5 h-3.5 text-slate-400" /> Filter
+            Retry
           </button>
-
-          {/* Status Dropdown */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
-          >
-            <option value="all">All Status</option>
-            <option value="In Progress">In Progress</option>
-            <option value="Review">Review</option>
-            <option value="Completed">Completed</option>
-            <option value="On Hold">On Hold</option>
-          </select>
-
-          {/* Sort Dropdown */}
-          <select
-            value={sortOption}
-            onChange={(e) => setSortOption(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
-          >
-            <option value="recently_updated">Sort: Recently Updated</option>
-            <option value="name">Sort: Name</option>
-            <option value="progress">Sort: Progress</option>
-          </select>
-
-          {/* View Mode Toggle */}
-          <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200/80">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-lg transition ${
-                viewMode === 'grid' ? 'bg-white text-blue-600 shadow-2xs font-bold' : 'text-slate-400 hover:text-slate-600'
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition ${
-                viewMode === 'list' ? 'bg-white text-blue-600 shadow-2xs font-bold' : 'text-slate-400 hover:text-slate-600'
-              }`}
-              title="List View"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
         </div>
-      </div>
-
-      {/* ---------------------------------------------------------------- DATA TABLE LIST VIEW */}
-      {!loading && filteredProjects.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-12 text-center">
-          <p className="text-sm font-semibold text-slate-600">No projects yet</p>
-          <p className="text-xs text-slate-400 mt-1">Propose a project to start tracking progress and team activity.</p>
+      ) : projects.length === 0 ? (
+        <div className="rounded-card border border-dashed border-border bg-card p-12 text-center">
+          <p className="text-sm font-semibold text-foreground">No projects yet</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Propose a project to start tracking progress and team activity.
+          </p>
           <button
             onClick={() => navigate('/projects/propose')}
-            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition"
+            className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-btn bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold shadow-sm transition interactive-tap"
           >
             <Plus className="h-4 w-4" /> Propose Project
           </button>
         </div>
-      ) : viewMode === 'list' ? (
-        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-2xs overflow-hidden">
+      ) : (
+        <div className="bg-card border border-border rounded-card shadow-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-slate-50/80 border-b border-slate-200/90 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                <tr className="bg-surface-subtle border-b border-border text-muted-foreground font-semibold uppercase text-[10px] tracking-wider">
                   <th className="py-3 px-5">Project Details</th>
-                  <th className="py-3 px-4 text-center">Team</th>
+                  <th className="py-3 px-4">Team</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-center">Progress</th>
-                  <th className="py-3 px-4">Last Updated</th>
+                  <th className="py-3 px-4">Last Activity</th>
                   <th className="py-3 px-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
-                {paginatedProjects.map((p) => (
-                  <tr
-                    key={p.id}
-                    onClick={() => navigate(`/projects/${p.id}`)}
-                    className="hover:bg-slate-50/80 transition group cursor-pointer"
-                  >
-                    {/* 1. Project Details */}
-                    <td className="py-4 px-5">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`w-10 h-10 rounded-2xl ${p.iconBg || 'bg-blue-100'} ${
-                            p.iconColor || 'text-blue-600'
-                          } flex items-center justify-center shrink-0 shadow-2xs mt-0.5`}
-                        >
-                          {renderProjectIcon(p.iconType)}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900 text-sm group-hover:text-indigo-600 transition">
-                              {p.name}
-                            </span>
-                            {p.categoryTag && (
-                              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wide">
-                                {p.categoryTag}
+              <tbody className="divide-y divide-border">
+                {paginatedProjects.map((p) => {
+                  const idx = iconIndex(p.id);
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => navigate(`/projects/${p.id}`)}
+                      className="hover:bg-surface-subtle/70 transition-colors group cursor-pointer"
+                    >
+                      {/* 1. Project + domain */}
+                      <td className="py-4 px-5">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-btn bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                            {renderProjectIcon(ICON_TYPES[idx])}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-foreground text-sm group-hover:text-primary transition-colors">
+                                {p.name}
                               </span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 space-x-1 font-medium">
-                            {p.domain && <span>{p.domain}</span>}
-                            {p.domain && p.subdomain && <span>•</span>}
-                            {p.subdomain && <span>{p.subdomain}</span>}
-                          </div>
-                          <div className="text-[11px] text-slate-400 font-medium">
-                            {p.teamName && <span>{p.teamName}</span>}
-                            {p.teamName && p.memberCount !== undefined && <span> • </span>}
-                            {p.memberCount !== undefined && <span>{p.memberCount} Members</span>}
+                              {p.category && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary uppercase tracking-wide">
+                                  {p.category.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              {p.isCollaboration && (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-subtle text-foreground uppercase tracking-wide">
+                                  Collab
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5 space-x-1 font-medium">
+                              {p.domain && <span>{p.domain}</span>}
+                              {p.domain && p.sector && <span>•</span>}
+                              {p.sector && <span>{p.sector}</span>}
+                              {!p.domain && !p.sector && <span className="text-muted-foreground">No domain set</span>}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 2. Team Avatar Stack */}
-                    <td className="py-4 px-4 align-middle">
-                      <div className="flex items-center justify-center -space-x-2 overflow-hidden">
-                        {(p.teamAvatars || []).map((av, idx) => (
-                          <div
-                            key={idx}
-                            className={`w-7 h-7 rounded-full ${av.bg} text-white font-bold text-[10px] flex items-center justify-center border-2 border-white ring-1 ring-slate-100 shadow-2xs`}
-                          >
-                            {av.initials}
+                      {/* 2. Team */}
+                      <td className="py-4 px-4 align-middle">
+                        {p.team ? (
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground font-semibold text-[10px] flex items-center justify-center shrink-0">
+                              {initialsOf(p.team.name)}
+                            </div>
+                            <div>
+                              <div className="font-medium text-foreground">{p.team.name}</div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {p.team.memberCount} {p.team.memberCount === 1 ? 'member' : 'members'}
+                              </div>
+                            </div>
                           </div>
-                        ))}
-                        {(p.moreMembersCount || 0) > 0 && (
-                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px] flex items-center justify-center border-2 border-white ring-1 ring-slate-200">
-                            +{p.moreMembersCount}
-                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">No team</span>
                         )}
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 3. Status Badge */}
-                    <td className="py-4 px-4 text-center align-middle">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                          p.status === 'In Progress'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80'
-                            : p.status === 'Review'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200/80'
-                            : p.status === 'Completed'
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : 'bg-rose-50 text-rose-700 border border-rose-200/80'
-                        }`}
-                      >
-                        {p.status}
-                      </span>
-                    </td>
-
-                    {/* 4. Progress */}
-                    <td className="py-4 px-4 align-middle">
-                      <div className="flex items-center gap-2 justify-center">
-                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden shrink-0">
-                          <div
-                            className="h-full bg-blue-600 rounded-full transition-all"
-                            style={{ width: `${p.progressPercent}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-bold text-slate-700 w-8 text-right">
-                          {p.progressPercent}%
+                      {/* 3. Status */}
+                      <td className="py-4 px-4 text-center align-middle">
+                        <span
+                          className={cn(
+                            'inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold',
+                            statusBadgeClass(p.statusLabel)
+                          )}
+                        >
+                          {p.statusLabel}
                         </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* 5. Last Updated */}
-                    <td className="py-4 px-4 text-xs font-semibold text-slate-600 align-middle">
-                      {p.lastUpdated}
-                    </td>
+                      {/* 4. Progress */}
+                      <td className="py-4 px-4 align-middle">
+                        <div className="flex items-center gap-2 justify-center">
+                          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden shrink-0">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-500"
+                              style={{ width: `${p.progress.percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-semibold text-foreground w-8 text-right tabular-nums">
+                            {p.progress.percentage}%
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-medium text-center mt-1">
+                          {p.progress.totalTasks === 0
+                            ? 'No tasks yet'
+                            : `${p.progress.completedTasks}/${p.progress.totalTasks} tasks`}
+                        </div>
+                      </td>
 
-                    {/* 6. Actions */}
-                    <td className="py-4 px-5 text-right align-middle">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/projects/${p.id}`);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-2xs"
-                        >
-                          Daily Log & Workspace
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/projects/${p.id}/execution-doc`);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition shadow-2xs"
-                        >
-                          <FileText className="w-3.5 h-3.5" /> Execution Doc
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWithdrawTarget({ id: p.id, name: p.name });
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition shadow-2xs"
-                          title="Withdraw from project"
-                        >
-                          <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                        </button>
-                      </div>
-                    </td>
+                      {/* 5. Last activity */}
+                      <td className="py-4 px-4 text-xs text-muted-foreground align-middle">
+                        {formatLastActivity(p.lastActivityAt)}
+                      </td>
 
-                  </tr>
-                ))}
+                      {/* 6. Actions */}
+                      <td className="py-4 px-5 text-right align-middle">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/projects/${p.id}`);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-btn transition shadow-sm interactive-tap"
+                          >
+                            Open Workspace
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWithdrawTarget({ id: p.id, name: p.name });
+                            }}
+                            className="inline-flex items-center gap-1.5 p-1.5 text-danger hover:bg-danger/10 rounded-btn transition interactive-tap"
+                            title="Withdraw from project"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
-      ) : (
-        /* GRID VIEW OPTION */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {paginatedProjects.map((p) => (
-            <div
-              key={p.id}
-              onClick={() => navigate(`/projects/${p.id}`)}
-              className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs hover:border-indigo-400 hover:shadow-md transition flex flex-col justify-between cursor-pointer group"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div
-                    className={`w-10 h-10 rounded-2xl ${p.iconBg || 'bg-blue-100'} ${
-                      p.iconColor || 'text-blue-600'
-                    } flex items-center justify-center shrink-0`}
-                  >
-                    {renderProjectIcon(p.iconType)}
-                  </div>
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      p.status === 'In Progress'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : p.status === 'Review'
-                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                        : p.status === 'Completed'
-                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        : 'bg-rose-50 text-rose-700 border border-rose-200'
-                    }`}
-                  >
-                    {p.status}
-                  </span>
-                </div>
-
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base group-hover:text-indigo-600 transition">
-                    {p.name}
-                  </h3>
-                  {(p.domain || p.subdomain) && (
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {[p.domain, p.subdomain].filter(Boolean).join(' • ')}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-                  <span>
-                    {[p.teamName, p.memberCount !== undefined ? `${p.memberCount} Members` : null]
-                      .filter(Boolean)
-                      .join(' • ')}
-                  </span>
-                  <div className="flex items-center -space-x-1.5">
-                    {(p.teamAvatars || []).map((av, idx) => (
-                      <div
-                        key={idx}
-                        className={`w-6 h-6 rounded-full ${av.bg} text-white font-bold text-[9px] flex items-center justify-center border border-white`}
-                      >
-                        {av.initials}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] font-bold text-slate-700">
-                    <span>Progress</span>
-                    <span>{p.progressPercent}%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-blue-600 rounded-full"
-                      style={{ width: `${p.progressPercent}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/projects/${p.id}`);
-                  }}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-xs"
-                >
-                  Daily Log & Workspace
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigate(`/projects/${p.id}/execution-doc`);
-                  }}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
-                >
-                  <FileText className="w-3.5 h-3.5" /> Execution Doc
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setWithdrawTarget({ id: p.id, name: p.name });
-                  }}
-                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition border border-rose-200"
-                  title="Withdraw from project"
-                >
-                  <LogOut className="w-3.5 h-3.5 text-rose-600" />
-                </button>
-              </div>
-            </div>
-
-          ))}
-        </div>
       )}
 
-      {/* ---------------------------------------------------------------- FOOTER PAGINATION */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-slate-200/80">
-        <div className="text-xs text-slate-500 font-medium">
-          Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, filteredProjects.length)} of {filteredProjects.length} projects
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 transition shadow-2xs"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-
-            {[...Array(totalPages)].map((_, idx) => {
-              const pageNum = idx + 1;
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`h-8 w-8 rounded-xl text-xs font-bold transition ${
-                    currentPage === pageNum
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-
-            <button
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-              className="p-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-40 transition shadow-2xs"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+      {/* ─── Footer Pagination ─────────────────────────────────────────────────── */}
+      {!loading && !error && projects.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border">
+          <div className="text-xs text-muted-foreground font-medium">
+            Showing {(currentPage - 1) * pageSize + 1} to{' '}
+            {Math.min(currentPage * pageSize, projects.length)} of {projects.length} projects
           </div>
 
-          <div className="relative">
-            <select className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 outline-none cursor-pointer">
-              <option value="5">5 / page</option>
-              <option value="10">10 / page</option>
-              <option value="20">20 / page</option>
-            </select>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="p-2 rounded-btn border border-border bg-card hover:bg-surface-subtle text-foreground disabled:opacity-40 transition shadow-sm interactive-tap"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              {[...Array(totalPages)].map((_, idx) => {
+                const pageNum = idx + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={cn(
+                      'h-8 w-8 rounded-btn text-xs font-semibold transition interactive-tap',
+                      currentPage === pageNum
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'bg-card text-foreground hover:bg-surface-subtle border border-border'
+                    )}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="p-2 rounded-btn border border-border bg-card hover:bg-surface-subtle text-foreground disabled:opacity-40 transition shadow-sm interactive-tap"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="relative">
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-3 py-1.5 rounded-btn bg-card border border-border text-xs font-semibold text-foreground outline-none cursor-pointer"
+              >
+                <option value={5}>5 / page</option>
+                <option value={10}>10 / page</option>
+                <option value={20}>20 / page</option>
+              </select>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Withdraw Project Modal */}
       {withdrawTarget && (
@@ -698,11 +439,10 @@ export const AllProjects: React.FC = () => {
           onClose={() => setWithdrawTarget(null)}
           onSuccess={() => {
             setWithdrawTarget(null);
-            fetchUserProjects();
+            void fetchMyProjects();
           }}
         />
       )}
     </div>
   );
 };
-

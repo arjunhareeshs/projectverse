@@ -28,14 +28,14 @@
 
   /* Focus ring */
   :focus-visible {
-    @apply outline-none ring-2 ring-primary ring-offset-2;
+    @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
   }
 }
 
 @layer utilities {
   /* Gradient text utility */
   .text-gradient {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--secondary)));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -44,88 +44,73 @@
   /* Glassmorphism utility */
   .glass {
     backdrop-filter: blur(12px);
-    background: hsl(var(--card) / 0.8);
-    border: 1px solid hsl(var(--border) / 0.6);
+    -webkit-backdrop-filter: blur(12px);
+    background: hsl(var(--card) / 0.85);
+    border: 1px solid hsl(var(--border) / 0.8);
+  }
+
+  /* GPU Layer Promotion for zero-jank micro-interactions */
+  .gpu-layer {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+  }
+
+  /* Tactile button & clickable element tap physics */
+  .interactive-tap {
+    transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 120ms ease, background-color 120ms ease;
+  }
+  .interactive-tap:active {
+    transform: scale(0.975);
+  }
+
+  /* Smooth lift for cards and elevated rows */
+  .hover-lift {
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 200ms ease, border-color 200ms ease;
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+    border-color: hsl(var(--primary) / 0.35);
+  }
+
+  /* Glassmorphism panel with crisp hairline border */
+  .glass-panel {
+    background: hsl(var(--card) / 0.88);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border) / 0.8);
+  }
+
+  /* Zero-lag skeleton shimmer sweep */
+  @keyframes shimmer-sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--muted));
+  }
+  .skeleton-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    animation: shimmer-sweep 1.6s infinite cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
-/* ─── Aurora Icon ─────────────────────────────────────────────────────────────── */
-@keyframes aurora-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.aurora-icon {
-  --aurora-size: 44px;
-  --aurora-spin: 5s;
-  --aurora-intensity: 0.85;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--aurora-size);
-  height: var(--aurora-size);
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1.25px solid rgba(17, 24, 39, 0.06);
-  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.03), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
-  background: #fafafa;
-}
-
-.aurora-icon__bloom,
-.aurora-icon__beam {
-  position: absolute;
-  border-radius: 50%;
-  will-change: transform;
-  animation: aurora-spin var(--aurora-spin) linear infinite;
-}
-
-.aurora-icon__bloom {
-  inset: -14%;
-  opacity: calc(var(--aurora-intensity) * 0.85);
-  filter: blur(22px);
-  background: conic-gradient(from -20deg,
-    rgba(255, 182, 109, 0.46) 0deg, rgba(255, 206, 160, 0.34) 42deg,
-    rgba(255, 244, 234, 0.40) 88deg, rgba(204, 238, 255, 0.38) 150deg,
-    rgba(143, 216, 255, 0.50) 200deg, rgba(176, 227, 255, 0.36) 252deg,
-    rgba(255, 230, 200, 0.36) 314deg, rgba(255, 182, 109, 0.46) 360deg);
-  -webkit-mask: radial-gradient(circle at center, rgba(0, 0, 0, 0) 7%, #000 44%, #000 64%, rgba(0, 0, 0, 0) 96%);
-          mask: radial-gradient(circle at center, rgba(0, 0, 0, 0) 7%, #000 44%, #000 64%, rgba(0, 0, 0, 0) 96%);
-}
-
-.aurora-icon__beam {
-  inset: 0;
-  opacity: var(--aurora-intensity);
-  filter: blur(6px);
-  background: conic-gradient(from -20deg,
-    rgba(255, 178, 104, 0.55) 0deg, rgba(255, 208, 162, 0.40) 40deg,
-    rgba(255, 247, 238, 0.48) 86deg, rgba(206, 239, 255, 0.44) 150deg,
-    rgba(138, 214, 255, 0.58) 200deg, rgba(178, 228, 255, 0.42) 250deg,
-    rgba(255, 228, 198, 0.42) 312deg, rgba(255, 178, 104, 0.55) 360deg);
-  -webkit-mask: radial-gradient(circle at center, rgba(0, 0, 0, 0) 9%, #000 42%, #000 62%, rgba(0, 0, 0, 0) 94%);
-          mask: radial-gradient(circle at center, rgba(0, 0, 0, 0) 9%, #000 42%, #000 62%, rgba(0, 0, 0, 0) 94%);
-}
-
-.aurora-icon__veil {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(circle at center, rgba(250, 250, 250, 0.92) 0%, rgba(250, 250, 250, 0.55) 13%, rgba(250, 250, 250, 0) 30%);
-}
-
-.aurora-icon__center {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38%;
-  height: 38%;
-  color: #111827;
-}
-
+/* Reduced Motion Override for Accessibility */
 @media (prefers-reduced-motion: reduce) {
-  .aurora-icon__bloom,
-  .aurora-icon__beam { animation: none; }
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hover-lift:hover { transform: none !important; }
+  .interactive-tap:active { transform: none !important; }
+  .skeleton-shimmer::after { animation: none !important; }
 }

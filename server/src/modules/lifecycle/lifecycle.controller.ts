@@ -11,6 +11,7 @@ import { evaluationEngine } from './engines/evaluation.engine';
 import { mentorEngine } from './engines/mentor.engine';
 import { renderDocPdfBuffer } from './render/docPdf';
 import { renderDocMarkdown } from './render/docMarkdown';
+import { persistExecutionDocNormalized } from './executionDocNormalizer';
 import { intakeSchema, dailyLogSchema, durationCheckSchema, suggestMembersSchema, mentorAskSchema } from './lifecycle.schemas';
 import { draftDailyLog } from './dailyLog.prefill';
 import { detectPersistentBlockers } from '../metrics/blockerEscalation';
@@ -219,6 +220,8 @@ export class LifecycleController {
           markdown,
         },
       });
+
+      await persistExecutionDocNormalized(savedDoc.id, newDocContent);
 
       res.status(StatusCodes.OK).json({
         version: savedDoc.version,

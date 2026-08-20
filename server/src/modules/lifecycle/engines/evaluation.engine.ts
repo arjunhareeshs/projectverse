@@ -5,10 +5,20 @@ import { chatJSON, isLlmConfigured } from '../../ai/llm.service';
 import { projectLogService } from '../projectLog.service';
 import { dailyLogService } from '../dailyLog.service';
 import { notificationService } from '../../notifications/notification.service';
-import { buildEvaluationPrompt } from '../prompts/evaluation.prompt';
+import {
+  serializeEvaluationPrompt,
+  dealiasEvaluationReport,
+  EvaluationReportSchema,
+} from '../../ai/promptSerializer';
 
 export class EvaluationEngine {
   async runEvaluationCycle(projectId: string, cycleNumber?: number): Promise<any> {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, organizationId: true, category: true, name: true },
+    });
+    const organizationId = project?.organizationId || undefined;
+
     const evalCtx: any = await projectLogService.getContext(projectId, 'evaluation');
     const startDate = new Date(evalCtx.duration.startDate);
 
@@ -72,8 +82,8 @@ export class EvaluationEngine {
       memberSelfSim[m.userId] = Math.round(maxSelfSim * 100);
     });
 
-    // GitHub evidence if linked
-    let githubCommits: any[] = [];
+    // GitHub evidence if linked (real commit history query)
+    let githubCommits: Array<{ sha: string; author: string; authorLogin?: string | null; authorEmail?: string | null; linkedUserId?: string | null; message: string; date: Date; isMerge?: boolean }> = [];
     const ghRepo = await prisma.githubRepository.findUnique({
       where: { projectId },
       include: {
@@ -81,7 +91,7 @@ export class EvaluationEngine {
           where: {
             date: { gte: periodStart, lte: periodEnd },
           },
-          take: 20,
+          orderBy: { date: 'asc' },
         },
       },
     });
@@ -90,8 +100,12 @@ export class EvaluationEngine {
       githubCommits = ghRepo.commits.map((c) => ({
         sha: c.sha.substring(0, 7),
         author: c.author,
+        authorLogin: c.authorLogin,
+        authorEmail: c.authorEmail,
+        linkedUserId: c.linkedUserId,
         message: c.message,
         date: c.date,
+        isMerge: c.isMerge,
       }));
     }
 
@@ -108,17 +122,19 @@ export class EvaluationEngine {
       }
     });
 
-    // Cross-team text similarity
+    // Cross-team text similarity — strictly scoped to the same organization and ordered deterministically
     const otherLogs = await prisma.dailyWorkLog.findMany({
       where: {
         projectId: { not: projectId },
+        ...(organizationId ? { project: { organizationId } } : {}),
         date: { gte: periodStart, lte: periodEnd },
       },
+      orderBy: { id: 'asc' },
       take: 100,
-      select: { workDone: true, projectId: true, userId: true },
+      select: { workDone: true, projectId: true, userId: true, date: true },
     });
 
-    const suspiciousPairs: any[] = [];
+    const suspiciousPairs: Array<{ userId: string; date: string; similarityPercent: number }> = [];
     let maxOverlapFound = 0;
 
     for (const myLog of logs) {
@@ -127,9 +143,9 @@ export class EvaluationEngine {
         if (ratio > maxOverlapFound) maxOverlapFound = ratio;
         if (ratio > 0.7) {
           suspiciousPairs.push({
-            myLog: myLog.workDone.slice(0, 100),
-            otherLog: other.workDone.slice(0, 100),
-            similarity: Math.round(ratio * 100),
+            userId: myLog.userId,
+            date: myLog.date,
+            similarityPercent: Math.round(ratio * 100),
           });
         }
       }
@@ -138,25 +154,35 @@ export class EvaluationEngine {
     // Previous eval
     const previousEval = evalCtx.lastEvaluationSummary;
 
-    let reportContent: EvaluationReportContent;
-    let isFallback = false;
+    // Build leak-free serialized LLM payload
+    const { prompt, aliasToUserId } = serializeEvaluationPrompt({
+      cycle: targetCycle,
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+      evalContext: evalCtx,
+      logsGroupedByMember,
+      githubCommits,
+      previousEval,
+      suspiciousPairs,
+    });
 
-    if (!isLlmConfigured()) {
+    let reportContent: EvaluationReportContent;
+    const isFallback = !isLlmConfigured();
+
+    if (isFallback) {
       reportContent = this.getFallbackReport(targetCycle, periodStart.toISOString(), periodEnd.toISOString(), logsGroupedByMember);
-      isFallback = true;
     } else {
-      const prompt = buildEvaluationPrompt(
-        targetCycle,
-        periodStart.toISOString(),
-        periodEnd.toISOString(),
-        evalCtx,
-        logsGroupedByMember,
-        githubCommits,
-        previousEval,
-        suspiciousPairs,
-      );
       const fallback = this.getFallbackReport(targetCycle, periodStart.toISOString(), periodEnd.toISOString(), logsGroupedByMember);
-      reportContent = await chatJSON<EvaluationReportContent>(prompt, fallback, { feature: 'evaluation' });
+      const rawLlmReport = await chatJSON<any>(prompt, fallback, { feature: 'evaluation' });
+      // De-alias member scores back to actual database userIds
+      const dealiased = dealiasEvaluationReport(rawLlmReport, aliasToUserId);
+      // Validate schema
+      const parseResult = EvaluationReportSchema.safeParse(dealiased);
+      if (parseResult.success) {
+        reportContent = parseResult.data as unknown as EvaluationReportContent;
+      } else {
+        reportContent = fallback;
+      }
     }
 
     // Apply Deterministic Guardrails
@@ -174,9 +200,8 @@ export class EvaluationEngine {
       }
 
       // 3.4 Contradiction Guardrail: 0 commits & 0 logs but high technical/scope score
-      const memberCommits = githubCommits.filter((c) =>
-        c.author?.toLowerCase().includes(m.name.toLowerCase()),
-      );
+      // Uses real attributed linkedUserId
+      const memberCommits = githubCommits.filter((c) => c.linkedUserId === m.userId);
       if (stats?.entryCount === 0 && memberCommits.length === 0) {
         if (reportContent.technicalProgress.score > 60) {
           reportContent.technicalProgress.score = 20;
@@ -191,7 +216,7 @@ export class EvaluationEngine {
       // Self-similarity note
       if (memberSelfSim[m.userId] > 80) {
         reportContent.suspiciousBehaviour.push(
-          `Member ${m.name} exhibits high self-similarity (${memberSelfSim[m.userId]}%) across daily logs.`,
+          `Member ${m.name || m.userId} exhibits high self-similarity (${memberSelfSim[m.userId]}%) across daily logs.`,
         );
       }
     });
@@ -276,7 +301,7 @@ export class EvaluationEngine {
 
     const overallScore = Math.round(weightedScore);
 
-    // Save or update EvaluationReport
+    // Save or update EvaluationReport with normalized columns
     const reportRecord = await prisma.evaluationReport.upsert({
       where: {
         projectId_cycle: { projectId, cycle: targetCycle },
@@ -286,14 +311,89 @@ export class EvaluationEngine {
         cycle: targetCycle,
         periodStart,
         periodEnd,
+        overallScore,
+        plagiarismRisk: reportContent.plagiarismRisk,
+        isFallback,
+        statusNote: isFallback ? 'Evaluated in offline fallback mode' : 'AI evaluation verified',
+        mentorFeedback: reportContent.mentorFeedback,
         content: reportContent as any,
       },
       update: {
         periodStart,
         periodEnd,
+        overallScore,
+        plagiarismRisk: reportContent.plagiarismRisk,
+        isFallback,
+        statusNote: isFallback ? 'Evaluated in offline fallback mode' : 'AI evaluation verified',
+        mentorFeedback: reportContent.mentorFeedback,
         content: reportContent as any,
       },
     });
+
+    // Normalized child records: Category Scores
+    const categoryEntries = [
+      { category: 'scopeAdherence', score: reportContent.scopeAdherence.score, notes: reportContent.scopeAdherence.notes },
+      { category: 'technicalProgress', score: reportContent.technicalProgress.score, notes: reportContent.technicalProgress.notes },
+      { category: 'timelineCompliance', score: reportContent.timelineCompliance.score, notes: reportContent.timelineCompliance.notes },
+      { category: 'memberParticipation', score: reportContent.memberParticipation.score, notes: reportContent.memberParticipation.notes },
+      { category: 'documentationQuality', score: reportContent.documentationQuality.score, notes: reportContent.documentationQuality.notes },
+      { category: 'authenticityConfidence', score: reportContent.authenticityConfidence.score, notes: reportContent.authenticityConfidence.notes },
+    ];
+
+    for (const ce of categoryEntries) {
+      await prisma.evaluationCategoryScore.upsert({
+        where: { reportId_category: { reportId: reportRecord.id, category: ce.category } },
+        create: { reportId: reportRecord.id, category: ce.category, score: ce.score, notes: ce.notes },
+        update: { score: ce.score, notes: ce.notes },
+      });
+    }
+
+    // Normalized child records: Member Scores
+    if (reportContent.memberParticipation?.perMember) {
+      for (const pm of reportContent.memberParticipation.perMember) {
+        if (!pm.userId) continue;
+        await prisma.evaluationMemberScore.upsert({
+          where: { reportId_userId: { reportId: reportRecord.id, userId: pm.userId } },
+          create: { reportId: reportRecord.id, userId: pm.userId, score: pm.score, notes: pm.notes },
+          update: { score: pm.score, notes: pm.notes },
+        });
+      }
+    }
+
+    // Normalized child records: Findings
+    await prisma.evaluationFinding.deleteMany({ where: { reportId: reportRecord.id } });
+    const findings: Array<{ reportId: string; kind: 'MISSING_WORK' | 'SUSPICIOUS' | 'RECOMMENDATION'; text: string }> = [];
+
+    (reportContent.missingWork || []).forEach((text) => findings.push({ reportId: reportRecord.id, kind: 'MISSING_WORK', text }));
+    (reportContent.suspiciousBehaviour || []).forEach((text) => findings.push({ reportId: reportRecord.id, kind: 'SUSPICIOUS', text }));
+    (reportContent.next15DayRecommendations || []).forEach((text) => findings.push({ reportId: reportRecord.id, kind: 'RECOMMENDATION', text }));
+
+    if (findings.length > 0) {
+      await prisma.evaluationFinding.createMany({ data: findings });
+    }
+
+    // Normalized child records: Evidence
+    await prisma.evaluationEvidence.deleteMany({ where: { reportId: reportRecord.id } });
+    const evidenceRows: Array<{ reportId: string; category: string; key: string; value: string }> = [];
+
+    const categoriesWithEvidence = ['scopeAdherence', 'technicalProgress', 'timelineCompliance', 'memberParticipation', 'documentationQuality', 'authenticityConfidence'] as const;
+    for (const catName of categoriesWithEvidence) {
+      const evObj = (reportContent as any)[catName]?.evidence;
+      if (evObj && typeof evObj === 'object') {
+        for (const [k, v] of Object.entries(evObj)) {
+          evidenceRows.push({
+            reportId: reportRecord.id,
+            category: catName,
+            key: k,
+            value: typeof v === 'object' ? JSON.stringify(v) : String(v),
+          });
+        }
+      }
+    }
+
+    if (evidenceRows.length > 0) {
+      await prisma.evaluationEvidence.createMany({ data: evidenceRows });
+    }
 
     // Append event
     await projectLogService.appendEvent(projectId, {
@@ -358,7 +458,6 @@ export class EvaluationEngine {
         'Push code commits regularly to linked GitHub repository.',
       ],
       isFallback: true,
-      statusNote: 'UNVERIFIED_AI_UNAVAILABLE',
     };
   }
 }

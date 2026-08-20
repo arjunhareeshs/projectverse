@@ -17,6 +17,23 @@ export const projectController = {
     }
   },
 
+  async getMyProjects(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user || !user.organizationId) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+
+      const result = await projectService.getMyProjects(user.organizationId, user.id);
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching my projects:', error);
+      res
+        .status(StatusCodes.INTERNAL_SERVER_ERROR)
+        .json({ message: 'Failed to fetch your projects' });
+    }
+  },
+
   async getActiveProjects(req: Request, res: Response) {
     try {
       const user = req.user;

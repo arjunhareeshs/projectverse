@@ -1,4 +1,70 @@
 import { prisma } from '../../shared/database';
+import { isTaskDone, projectProgressService } from './projectProgress.service';
+
+/** Display labels for the free-form Project.status string. */
+export type ProjectStatusLabel =
+  | 'Planned'
+  | 'Pending Approval'
+  | 'In Progress'
+  | 'In Review'
+  | 'On Hold'
+  | 'Completed';
+
+/**
+ * Project.status is an unconstrained String. Live values are 'CATALOG',
+ * 'active', 'planned' and 'pending_approval'; the remaining labels are mapped
+ * defensively so future writes render correctly rather than silently falling
+ * through to "In Progress".
+ */
+export function toProjectStatusLabel(status: string): ProjectStatusLabel {
+  switch (status.toLowerCase()) {
+    case 'completed':
+    case 'done':
+      return 'Completed';
+    case 'on_hold':
+    case 'onhold':
+    case 'paused':
+      return 'On Hold';
+    case 'review':
+    case 'in_review':
+      return 'In Review';
+    case 'pending_approval':
+      return 'Pending Approval';
+    case 'active':
+    case 'in_progress':
+    case 'ongoing':
+      return 'In Progress';
+    default:
+      return 'Planned';
+  }
+}
+
+export interface MyProjectItemDto {
+  id: string;
+  name: string;
+  domain: string | null;
+  sector: string | null;
+  category: string | null;
+  /** Raw persisted status. */
+  status: string;
+  statusLabel: ProjectStatusLabel;
+  team: { id: string; name: string; color: string | null; memberCount: number } | null;
+  isCollaboration: boolean;
+  progress: {
+    percentage: number;
+    totalTasks: number;
+    completedTasks: number;
+    activeTasks: number;
+    overdueTasks: number;
+  };
+  /** ISO timestamp. */
+  lastActivityAt: string;
+}
+
+export interface MyProjectsResponse {
+  projects: MyProjectItemDto[];
+  summary: { total: number; inProgress: number; completed: number; onHold: number };
+}
 
 export const projectService = {
   async getProjects(organizationId: string) {
@@ -56,7 +122,7 @@ export const projectService = {
     // Transform into the format expected by the Dashboard ActiveProjectsList
     return projects.map((project) => {
       const totalTasks = project.tasks.length;
-      const completedTasks = project.tasks.filter((t) => t.status === 'done').length;
+      const completedTasks = project.tasks.filter((t) => isTaskDone(t.status)).length;
       const progress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
       // Calculate days left: use the earliest open task due date as a proxy
@@ -96,6 +162,99 @@ export const projectService = {
         members: Array.from(memberMap.values()),
       };
     });
+  },
+
+  /**
+   * My Projects — the authenticated user's actual working projects.
+   *
+   * A project qualifies when the user is a ProjectMember of it, or when the
+   * user's team owns it or collaborates on it (team membership = User.teamId).
+   * Catalog entries and templates are excluded; they belong to the catalog page.
+   */
+  async getMyProjects(organizationId: string, userId: string): Promise<MyProjectsResponse> {
+    const requester = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { teamId: true },
+    });
+
+    const teamId = requester?.teamId ?? null;
+
+    const projects = await prisma.project.findMany({
+      where: {
+        organizationId,
+        isTemplate: false,
+        status: { not: 'CATALOG' },
+        OR: [
+          { members: { some: { userId } } },
+          ...(teamId ? [{ teamId }, { collaboratingTeamId: teamId }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        domain: true,
+        sector: true,
+        category: true,
+        status: true,
+        teamId: true,
+        collaboratingTeamId: true,
+        updatedAt: true,
+        team: {
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            _count: { select: { members: true } },
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const progressById = await projectProgressService.getProgressForProjects(
+      projects.map((p) => p.id),
+    );
+
+    const items: MyProjectItemDto[] = projects.map((p) => {
+      const progress = progressById.get(p.id);
+      return {
+        id: p.id,
+        name: p.name,
+        domain: p.domain,
+        sector: p.sector,
+        category: p.category,
+        status: p.status,
+        statusLabel: toProjectStatusLabel(p.status),
+        team: p.team
+          ? {
+              id: p.team.id,
+              name: p.team.name,
+              color: p.team.color,
+              memberCount: p.team._count.members,
+            }
+          : null,
+        isCollaboration: teamId !== null && p.collaboratingTeamId === teamId,
+        progress: {
+          percentage: progress?.percentage ?? 0,
+          totalTasks: progress?.totalTasks ?? 0,
+          completedTasks: progress?.completedTasks ?? 0,
+          activeTasks: progress?.activeTasks ?? 0,
+          overdueTasks: progress?.overdueTasks ?? 0,
+        },
+        lastActivityAt: (progress?.lastActivityAt ?? p.updatedAt).toISOString(),
+      };
+    });
+
+    // Summary counts are computed over the full result set, not a page of it.
+    return {
+      projects: items,
+      summary: {
+        total: items.length,
+        inProgress: items.filter((p) => p.statusLabel === 'In Progress').length,
+        completed: items.filter((p) => p.statusLabel === 'Completed').length,
+        onHold: items.filter((p) => p.statusLabel === 'On Hold').length,
+      },
+    };
   },
 
   async createProject(

@@ -73,6 +73,8 @@ model User {
   rewardTransactions    RewardTransaction[]
   phaseSubmissions      PhaseSubmission[]           @relation("PhaseSubmitter")
   reviewedSubmissions   PhaseSubmission[]           @relation("PhaseReviewer")
+  githubCommits         GithubCommit[]
+  evaluationMemberScores EvaluationMemberScore[]
 }
 
 model Organization {
@@ -194,16 +196,16 @@ model Project {
   soul                   String? // one-line essence
   backgroundContext      String?
   targetUsers            String?
-  useCases               Json? // string[]
+  useCases               Json? // string[] (legacy fallback)
   constraints            String?
   outOfScope             String? // explicitly what NOT to build
-  expectedMetrics        Json? // { name, target, unit }[]
-  deliverables           Json? // string[]
+  expectedMetrics        Json? // { name, target, unit }[] (legacy fallback)
+  deliverables           Json? // string[] (legacy fallback)
   courseOutcomes         String[] @default([]) // ['CO1', 'CO2']
   programOutcomes        String[] @default([]) // ['PO1', 'PO5']
   skillsGained           String[] @default([]) // ['Embedded C', 'REST API design', 'PCB routing']
   prerequisites          String[] @default([]) // skills + prior coursework
-  phases                 Json? // [{ label: "Review 1", week: 4, expected: "..." }]
+  phases                 Json? // [{ label: "Review 1", week: 4, expected: "..." }] (legacy fallback)
   hardwareComponents     String[] @default([]) // ['DHT22', 'ESP32', 'Relay 5V']
   budgetEstimateInr      Int?
   budgetNotes            String?
@@ -214,7 +216,7 @@ model Project {
   referenceLinks         String[] @default([])
   similarProducts        String[] @default([]) // existing products to differentiate against
   suggestedDurationWeeks Int?
-  typeSpecific           Json? // Tier-3 block (software scale/load, hardware BOM, IoT payload/frequency)
+  typeSpecific           Json? // Tier-3 block (legacy fallback)
 
   // Differentiation system (each team must bring a unique angle)
   differentiationApproach   String? // team's unique angle, 30+ chars
@@ -247,25 +249,34 @@ model Project {
   opportunityRecommendation OpportunityRecommendation?
   features                  ProjectFeature[]
   executionPhases           ProjectPhase[]
+
+  // Normalized catalog child relations
+  useCasesList              ProjectUseCase[]
+  deliverablesList          ProjectDeliverable[]
+  expectedMetricsList       ProjectExpectedMetric[]
+  catalogPhases             ProjectCatalogPhase[]
+  typeSpecificRecord        ProjectTypeSpecific?
 }
 
 model ProblemStatementProposal {
   id                 String   @id @default(cuid())
   submitterId        String
   rawText            String
-  scores             Json?
+  scores             Json? // legacy fallback
   verdict            String // ACCEPTED | REJECTED | PENDING_ADMIN
   reasons            String[] @default([])
   improvementHints   String[] @default([])
   duplicateOfId      String?
-  extracted          Json?
+  extracted          Json? // legacy fallback
   publishedProjectId String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  submitter        User     @relation(fields: [submitterId], references: [id])
-  duplicateOf      Project? @relation("ProposalDuplicate", fields: [duplicateOfId], references: [id])
-  publishedProject Project? @relation("ProposalPublished", fields: [publishedProjectId], references: [id])
+  submitter          User     @relation(fields: [submitterId], references: [id])
+  duplicateOf        Project? @relation("ProposalDuplicate", fields: [duplicateOfId], references: [id])
+  publishedProject   Project? @relation("ProposalPublished", fields: [publishedProjectId], references: [id])
+  scoreRecord        ProposalScore?
+  extractionRecord   ProposalExtraction?
 }
 
 model ProjectMember {
@@ -604,12 +615,16 @@ model GithubRepository {
   lastSyncedAt  DateTime?
   lastSyncError String?
 
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  project      Project?            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  contributors GithubContributor[]
-  commits      GithubCommit[]
-  snapshots    GithubSnapshot[]
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  project         Project?                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  contributors    GithubContributor[]
+  commits         GithubCommit[]
+  snapshots       GithubSnapshot[]
+  languagesList   GithubRepositoryLanguage[]
+  labelsList      GithubRepositoryLabel[]
+  milestonesList  GithubRepositoryMilestone[]
+  structureRecord GithubRepoStructure?
 
   @@unique([owner, repository])
 }
@@ -629,47 +644,332 @@ model GithubCommit {
   repositoryId String
   sha          String
   author       String
+  authorLogin  String? // GitHub login from commit.author.login
+  authorEmail  String? // commit.commit.author.email
+  linkedUserId String? // FK -> User, resolved attribution
+  linkedUser   User?            @relation(fields: [linkedUserId], references: [id])
   message      String
   date         DateTime
+  isMerge      Boolean          @default(false)
   repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 
   @@unique([repositoryId, sha])
+  @@index([repositoryId, date])
+  @@index([linkedUserId, date])
 }
 
 model GithubSnapshot {
-  id           String           @id @default(cuid())
-  repositoryId String
-  capturedAt   DateTime         @default(now())
-  metrics      Json
-  repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(cuid())
+  repositoryId       String
+  capturedAt         DateTime         @default(now())
+  metrics            Json // legacy fallback
+  stars              Int              @default(0)
+  forks              Int              @default(0)
+  watchers           Int              @default(0)
+  commitCount        Int              @default(0)
+  contributorCount   Int              @default(0)
+  openIssues         Int              @default(0)
+  closedIssues       Int              @default(0)
+  openPullRequests   Int              @default(0)
+  closedPullRequests Int              @default(0)
+  mergedPullRequests Int              @default(0)
+  popularityScore    Int              @default(0)
+  repository         GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
 
   @@index([repositoryId, capturedAt])
 }
 
+model GithubRepositoryLanguage {
+  id           String           @id @default(cuid())
+  repositoryId String
+  language     String
+  bytes        Int
+  repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, language])
+  @@index([repositoryId])
+}
+
+model GithubRepositoryLabel {
+  id           String           @id @default(cuid())
+  repositoryId String
+  name         String
+  color        String?
+  description  String?
+  repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, name])
+  @@index([repositoryId])
+}
+
+model GithubRepositoryMilestone {
+  id           String           @id @default(cuid())
+  repositoryId String
+  title        String
+  state        String           @default("open")
+  dueOn        DateTime?
+  repository   GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, title])
+  @@index([repositoryId])
+}
+
+model GithubRepoStructure {
+  id              String           @id @default(cuid())
+  repositoryId    String           @unique
+  hasSrc          Boolean          @default(false)
+  hasTests        Boolean          @default(false)
+  hasDocs         Boolean          @default(false)
+  hasCi           Boolean          @default(false)
+  fileCount       Int              @default(0)
+  directoryCount  Int              @default(0)
+  topLevelFolders String[]         @default([])
+  repository      GithubRepository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+}
+
+model ProjectUseCase {
+  id        String  @id @default(cuid())
+  projectId String
+  text      String
+  order     Int     @default(0)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, order])
+}
+
+model ProjectDeliverable {
+  id        String  @id @default(cuid())
+  projectId String
+  text      String
+  order     Int     @default(0)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, order])
+}
+
+model ProjectExpectedMetric {
+  id        String  @id @default(cuid())
+  projectId String
+  name      String
+  target    String
+  unit      String?
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ProjectCatalogPhase {
+  id        String  @id @default(cuid())
+  projectId String
+  label     String
+  week      Int
+  expected  String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, week])
+}
+
+model ProjectTypeSpecific {
+  id         String   @id @default(cuid())
+  projectId  String   @unique
+  kind       String   // SOFTWARE | HARDWARE | IOT
+  data       String?  // summary or text representation
+  attributes Json?
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
 model ProjectLog {
-  id        String            @id @default(cuid())
-  projectId String            @unique
-  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version   Int               @default(0)
-  state     Json // ProjectLogState
-  updatedAt DateTime          @updatedAt
-  createdAt DateTime          @default(now())
-  events    ProjectLogEvent[]
+  id               String                      @id @default(cuid())
+  projectId        String                      @unique
+  project          Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Int                         @default(0)
+  state            Json // ProjectLogState (legacy fallback)
+  updatedAt        DateTime                    @updatedAt
+  createdAt        DateTime                    @default(now())
+  events           ProjectLogEvent[]
+  duration         ProjectLogDuration?
+  durationHistory  ProjectLogDurationHistory[]
+  members          ProjectLogMember[]
+  technologiesList ProjectLogTechnology[]
+  workPackages     ProjectLogWorkPackage[]
+  milestones       ProjectLogMilestone[]
+  skills           ProjectLogSkill[]
+  skillGaps        ProjectLogSkillGap[]
+  flags            ProjectLogFlag[]
+  evaluations      ProjectLogEvaluationRef[]
 }
 
 model ProjectLogEvent {
-  id          String     @id @default(cuid())
+  id          String                 @id @default(cuid())
   logId       String
-  log         ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  log         ProjectLog             @relation(fields: [logId], references: [id], onDelete: Cascade)
   seq         Int // monotonically increasing per log; equals state.version after apply
   type        String // ProjectLogEventType
   actorUserId String // userId | "SYSTEM" | "AI"
-  data        Json
+  data        Json // legacy fallback
   note        String?
-  createdAt   DateTime   @default(now())
+  createdAt   DateTime               @default(now())
+  fields      ProjectLogEventField[]
 
   @@unique([logId, seq])
   @@index([logId, type])
+}
+
+model ProjectLogDuration {
+  id        String     @id @default(cuid())
+  logId     String     @unique
+  log       ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  months    Int
+  startDate DateTime
+  endDate   DateTime
+}
+
+model ProjectLogDurationHistory {
+  id     String     @id @default(cuid())
+  logId  String
+  log    ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  at     DateTime
+  months Int
+  reason String?
+
+  @@index([logId])
+}
+
+model ProjectLogMember {
+  id               String                           @id @default(cuid())
+  logId            String
+  log              ProjectLog                       @relation(fields: [logId], references: [id], onDelete: Cascade)
+  userId           String
+  name             String
+  joinedAt         DateTime
+  active           Boolean                          @default(true)
+  responsibilities ProjectLogMemberResponsibility[]
+
+  @@unique([logId, userId])
+  @@index([logId])
+}
+
+model ProjectLogMemberResponsibility {
+  id            String           @id @default(cuid())
+  memberId      String
+  member        ProjectLogMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  workPackageId String
+
+  @@index([memberId])
+}
+
+model ProjectLogTechnology {
+  id    String     @id @default(cuid())
+  logId String
+  log   ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  name  String
+
+  @@unique([logId, name])
+  @@index([logId])
+}
+
+model ProjectLogWorkPackage {
+  id         String     @id @default(cuid())
+  logId      String
+  log        ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  slug       String // e.g. "backend"
+  name       String
+  percentage Int        @default(0)
+  status     String     @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | DONE
+  assignedTo String[]   @default([])
+
+  @@unique([logId, slug])
+  @@index([logId])
+}
+
+model ProjectLogMilestone {
+  id             String                       @id @default(cuid())
+  logId          String
+  log            ProjectLog                   @relation(fields: [logId], references: [id], onDelete: Cascade)
+  milestoneId    String // client/internal id e.g. "m-1"
+  name           String
+  expectedOutput String?
+  dueWeek        Int
+  dueDate        DateTime
+  status         String                       @default("PENDING") // PENDING | DONE | MISSED
+  history        ProjectLogMilestoneHistory[]
+
+  @@unique([logId, milestoneId])
+  @@index([logId])
+}
+
+model ProjectLogMilestoneHistory {
+  id          String              @id @default(cuid())
+  milestoneId String
+  milestone   ProjectLogMilestone @relation(fields: [milestoneId], references: [id], onDelete: Cascade)
+  at          DateTime
+  dueDate     DateTime
+  reason      String?
+
+  @@index([milestoneId])
+}
+
+model ProjectLogSkill {
+  id    String     @id @default(cuid())
+  logId String
+  log   ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  skill String
+
+  @@unique([logId, skill])
+  @@index([logId])
+}
+
+model ProjectLogSkillGap {
+  id         String     @id @default(cuid())
+  logId      String
+  log        ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  skill      String
+  missingFor String[]   @default([])
+
+  @@index([logId])
+}
+
+model ProjectLogFlag {
+  id       String     @id @default(cuid())
+  logId    String
+  log      ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  flagId   String
+  at       DateTime
+  type     String // DELAY | INACTIVE_MEMBER | MISSING_DEPENDENCY | OVERLOAD | TIMELINE_RISK | TECH_DRIFT
+  message  String
+  resolved Boolean    @default(false)
+
+  @@unique([logId, flagId])
+  @@index([logId])
+}
+
+model ProjectLogEvaluationRef {
+  id             String     @id @default(cuid())
+  logId          String
+  log            ProjectLog @relation(fields: [logId], references: [id], onDelete: Cascade)
+  cycle          Int
+  periodStart    DateTime
+  periodEnd      DateTime
+  authenticity   Float      @default(0)
+  plagiarismRisk String     @default("LOW") // LOW | MEDIUM | HIGH
+  overall        Float      @default(0)
+  reportId       String
+
+  @@unique([logId, cycle])
+  @@index([logId])
+}
+
+model ProjectLogEventField {
+  id        String          @id @default(cuid())
+  eventId   String
+  event     ProjectLogEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  key       String
+  valueText String?
+  valueNum  Float?
+  valueBool Boolean?
+  valueDate DateTime?
+
+  @@index([eventId, key])
 }
 
 model DailyWorkLog {
@@ -682,7 +982,7 @@ model DailyWorkLog {
   workDone     String
   hoursSpent   Float?
   blockers     String?
-  evidenceUrls Json? // string[]
+  evidenceUrls Json? // legacy fallback (string[])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -690,29 +990,293 @@ model DailyWorkLog {
   @@index([projectId, date])
 }
 
-model ExecutionDocument {
+model EvidenceUrl {
   id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version   Int
-  content   Json // ExecutionDocContent
-  markdown  String // rendered markdown, source of truth for download
+  ownerType String // DAILY_LOG | PHASE_SUBMISSION
+  ownerId   String
+  url       String
+  position  Int      @default(0)
   createdAt DateTime @default(now())
+
+  @@index([ownerType, ownerId])
+}
+
+model ExecutionDocument {
+  id                   String                         @id @default(cuid())
+  projectId            String
+  project              Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version              Int
+  content              Json // ExecutionDocContent (legacy fallback)
+  markdown             String // rendered markdown, source of truth for download
+  createdAt            DateTime                       @default(now())
+  overviewRecord       ExecutionDocOverview?
+  objectivesList       ExecutionDocObjective[]
+  deliverablesList     ExecutionDocDeliverable[]
+  risksList            ExecutionDocRisk[]
+  successCriteriaList  ExecutionDocSuccessCriteria[]
+  skillsRequiredList   ExecutionDocSkillRequired[]
+  workPackagesList     ExecutionDocWorkPackage[]
+  milestonesList       ExecutionDocMilestone[]
+  learningResourcesList ExecutionDocLearningResource[]
+  featuresList         ExecutionDocFeature[]
+  teamShareList        ExecutionDocTeamShare[]
 
   @@unique([projectId, version])
 }
 
+model ExecutionDocOverview {
+  id                  String            @id @default(cuid())
+  executionDocumentId String            @unique
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  background          String?
+  purpose             String?
+  problemStatement    String?
+  scope               String?
+  expectedOutcome     String?
+  targetUsers         String?
+  uniquenessNotes     String?
+}
+
+model ExecutionDocObjective {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  text                String
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocDeliverable {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  text                String
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocRisk {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  text                String
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocSuccessCriteria {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  text                String
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocSkillRequired {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  skill               String
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocWorkPackage {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  slug                String?
+  name                String
+  description         String?
+  percentage          Int               @default(0)
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocMilestone {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  name                String
+  expectedOutput      String?
+  completionWeek      Int
+  rewardPoints        Int               @default(0)
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocLearningResource {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  topic               String
+  resource            String
+  url                 String?
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocFeature {
+  id                   String            @id @default(cuid())
+  executionDocumentId  String
+  executionDocument    ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  name                 String
+  description          String?
+  importance           String            @default("Medium") // High | Medium | Low
+  points               Int               @default(0)
+  implementationMethod String?
+  aiRationale          String?
+  order                Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
+model ExecutionDocTeamShare {
+  id                  String            @id @default(cuid())
+  executionDocumentId String
+  executionDocument   ExecutionDocument @relation(fields: [executionDocumentId], references: [id], onDelete: Cascade)
+  userId              String?
+  name                String
+  role                String
+  sharePercent        Int               @default(0)
+  rewardPoints        Int               @default(0)
+  isLead              Boolean           @default(false)
+  order               Int               @default(0)
+
+  @@index([executionDocumentId, order])
+}
+
 model EvaluationReport {
-  id          String   @id @default(cuid())
-  projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  cycle       Int // 1, 2, 3… (15-day cycles)
-  periodStart DateTime
-  periodEnd   DateTime
-  content     Json // EvaluationReportContent
-  createdAt   DateTime @default(now())
+  id             String                    @id @default(cuid())
+  projectId      String
+  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  cycle          Int // 1, 2, 3… (15-day cycles)
+  periodStart    DateTime
+  periodEnd      DateTime
+  overallScore   Int?
+  plagiarismRisk String?
+  isFallback     Boolean                   @default(false)
+  statusNote     String?
+  mentorFeedback String?
+  content        Json? // EvaluationReportContent (legacy fallback)
+  createdAt      DateTime                  @default(now())
+  categoryScores EvaluationCategoryScore[]
+  memberScores   EvaluationMemberScore[]
+  findings       EvaluationFinding[]
+  evidence       EvaluationEvidence[]
 
   @@unique([projectId, cycle])
+  @@index([overallScore])
+}
+
+model EvaluationCategoryScore {
+  id       String           @id @default(cuid())
+  reportId String
+  report   EvaluationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  category String
+  score    Int
+  notes    String?
+
+  @@unique([reportId, category])
+  @@index([reportId])
+}
+
+model EvaluationMemberScore {
+  id       String           @id @default(cuid())
+  reportId String
+  report   EvaluationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score    Int
+  notes    String?
+
+  @@unique([reportId, userId])
+  @@index([reportId])
+  @@index([userId])
+}
+
+enum EvaluationFindingKind {
+  MISSING_WORK
+  SUSPICIOUS
+  RECOMMENDATION
+}
+
+model EvaluationFinding {
+  id       String                @id @default(cuid())
+  reportId String
+  report   EvaluationReport      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  kind     EvaluationFindingKind
+  text     String
+
+  @@index([reportId, kind])
+}
+
+model EvaluationEvidence {
+  id       String           @id @default(cuid())
+  reportId String
+  report   EvaluationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  category String
+  key      String
+  value    String
+
+  @@index([reportId, category])
+}
+
+model ProposalScore {
+  id             String                @id @default(cuid())
+  proposalId     String                @unique
+  proposal       ProblemStatementProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  overallScore   Float
+  feasibility    Float?
+  impact         Float?
+  novelty        Float?
+  technicalDepth Float?
+  clarity        Float?
+  rubricScores   ProposalRubricScore[]
+  createdAt      DateTime              @default(now())
+}
+
+model ProposalRubricScore {
+  id         String        @id @default(cuid())
+  scoreId    String
+  score      ProposalScore @relation(fields: [scoreId], references: [id], onDelete: Cascade)
+  family     String // RUBRIC | INDUSTRY | PERSPECTIVE
+  dimension  String
+  scoreValue Float
+  rationale  String?
+
+  @@index([scoreId, family])
+}
+
+model ProposalExtraction {
+  id               String                   @id @default(cuid())
+  proposalId       String                   @unique
+  proposal         ProblemStatementProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  problemStatement String?
+  proposedSolution String?
+  targetAudience   String?
+  domain           String?
+  items            ProposalExtractionItem[]
+  createdAt        DateTime                 @default(now())
+}
+
+model ProposalExtractionItem {
+  id           String             @id @default(cuid())
+  extractionId String
+  extraction   ProposalExtraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  kind         String // OBJECTIVE | DELIVERABLE | TECH | CONSTRAINT
+  value        String
+
+  @@index([extractionId, kind])
 }
 
 // ─── Insights Models ─────────────────────────────────────────────────────────
@@ -789,9 +1353,9 @@ model StandoutProject {
 }
 
 model OpportunityRecommendation {
-  id               String   @id @default(cuid())
-  projectId        String   @unique
-  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id               String                          @id @default(cuid())
+  projectId        String                          @unique
+  project          Project                         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   teamId           String?
   opportunityScore Float // 0-100 composite readiness score (static, cached)
   cyclesEvaluated  Int
@@ -799,17 +1363,32 @@ model OpportunityRecommendation {
   hackathonFit     Int // 0-100 sub-score
   presentationFit  Int // 0-100 sub-score
   incubationFit    Int // 0-100 sub-score
-  recommendations  Json // Array<{ type, name, url, why, deadline?, matchReason }>
-  isFallback       Boolean  @default(false)
-  status           String   @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED'
+  recommendations  Json // legacy fallback
+  items            OpportunityRecommendationItem[]
+  isFallback       Boolean                         @default(false)
+  status           String                          @default("OPEN") // 'OPEN' | 'ACKNOWLEDGED' | 'DISMISSED'
   reviewedById     String?
-  reviewedBy       User?    @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
+  reviewedBy       User?                           @relation("OpportunityReviewer", fields: [reviewedById], references: [id])
   reviewNote       String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime                        @default(now())
+  updatedAt        DateTime                        @updatedAt
 
   @@index([status])
   @@index([opportunityScore])
+}
+
+model OpportunityRecommendationItem {
+  id               String                    @id @default(cuid())
+  recommendationId String
+  recommendation   OpportunityRecommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  type             String
+  name             String
+  url              String?
+  why              String?
+  deadline         String?
+  matchReason      String?
+
+  @@index([recommendationId])
 }
 
 // ─── Feature Extraction, Phase Execution & Rewards ────────────────────────────
@@ -858,7 +1437,7 @@ model PhaseSubmission {
   submittedById  String
   submittedBy    User         @relation("PhaseSubmitter", fields: [submittedById], references: [id])
   submissionNote String
-  evidenceUrls   Json?
+  evidenceUrls   Json? // legacy fallback
   status         String       @default("PENDING") // PENDING | APPROVED | CHANGES_REQUESTED
   reviewedById   String?
   reviewedBy     User?        @relation("PhaseReviewer", fields: [reviewedById], references: [id])

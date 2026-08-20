@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { teamService } from './team.service';
+import { checkTeamAccess } from '../../shared/access';
 
 // Helper: Express v5 types params as string | string[] — narrow to string
 function pid(req: Request): string {
@@ -362,6 +363,15 @@ export const teamController = {
       const user = req.user;
       if (!user || !user.organizationId)
         return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+
+      // Never trust the teamId from the URL — a user may only read their own team's projects.
+      const access = await checkTeamAccess(user.id, pid(req));
+      if (!access.allowed) {
+        return access.reason === 'NOT_FOUND'
+          ? res.status(StatusCodes.NOT_FOUND).json({ message: 'Team not found' })
+          : res.status(StatusCodes.FORBIDDEN).json({ message: 'You are not a member of this team' });
+      }
+
       const projects = await teamService.getTeamProjects(user.organizationId, pid(req));
       res.json(projects);
     } catch (error) {

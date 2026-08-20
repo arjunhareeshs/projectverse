@@ -4,6 +4,7 @@ import { githubService } from '../github/github.service';
 import { logger } from '../../shared/logger';
 import { getIoInstance } from '../../infrastructure/socket';
 import { notificationService } from '../notifications/notification.service';
+import { projectProgressService } from '../projects/projectProgress.service';
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 
@@ -1042,13 +1043,17 @@ export const teamService = {
       orderBy: { createdAt: 'desc' },
     });
 
+    // Progress comes from the single project-progress service — do not recompute here.
+    const progressById = await projectProgressService.getProgressForProjects(
+      projects.map((p) => p.id),
+    );
+
     return projects.map((p) => {
-      const total = p.tasks.length;
-      const done = p.tasks.filter((t) => t.status === 'done' || t.status === 'completed').length;
+      const progress = progressById.get(p.id);
       return {
         ...p,
-        progress: total > 0 ? Math.round((done / total) * 100) : 0,
-        taskCount: total,
+        progress: progress?.percentage ?? 0,
+        taskCount: progress?.totalTasks ?? 0,
         isCollaboration: !!p.collaboratingTeamId,
       };
     });

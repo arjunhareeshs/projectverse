@@ -9,6 +9,7 @@ import {
   AdminContext,
 } from '../../shared/projectLog.types';
 import { applyEvent } from './projectLog.reducer';
+import { persistNormalizedProjectLog, persistNormalizedEventFields } from './projectLogNormalizer';
 
 export class ProjectLogService {
   async initLog(
@@ -89,6 +90,8 @@ export class ProjectLogService {
       },
     });
 
+    await persistNormalizedProjectLog(created.id, initialState);
+
     return created.state as unknown as ProjectLogState;
   }
 
@@ -132,25 +135,30 @@ export class ProjectLogService {
     nextState.version = nextVersion;
 
     try {
-      await prisma.$transaction([
-        prisma.projectLogEvent.create({
-          data: {
-            logId: logRow.id,
-            seq: nextVersion,
-            type: eventPayload.type,
-            actorUserId: eventPayload.actorUserId,
-            data: eventPayload.data as any,
-            note: eventPayload.note,
-          },
-        }),
-        prisma.projectLog.update({
-          where: { id: logRow.id },
-          data: {
-            version: nextVersion,
-            state: nextState as any,
-          },
-        }),
-      ]);
+      const createdEvent = await prisma.projectLogEvent.create({
+        data: {
+          logId: logRow.id,
+          seq: nextVersion,
+          type: eventPayload.type,
+          actorUserId: eventPayload.actorUserId,
+          data: eventPayload.data as any,
+          note: eventPayload.note,
+        },
+      });
+
+      await prisma.projectLog.update({
+        where: { id: logRow.id },
+        data: {
+          version: nextVersion,
+          state: nextState as any,
+        },
+      });
+
+      await persistNormalizedProjectLog(logRow.id, nextState);
+      if (eventPayload.data && typeof eventPayload.data === 'object') {
+        await persistNormalizedEventFields(createdEvent.id, eventPayload.data as Record<string, unknown>);
+      }
+
       return nextState;
     } catch (err: any) {
       if (retry && err.code === 'P2002') {

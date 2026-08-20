@@ -121,6 +121,39 @@ async function countViaPagination(path: string): Promise<number> {
   return countFromLinkHeader(headers, Array.isArray(data) ? data.length : 0);
 }
 
+/**
+ * Fetches all items across paginated GitHub REST responses up to maxPages (default: 20).
+ * Reuses existing coreGet + Link header pagination.
+ */
+async function listAllPaginated<T = any>(
+  path: string,
+  params: Record<string, unknown> = {},
+  maxPages: number = 20,
+): Promise<T[]> {
+  const perPage = 100;
+  let page = 1;
+  const allItems: T[] = [];
+
+  while (page <= maxPages) {
+    try {
+      const { data, headers } = await coreGet<T[]>(path, {
+        params: { ...params, per_page: perPage, page },
+      });
+      if (!Array.isArray(data) || data.length === 0) break;
+      allItems.push(...data);
+
+      const lastPage = countFromLinkHeader(headers, page);
+      if (page >= lastPage || data.length < perPage) break;
+      page++;
+    } catch (err: any) {
+      if (err?.status === 404 || err?.status === 409) break; // empty repo or branch
+      throw err;
+    }
+  }
+
+  return allItems;
+}
+
 /** Uses the Search API for counts GitHub doesn't expose directly (closed issues, PR states). */
 async function searchCount(query: string): Promise<number> {
   return searchGate.schedule(async () => {
@@ -138,5 +171,6 @@ export const githubClient = {
   coreGet,
   fileExists,
   countViaPagination,
+  listAllPaginated,
   searchCount,
 };
