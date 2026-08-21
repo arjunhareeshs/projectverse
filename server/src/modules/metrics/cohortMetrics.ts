@@ -1,7 +1,9 @@
 import { prisma } from '../../shared/database';
+import type { CohortReportKind, Prisma } from '@prisma/client';
 import { concentrationHHI, zScore } from '../../shared/statistics';
 import { availability } from '../projects/selection.constants';
-import { teamRisk, RiskInput } from './riskModel';
+import { teamRisk } from './riskModel';
+import { buildRiskInputForProject } from './riskInputBuilder';
 import { analyzeInterventionEffectiveness } from './intervention';
 
 export async function onboardingFunnel(organizationId: string) {
@@ -142,15 +144,7 @@ export async function cohortSegmentation(
 export async function earlyWarningBoard(organizationId: string) {
   const projects = await prisma.project.findMany({
     where: { organizationId, isTemplate: false, status: { in: ['active', 'pending_approval', 'planned'] } },
-    select: {
-      id: true,
-      name: true,
-      teamId: true,
-      createdAt: true,
-      dailyWorkLogs: { select: { date: true, userId: true } },
-      githubRepo: { select: { id: true, commits: { select: { date: true } } } },
-      members: { select: { userId: true } },
-    },
+    select: { id: true, name: true, teamId: true },
   });
 
   const rankings: Array<{
@@ -162,19 +156,13 @@ export async function earlyWarningBoard(organizationId: string) {
   }> = [];
 
   for (const p of projects) {
-    const totalLogs = p.dailyWorkLogs.length;
-    const expectedLogs = Math.max(1, 14 * Math.max(1, p.members.length));
-    const logComplianceRate = Math.min(1, totalLogs / expectedLogs);
-
-    const riskInput: RiskInput = {
-      percentTimeElapsed: 40,
-      percentMilestonesDone: 30,
-      logComplianceRate,
-      commitVelocityTrend: 0,
-      openFlagSeverity: 0.2,
-      contributionGini: 0.25,
-    };
-
+    // Real inputs from lifecycle state, daily logs, GitHub commits and task
+    // workload — NOT a shared hardcoded RiskInput. See riskInputBuilder.ts:
+    // the previous version passed percentTimeElapsed/percentMilestonesDone/
+    // commitVelocityTrend/openFlagSeverity/contributionGini as the same fixed
+    // constants for every project, so only logComplianceRate genuinely
+    // differed between rows on this board.
+    const riskInput = await buildRiskInputForProject(p.id);
     const risk = teamRisk(riskInput);
 
     rankings.push({
@@ -236,12 +224,77 @@ export async function cohortRoiReport(organizationId: string) {
   const demand = await catalogDemand(organizationId);
   const interventions = await analyzeInterventionEffectiveness(organizationId);
 
+  // Real proportion of evaluation reports that were genuine AI evaluations
+  // rather than the degraded `isFallback` fallback path — replaces a
+  // hardcoded `92` that was returned regardless of actual data.
+  const [totalReports, fallbackReports] = await Promise.all([
+    prisma.evaluationReport.count({ where: { project: { organizationId } } }),
+    prisma.evaluationReport.count({ where: { project: { organizationId }, isFallback: true } }),
+  ]);
+  const evidenceBackedScorePct = totalReports > 0
+    ? Math.round(((totalReports - fallbackReports) / totalReports) * 100)
+    : null;
+
   return {
     onboardingCompletionRatePct: Math.round((funnel.stage.approved / Math.max(1, funnel.stage.total)) * 100),
     catalogDemandHHI: demand.concentrationHHI,
     interventionSuccessRatePct: interventions.successRatePct,
     averageRiskReduction: interventions.averageRiskDelta,
-    evidenceBackedScorePct: 92,
-    disputeRatePct: 1.2,
+    evidenceBackedScorePct,
+    // No dispute-tracking table exists yet (a student contesting a grade is
+    // not currently recorded anywhere) — return null rather than a fabricated
+    // rate. Add an EvaluationDispute table before surfacing this for real.
+    disputeRatePct: null,
   };
+}
+
+/**
+ * Persists any of the six cohort report payloads above as a
+ * CohortMetricSnapshot, keyed to a 24h period bucket so repeated calls within
+ * the same day update one row instead of accumulating duplicates. This is
+ * additive-only: callers should still use the live return value from the
+ * report function for the response, and treat this as a fire-and-forget
+ * side effect for trend history and org-wide analytics.
+ */
+export async function snapshotCohortReport(
+  organizationId: string,
+  reportKind: CohortReportKind,
+  payload: Prisma.InputJsonValue,
+  options: { cohortKey?: string; sampleSize?: number; computeRunId?: string } = {},
+) {
+  const now = new Date();
+  const periodStart = new Date(now);
+  periodStart.setHours(0, 0, 0, 0);
+  const periodEnd = new Date(periodStart);
+  periodEnd.setDate(periodEnd.getDate() + 1);
+  // "" is the "no sub-cohort dimension" sentinel — see the schema comment on
+  // CohortMetricSnapshot.cohortKey for why this can't be null.
+  const cohortKey = options.cohortKey ?? '';
+
+  return prisma.cohortMetricSnapshot.upsert({
+    where: {
+      organizationId_reportKind_cohortKey_periodStart: {
+        organizationId,
+        reportKind,
+        cohortKey,
+        periodStart,
+      },
+    },
+    create: {
+      organizationId,
+      reportKind,
+      cohortKey,
+      periodStart,
+      periodEnd,
+      payload,
+      sampleSize: options.sampleSize ?? 0,
+      computeRunId: options.computeRunId,
+    },
+    update: {
+      payload,
+      sampleSize: options.sampleSize ?? 0,
+      computeRunId: options.computeRunId,
+      computedAt: now,
+    },
+  });
 }

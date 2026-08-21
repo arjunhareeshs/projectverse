@@ -10,6 +10,7 @@ import {
   dealiasEvaluationReport,
   EvaluationReportSchema,
 } from '../../ai/promptSerializer';
+import { persistAuthenticityAudit } from '../../metrics/authenticity';
 
 export class EvaluationEngine {
   async runEvaluationCycle(projectId: string, cycleNumber?: number): Promise<any> {
@@ -393,6 +394,22 @@ export class EvaluationEngine {
 
     if (evidenceRows.length > 0) {
       await prisma.evaluationEvidence.createMany({ data: evidenceRows });
+    }
+
+    // Best-effort: persist the cross-source authenticity audit for this cycle,
+    // linked to the report that consumed it. This is additive — it does not
+    // change overallScore or authenticityConfidence.score above, which are
+    // already computed by this engine's own logic; it gives the audit a
+    // durable, per-member record (AuthenticitySignal) that survives even if
+    // the report content JSON is later regenerated.
+    try {
+      await persistAuthenticityAudit(
+        projectId,
+        { periodStart, periodEnd },
+        { evaluationReportId: reportRecord.id },
+      );
+    } catch (auditErr) {
+      console.error(`[EvaluationEngine] Authenticity audit persistence failed for project ${projectId} (non-fatal):`, auditErr);
     }
 
     // Append event

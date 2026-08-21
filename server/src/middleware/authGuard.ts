@@ -8,10 +8,8 @@ export interface AuthenticatedRequest extends Request {
 }
 
 export async function authGuard(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  let token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token && req.query['token']) {
-    token = req.query['token'] as string;
-  }
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7).trim() : undefined;
 
   if (!token) {
     res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Missing access token' });

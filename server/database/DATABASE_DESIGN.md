@@ -32,13 +32,18 @@
 | Storage | 1 (orphaned) | 2 | 3 |
 | Auth / RBAC | 2 (stubs) | 4 | 6 |
 | Audit & logs | 3 | 5 | 8 |
-| **Total** | **96*** | **16** | **112** |
+| Derived metrics & analytics | 0 | 14 | 14 |
+| **Total** | **96*** | **30** | **126** |
 
 \* 94 `model` blocks in `schema.prisma`; the two extra rows above are `FileAsset` and
 `ActivityLog` counted in their functional groups.
 
 Enums: **3 existing** (`RoleType`, `ProjectCategory`, `EvaluationFindingKind`) + **17 proposed**
-to replace unconstrained `String` status columns = **20**.
+to replace unconstrained `String` status columns + **11** for the metrics subsystem (§17.5)
+= **31**.
+
+Section **17** covers the `metrics` / `intelligence` subsystem, added after a coverage audit
+found it untraced; it carries its own tables, relationships and migration phase.
 
 ---
 
@@ -1229,9 +1234,10 @@ collaborate additionally reads/writes `TeamCollaboration` and, on accept, sets
 | `/admin/standouts` | `StandoutProject`, `Project` | `status`, `reviewNote`, `reviewedById` | ADMIN |
 | `/admin/upload` | previous batches | creates `User`, `Team`, `TeamMember`, `UserSkill`, `AdminAchievement` from Excel; **[NEW]** `BulkUploadBatch` + `BulkUploadRow` + `StoredFile` (the source spreadsheet) | ADMIN |
 
-Nine legacy admin routes (`/admin/users`, `/admin/teams`, `/admin/projects`, `/admin/documents`,
+Ten legacy admin routes (`/admin/users`, `/admin/teams`, `/admin/projects`, `/admin/documents`,
 `/admin/analytics`, `/admin/directory`, `/admin/chat`, `/admin/ai-assistant`,
-`/admin/team-trends`) redirect to `/admin/top-teams` and read nothing.
+`/admin/team-trends`, `/admin/student-trends`) redirect to `/admin/top-teams` or
+`/admin/top-students` and read nothing.
 
 ---
 
@@ -2601,3 +2607,393 @@ inferred. Each should be confirmed before implementation.
 8. `askMentor` swallows all errors and returns HTTP 200 with a fallback string.
 9. `refreshSchema` exists but there is no `/auth/refresh` route.
 10. `Role` and `Permission` are connected to nothing; authorization is the `User.role` enum.
+
+---
+
+## 17. Derived Metrics & Analytics Subsystem
+
+> Covers `server/src/modules/metrics/` (9 services, 972 lines) and
+> `server/src/modules/intelligence/`. This subsystem computes every score the platform shows
+> and **persists none of them**. The tables below close that gap.
+> **14 new tables**, bringing the design total to **126**.
+
+### 17.1 What the module does today
+
+| Service | LOC | Nature | Reads | Persists |
+|---|---:|---|---|---|
+| `northStar.ts` | 99 | constant `NORTH_STAR_TREE` — 1 north-star + leading/lagging metric definitions | nothing | **no** |
+| `riskModel.ts` | 124 | pure `teamRisk(RiskInput) → RiskResult`; `RISK_WEIGHTS` hardcoded; `calibrateRiskModel()` exists | nothing | **no** |
+| `selectionFit.ts` | 93 | pure `computeFit(FitInput) → FitResult`; `DOMAIN_REQUIRED_SKILLS` hardcoded for 8 domains | nothing | **no** |
+| `authenticity.ts` | 106 | `auditProjectAuthenticity(projectId)` — cross-correlates daily logs vs commits vs doc activity | `DailyWorkLog`, `GithubRepository`, `ProjectMember` | **no** |
+| `blockerEscalation.ts` | 87 | `detectPersistentBlockers(projectId)` — blockers recurring ≥ `ESCALATION_DAYS` (3) | `DailyWorkLog.blockers` | **no** |
+| `workload.ts` | 75 | `teamWorkload(projectId)` — per-member task counts + Gini imbalance | `ProjectMember`, `Task` | **no** |
+| `benchmarks.ts` | 48 | pure `wrapBenchmark(value, population)` — median, percentile, z-score, outlier at \|z\| ≥ 1.96 | nothing | **no** |
+| `cohortMetrics.ts` | 247 | 6 org-wide aggregates: `onboardingFunnel`, `formationHealth`, `cohortSegmentation`, `earlyWarningBoard`, `catalogDemand`, `cohortRoiReport` | `User`, `Team`, `Project`, `TeamInvite` — full-table scans | **no** |
+| `intervention.ts` | 93 | `analyzeInterventionEffectiveness(orgId)` — risk delta 14 days after an admin nudge | `ProjectLogEvent WHERE type='INTERVENTION_LOGGED'` | **no** |
+
+### 17.2 Defects found in this module
+
+These are code findings, not design opinions. Each is verifiable at the cited line.
+
+**M-1 — `intervention.ts` fabricates its own success metric.**
+```ts
+const initialRiskScore   = Number(data.initialRiskScore   || 50);
+const post14DayRiskScore = Number(data.post14DayRiskScore || 40);
+const riskDelta = initialRiskScore - post14DayRiskScore;   // positive = risk reduced
+```
+When the event JSON lacks these keys the fallbacks are `50` and `40`, so `riskDelta` is
+**always `+10`** — a guaranteed "risk reduced" result. Every intervention with missing data is
+silently scored as a success, and `successRatePct` is biased upward by construction. This is the
+same class of defect `db_change.md` called out on the Dashboard streak (hardcoded values
+masquerading as measurement), and it is worse here because the number is used to judge whether
+staff intervention works.
+
+**M-2 — `intervention.ts` uses the wrong identifier.**
+`records` is built with `projectId: e.logId`. `ProjectLogEvent.logId` is the **`ProjectLog` id**,
+not the `Project` id. Any join or grouping on that field silently mismatches.
+
+**M-3 — Post-intervention risk is structurally unmeasurable.**
+`analyzeInterventionEffectiveness` needs the risk score 14 days after the nudge, but
+`teamRisk()` is pure and nothing stores its output. There is no historical risk to read, which
+is *why* M-1's fallbacks exist. `ProjectRiskScore` (§17.4) is the actual fix; M-1 is the symptom.
+
+**M-4 — `DOMAIN_REQUIRED_SKILLS` is a hardcoded map of 8 domains.**
+A `Project.domain` outside that map yields an empty `requiredSkills` array, so `skillCoverage`
+is computed against nothing and the fit score becomes meaningless rather than erroring. Adding
+or retuning a domain requires a code deploy.
+
+**M-5 — `wrapBenchmark` reports a confident verdict on an empty cohort.**
+With `population.length === 0` it returns `percentile: 50, zScore: 0, isOutlier: false` — an
+"average performer" verdict derived from no data. It needs an explicit `insufficientData` flag
+so callers can suppress the badge instead of rendering a fake median.
+
+**M-6 — `RISK_WEIGHTS` are hardcoded while `calibrateRiskModel()` exists.**
+Calibration implies weights change over time. Without versioning, a risk score computed last
+month is not comparable to one computed today, and no stored score can be reproduced.
+
+**M-7 — `cohortMetrics.ts` scans whole tables per request.**
+Six functions each issue unindexed org-wide `findMany` calls over `User`, `Team`, `Project`,
+`TeamInvite`. At one college this is slow; at cohort scale it is the platform's first hard
+performance wall. These must become scheduled rollups (§17.4 `CohortMetricSnapshot`).
+
+### 17.3 Persist-vs-compute decision
+
+The rule applied: **persist when the value is an input to another decision, is shown as a trend,
+or must be defensible after the fact.** Compute when it is cheap, current-state-only, and
+nothing downstream depends on yesterday's answer.
+
+| Service | Decision | Reason |
+|---|---|---|
+| `northStar` | **persist definitions** | metric config, admin-editable, referenced by snapshots |
+| `riskModel` | **persist every computation** | trend, intervention measurement, early-warning board |
+| `selectionFit` | **persist at claim time** + persist the skill map | the score justifies a claim decision and must be defensible later |
+| `authenticity` | **persist audits and signals** | academic-integrity evidence; must survive the log being edited |
+| `blockerEscalation` | **persist escalations** | has a lifecycle (raised → acknowledged → resolved) |
+| `workload` | **compute on demand**; persist only `imbalanceGini` into the risk snapshot | cheap, current-state-only, no trend shown |
+| `benchmarks` | **persist the population distribution**, not the wrapper | percentile must not shift between two reads in one session |
+| `cohortMetrics` | **persist as scheduled snapshots** | full-table scans; also the only way to show cohort trend |
+| `intervention` | **persist as a first-class table** | currently a JSON blob inside an event, which is what enables M-1 |
+
+### 17.4 New tables
+
+#### `MetricDefinition` — reference
+Replaces the hardcoded `NORTH_STAR_TREE`.
+
+| Column | Type | Req | Default | Notes |
+|---|---|---|---|---|
+| `id` | `TEXT` | ! | `cuid()` | PK |
+| `organizationId` | `TEXT` | ? | — | FK → `Organization`; NULL = platform-wide default |
+| `key` | `TEXT` | ! | — | `NS_01`, `L_LOG_COMPLIANCE`, `L_COMMIT_CADENCE` |
+| `name` | `TEXT` | ! | — | |
+| `metricType` | `MetricType` | ! | — | `NORTH_STAR \| LEADING \| LAGGING` |
+| `unit` | `TEXT` | ! | — | `%`, `commits/week` |
+| `description` | `TEXT` | ! | — | |
+| `targetExpression` | `TEXT` | ? | — | `> 85%` — kept as text; it is a display target, not a computed bound |
+| `scope` | `MetricScope` | ! | `PROJECT` | `ORG \| COHORT \| TEAM \| PROJECT \| USER` |
+| `isActive` | `BOOLEAN` | ! | `true` | |
+| `displayOrder` | `INTEGER` | ! | `0` | |
+| timestamps | | ! | | |
+
+PK `id`; UNIQUE `(organizationId, key)`; index `(metricType, isActive)`.
+
+#### `MetricSnapshot` — generic metric time series
+
+| Column | Type | Req | Notes |
+|---|---|---|---|
+| `id` | `TEXT` | ! | PK |
+| `definitionId` | `TEXT` | ! | FK → `MetricDefinition`, CASCADE |
+| `scope` | `MetricScope` | ! | matches the definition's scope |
+| `subjectId` | `TEXT` | ! | project / team / user / org id per `scope` |
+| `organizationId` | `TEXT` | ! | FK, denormalized for cohort queries |
+| `value` | `DOUBLE PRECISION` | ! | |
+| `periodStart` / `periodEnd` | `TIMESTAMPTZ` | ! | window the value covers |
+| `sampleSize` | `INTEGER` | ! | rows the value was computed from |
+| `insufficientData` | `BOOLEAN` | ! | default `false` — the M-5 fix, surfaced at the storage layer |
+| `computeRunId` | `TEXT` | ? | FK → `MetricComputeRun` |
+| `computedAt` | `TIMESTAMPTZ` | ! | `now()` |
+
+PK `id`; UNIQUE `(definitionId, scope, subjectId, periodStart)` — makes recompute idempotent;
+indexes `(scope, subjectId, computedAt DESC)`, `(organizationId, definitionId, periodStart)`.
+`subjectId` is intentionally polymorphic (see §17.7).
+
+#### `RiskModelVersion` — the M-6 fix
+
+| Column | Type | Req | Notes |
+|---|---|---|---|
+| `id` | `TEXT` | ! | PK |
+| `version` | `INTEGER` | ! | monotonic |
+| `weightSlip` / `weightLogs` / `weightCommits` / `weightFlags` / `weightFairness` | `DOUBLE PRECISION` | ! | defaults `0.30 / 0.25 / 0.15 / 0.20 / 0.10` — today's `RISK_WEIGHTS` |
+| `amberThreshold` / `redThreshold` | `INTEGER` | ! | band cutoffs |
+| `calibratedFrom` | `INTEGER` | ? | sample size `calibrateRiskModel()` used |
+| `isActive` | `BOOLEAN` | ! | exactly one active |
+| `notes` | `TEXT` | ? | why it was recalibrated |
+| `createdAt` / `createdById` | | | FK → `User` SET NULL |
+
+PK `id`; UNIQUE `version`; partial UNIQUE `(isActive) WHERE isActive`;
+CHECK: the five weights sum to `1.0 ± 0.001`; CHECK `redThreshold > amberThreshold`.
+
+#### `ProjectRiskScore` — the M-3 fix
+
+| Column | Type | Req | Notes |
+|---|---|---|---|
+| `id` | `TEXT` | ! | PK |
+| `projectId` | `TEXT` | ! | FK → `Project`, CASCADE |
+| `modelVersionId` | `TEXT` | ! | FK → `RiskModelVersion`, RESTRICT — a stored score must stay reproducible |
+| `score` | `INTEGER` | ! | 0–100 |
+| `band` | `RiskBand` | ! | `GREEN \| AMBER \| RED` |
+| *inputs* `percentTimeElapsed`, `percentMilestonesDone`, `logComplianceRate`, `commitVelocityTrend`, `openFlagSeverity`, `contributionGini` | `DOUBLE PRECISION` | ! | the exact `RiskInput` — stored so the score can be recomputed and audited |
+| *components* `slippage`, `logNonCompliance`, `commitDrop`, `flagSeverity`, `contributionImbalance` | `DOUBLE PRECISION` | ! | the `RiskResult.components` breakdown |
+| `computedAt` | `TIMESTAMPTZ` | ! | `now()` |
+| `computeRunId` | `TEXT` | ? | FK → `MetricComputeRun` |
+
+PK `id`; UNIQUE `(projectId, computedAt)`; indexes `(projectId, computedAt DESC)` (trend),
+`(band, computedAt DESC)` (early-warning board), `(computedAt)` (the 14-day lookback that M-3
+needs). CHECK `score BETWEEN 0 AND 100`; all rates `BETWEEN 0 AND 1`;
+`commitVelocityTrend BETWEEN -1 AND 1`.
+
+**Storing the inputs alongside the score is the point.** It is what makes a risk score
+defensible to a student, reproducible after a recalibration, and usable as the "before" value
+in intervention analysis.
+
+#### `ProjectRiskDriver` — normalized top drivers
+`id` PK, `riskScoreId!` FK CASCADE, `driverKey RiskDriverKey!`
+(`MILESTONE_SLIPPAGE | LOG_NONCOMPLIANCE | OPEN_FLAGS | COMMIT_DECLINE | CONTRIBUTION_IMBALANCE`),
+`weightPct INTEGER!`, `rank INTEGER!`.
+UNIQUE `(riskScoreId, driverKey)`; index `(driverKey, weightPct DESC)`.
+Today `drivers` is a formatted `string[]` (`"Milestone slippage (30% risk weight)"`) — unusable
+for "what is the most common risk driver this term". Normalizing makes that a one-line query.
+
+#### `DomainSkillRequirement` — the M-4 fix
+`id` PK, `organizationId?` FK (NULL = platform default), `domain TEXT!`, `skillName TEXT!`,
+`weight DOUBLE PRECISION!` default `1.0`, `isRequired BOOLEAN!` default `true`, timestamps.
+UNIQUE `(organizationId, domain, skillName)`; index `(domain)`.
+Seed from the existing 8-domain map. Admin-editable, so a new domain no longer needs a deploy.
+
+#### `ProjectFitScore` — selection fit, persisted at claim time
+`id` PK, `projectId!` FK CASCADE, `teamId!` FK CASCADE, `score DOUBLE PRECISION!`,
+`skillCoverage DOUBLE PRECISION!`, `timeFit`, `perfFit`, `avgPerformance`, `weeksAvailable INT!`,
+`difficultyTier INT!`, `weightSkillCoverage`/`weightTimeFit`/`weightPerfFit` (the weights in
+force), `reasons` → normalized child `ProjectFitReason(id, fitScoreId, text, order)`,
+`computedAt!`.
+UNIQUE `(projectId, teamId, computedAt)`; index `(teamId, computedAt DESC)`.
+CHECK `difficultyTier BETWEEN 0 AND 4`, `skillCoverage BETWEEN 0 AND 1`.
+
+#### `AuthenticityAudit` — per project per run
+`id` PK, `projectId!` FK CASCADE, `overallConfidence INTEGER!` (0–100),
+`signalCount INT!`, `suspiciousCount INT!`, `periodStart!`, `periodEnd!`,
+`evaluationReportId?` FK → `EvaluationReport` SET NULL (links the audit to the cycle that used
+it), `computeRunId?`, `createdAt!`.
+UNIQUE `(projectId, periodStart, periodEnd)`; index `(projectId, createdAt DESC)`,
+`(overallConfidence)`.
+
+#### `AuthenticitySignal` — per member per date
+`id` PK, `auditId!` FK CASCADE, `userId!` FK RESTRICT, `date DATE!`,
+`logClaimed BOOLEAN!`, `hoursClaimed DOUBLE PRECISION!` default `0`,
+`commitCount INT!` default `0`, `docActivityCount INT!` default `0`,
+`suspicious BOOLEAN!` default `false`, `reason TEXT?`.
+UNIQUE `(auditId, userId, date)`; index `(userId, date)`, `(auditId, suspicious)`.
+**RESTRICT on `userId`** for the same reason as `EvaluationMemberScore` — this is integrity
+evidence about a person and must not vanish with an account.
+
+#### `BlockerEscalation` — persistent blockers with a lifecycle
+`id` PK, `projectId!` FK CASCADE, `userId!` FK RESTRICT, `summary TEXT!`,
+`firstSeenDate DATE!`, `lastSeenDate DATE!`, `recurrenceCount INT!`,
+`severity INT!` (0–100), `status BlockerStatus!` default `OPEN`
+(`OPEN | ACKNOWLEDGED | RESOLVED | STALE`), `acknowledgedById?`, `acknowledgedAt?`,
+`resolvedAt?`, `resolutionNote?`, `projectLogFlagId?` FK → `ProjectLogFlag` SET NULL,
+timestamps.
+UNIQUE `(projectId, userId, firstSeenDate)`; index `(projectId, status)`,
+`(status, severity DESC)`.
+CHECK `lastSeenDate >= firstSeenDate`; CHECK `recurrenceCount >= ESCALATION_DAYS` (3).
+The optional `projectLogFlagId` links an escalation to the `ProjectLogFlag` it raised, so the
+workspace flag and the analytics record are the same fact rather than two.
+
+#### `CohortBenchmark` — the population distribution behind a percentile
+`id` PK, `organizationId!` FK CASCADE, `definitionId!` FK → `MetricDefinition` CASCADE,
+`cohortKey TEXT!` (e.g. `year=II&cluster=CS`), `periodStart!`, `periodEnd!`,
+`populationSize INT!`, `median`, `mean`, `stdDev`, `p25`, `p75`, `p90` (all
+`DOUBLE PRECISION!`), `insufficientData BOOLEAN!` default `false`, `computedAt!`.
+UNIQUE `(organizationId, definitionId, cohortKey, periodStart)`;
+index `(definitionId, periodStart DESC)`.
+Storing the distribution — not the wrapper output — means two users reading the same percentile
+in the same session get the same number, and `wrapBenchmark` becomes a pure formatter over a
+stable population.
+
+#### `CohortMetricSnapshot` — the M-7 fix
+`id` PK, `organizationId!` FK CASCADE, `reportKind CohortReportKind!`
+(`ONBOARDING_FUNNEL | FORMATION_HEALTH | SEGMENTATION | EARLY_WARNING | CATALOG_DEMAND | ROI`),
+`cohortKey TEXT?`, `periodStart!`, `periodEnd!`, `payload JSONB!`, `sampleSize INT!`,
+`computeRunId?`, `computedAt!`.
+UNIQUE `(organizationId, reportKind, cohortKey, periodStart)`;
+index `(organizationId, reportKind, computedAt DESC)`.
+**`payload` is JSONB by deliberate exception** — these six reports have six different shapes,
+they are read whole and never filtered by inner field, and they are regenerable. That is the
+narrow case where JSONB is correct, and it is the opposite of the legacy JSON columns in §13.7
+R-4, which duplicate queryable normalized data.
+
+#### `Intervention` — the M-1 / M-2 fix
+Promotes the JSON-in-event record to a real table.
+
+| Column | Type | Req | Notes |
+|---|---|---|---|
+| `id` | `TEXT` | ! | PK |
+| `projectId` | `TEXT` | ! | FK → `Project` CASCADE — **a real project id**, fixing M-2 |
+| `organizationId` | `TEXT` | ! | FK, for the org-scoped report |
+| `actorUserId` | `TEXT` | ! | FK → `User` RESTRICT — who intervened |
+| `kind` | `InterventionKind` | ! | `GENERAL_NUDGE \| MENTOR_MEETING \| DEADLINE_EXTENSION \| TEAM_RESHUFFLE \| SCOPE_REDUCTION \| ESCALATION` |
+| `note` | `TEXT` | ? | |
+| `baselineRiskScoreId` | `TEXT` | ? | FK → `ProjectRiskScore` SET NULL — the score at intervention time |
+| `followUpRiskScoreId` | `TEXT` | ? | FK → `ProjectRiskScore` SET NULL — the score 14 days later |
+| `followUpDueAt` | `TIMESTAMPTZ` | ! | `loggedAt + 14 days` |
+| `riskDelta` | `DOUBLE PRECISION` | ? | **NULL until both scores exist — never defaulted** |
+| `outcome` | `InterventionOutcome` | ! | `PENDING \| IMPROVED \| UNCHANGED \| WORSENED \| INCONCLUSIVE` default `PENDING` |
+| `loggedAt` | `TIMESTAMPTZ` | ! | `now()` |
+
+PK `id`; index `(projectId, loggedAt DESC)`, `(organizationId, kind, outcome)`,
+`(followUpDueAt) WHERE outcome = 'PENDING'` (the follow-up job's queue).
+
+**The nullable `riskDelta` is the whole fix.** M-1 exists because the code had nowhere to say
+"we don't know yet", so it invented `50 → 40`. With `NULL` + `outcome = PENDING`, an
+unmeasured intervention is excluded from `successRatePct` instead of counted as a win, and
+`INCONCLUSIVE` covers the case where the follow-up window passed without a computed score.
+
+#### `MetricComputeRun` — job tracking
+`id` PK, `kind MetricRunKind!` (`RISK | AUTHENTICITY | BLOCKERS | COHORT | BENCHMARK | ALL`),
+`organizationId?` FK, `status JobStatus!`, `startedAt!`, `finishedAt?`,
+`subjectsProcessed INT!` default `0`, `snapshotsWritten INT!` default `0`, `errorMessage?`,
+`triggeredById?` FK → `User` SET NULL.
+Index `(kind, startedAt DESC)`.
+Same shape as `InsightsRun` (§2.9) — deliberately, so both pipelines are observable the same way.
+
+### 17.5 Enums added (11)
+
+```
+MetricType          = NORTH_STAR | LEADING | LAGGING
+MetricScope         = ORG | COHORT | TEAM | PROJECT | USER
+RiskBand            = GREEN | AMBER | RED
+RiskDriverKey       = MILESTONE_SLIPPAGE | LOG_NONCOMPLIANCE | OPEN_FLAGS
+                    | COMMIT_DECLINE | CONTRIBUTION_IMBALANCE
+BlockerStatus       = OPEN | ACKNOWLEDGED | RESOLVED | STALE
+CohortReportKind    = ONBOARDING_FUNNEL | FORMATION_HEALTH | SEGMENTATION
+                    | EARLY_WARNING | CATALOG_DEMAND | ROI
+InterventionKind    = GENERAL_NUDGE | MENTOR_MEETING | DEADLINE_EXTENSION
+                    | TEAM_RESHUFFLE | SCOPE_REDUCTION | ESCALATION
+InterventionOutcome = PENDING | IMPROVED | UNCHANGED | WORSENED | INCONCLUSIVE
+MetricRunKind       = RISK | AUTHENTICITY | BLOCKERS | COHORT | BENCHMARK | ALL
+AnomalyType         = HIGH_OUTLIER | LOW_OUTLIER
+FitTier             = POOR | MARGINAL | GOOD | STRONG
+```
+
+Total enums: 20 (§11.1) + 11 = **31**.
+
+### 17.6 Relationship map
+
+| Parent | Child | FK | Type | Cascade | Reason |
+|---|---|---|---|---|---|
+| `Organization` | `MetricDefinition` | `organizationId` | 1→N | CASCADE | NULL = platform default |
+| `MetricDefinition` | `MetricSnapshot` | `definitionId` | 1→N | CASCADE | snapshot is meaningless without its definition |
+| `MetricDefinition` | `CohortBenchmark` | `definitionId` | 1→N | CASCADE | |
+| `Project` | `ProjectRiskScore` | `projectId` | 1→N (time series) | CASCADE | |
+| `RiskModelVersion` | `ProjectRiskScore` | `modelVersionId` | 1→N | **RESTRICT** | a stored score must stay reproducible; never delete a model version that scores reference |
+| `ProjectRiskScore` | `ProjectRiskDriver` | `riskScoreId` | 1→N | CASCADE | |
+| `ProjectRiskScore` | `Intervention` | `baselineRiskScoreId`, `followUpRiskScoreId` | 1→N ×2 | SET NULL | the intervention record outlives a purged score |
+| `Project` | `Intervention` | `projectId` | 1→N | CASCADE | |
+| `User` | `Intervention` | `actorUserId` | 1→N | RESTRICT | who intervened is an accountability record |
+| `Project` | `AuthenticityAudit` | `projectId` | 1→N | CASCADE | |
+| `AuthenticityAudit` | `AuthenticitySignal` | `auditId` | 1→N | CASCADE | |
+| `User` | `AuthenticitySignal` | `userId` | 1→N | **RESTRICT** | integrity evidence about a person |
+| `EvaluationReport` | `AuthenticityAudit` | `evaluationReportId` | 1→N | SET NULL | links the audit to the cycle that consumed it |
+| `Project` / `User` | `BlockerEscalation` | `projectId` / `userId` | 1→N | CASCADE / RESTRICT | |
+| `ProjectLogFlag` | `BlockerEscalation` | `projectLogFlagId` | 1→1 | SET NULL | one fact, two surfaces |
+| `Project` / `Team` | `ProjectFitScore` | `projectId` / `teamId` | 1→N | CASCADE | |
+| `ProjectFitScore` | `ProjectFitReason` | `fitScoreId` | 1→N | CASCADE | |
+| `Organization` | `CohortMetricSnapshot`, `CohortBenchmark` | `organizationId` | 1→N | CASCADE | |
+| `MetricComputeRun` | `MetricSnapshot`, `ProjectRiskScore`, `CohortMetricSnapshot` | `computeRunId` | 1→N ×3 | SET NULL | provenance survives run purging |
+
+### 17.7 Design notes
+
+**On `MetricSnapshot.subjectId` being polymorphic.** It carries no FK, which §4.12 G-1 argues
+against for `EvidenceUrl`. The difference is consequence: an orphaned metric snapshot is stale
+analytics caught by the next recompute, whereas an orphaned evidence row misrepresents a
+student's work. Four typed snapshot tables would quadruple the schema for a value that is
+regenerable. The polymorphic key is the right trade here, and the asymmetry is deliberate.
+
+**On retention.** `ProjectRiskScore` is written per project per run — the highest-volume table
+in this subsystem. Keep daily granularity for 90 days, then downsample to weekly, matching the
+`GithubSnapshot` policy in §10.3. `MetricComputeRun` keeps 90 days. `AuthenticityAudit` and
+`AuthenticitySignal` are **kept indefinitely** — they are academic-integrity records, not
+telemetry.
+
+**On compute cadence.** Risk, authenticity and blockers run nightly per active project.
+Cohort snapshots and benchmarks run weekly per organization. Intervention follow-up is a job
+scanning `Intervention WHERE outcome = 'PENDING' AND followUpDueAt <= now()`, resolving
+`followUpRiskScoreId` from the nearest `ProjectRiskScore` and setting the outcome. None of this
+belongs in a request path.
+
+**On reproducibility.** Every stored score carries its inputs and its model version. That is
+what lets the platform answer "why was my team RED in week 6" six months later — which, for a
+system that grades students on these numbers, is not optional.
+
+### 17.8 Migration — Phase 7
+
+Runs after Phase 6 (§15); it depends on the enum and index work landing first.
+
+| Step | Change |
+|---|---|
+| 7.1 | Create `MetricDefinition`; seed from `NORTH_STAR_TREE`. Point `northStar.ts` at the table |
+| 7.2 | Create `RiskModelVersion`; seed v1 from the current `RISK_WEIGHTS` and mark active |
+| 7.3 | Create `ProjectRiskScore` + `ProjectRiskDriver`; make `teamRisk()` persist while staying pure (compute in the function, write in a thin service around it) |
+| 7.4 | Create `DomainSkillRequirement`; seed the 8 domains; add the "unknown domain" guard that M-4 currently lacks |
+| 7.5 | Create `ProjectFitScore` + `ProjectFitReason`; write one at claim time |
+| 7.6 | Create `AuthenticityAudit` + `AuthenticitySignal`; persist audit output and link it to the evaluation cycle |
+| 7.7 | Create `BlockerEscalation`; backfill from `DailyWorkLog.blockers`; link to `ProjectLogFlag` |
+| 7.8 | Create `CohortBenchmark` + `CohortMetricSnapshot`; move the six cohort functions behind them |
+| 7.9 | Create `Intervention`; **migrate from `ProjectLogEvent WHERE type='INTERVENTION_LOGGED'`, mapping `logId → ProjectLog.projectId` (M-2), and setting `riskDelta = NULL` / `outcome = PENDING` wherever the JSON lacked real scores rather than carrying the fabricated `50/40` forward (M-1)** |
+| 7.10 | Create `MetricComputeRun`; add the nightly and weekly schedules |
+| 7.11 | Add `insufficientData` handling to `wrapBenchmark` and its callers (M-5) |
+| 7.12 | Add the indexes in §17.4; build `CONCURRENTLY` |
+
+**Step 7.9 is the one to review before running.** The migration must report how many historical
+interventions had real scores versus fabricated ones — that count is the correction to any
+effectiveness figure previously reported to staff.
+
+### 17.9 Coverage after this section
+
+| Service | Covered by |
+|---|---|
+| `northStar.ts` | `MetricDefinition`, `MetricSnapshot` |
+| `riskModel.ts` | `RiskModelVersion`, `ProjectRiskScore`, `ProjectRiskDriver` |
+| `selectionFit.ts` | `DomainSkillRequirement`, `ProjectFitScore`, `ProjectFitReason` |
+| `authenticity.ts` | `AuthenticityAudit`, `AuthenticitySignal` |
+| `blockerEscalation.ts` | `BlockerEscalation` |
+| `workload.ts` | compute-on-demand; `contributionGini` persisted into `ProjectRiskScore` |
+| `benchmarks.ts` | `CohortBenchmark` |
+| `cohortMetrics.ts` | `CohortMetricSnapshot` |
+| `intervention.ts` | `Intervention` |
+| all | `MetricComputeRun` |
+
+**Still outstanding** (not in scope for this section): data traces for the ten endpoints listed
+in the §16 audit — `/teams/:id/coordination`, `/teams/:id/insights`,
+`/projects/recommend-technology`, `/projects/recommend-catalog`, `/catalog/tree`,
+`/catalog/allocate-team`, `/catalog/mentor`, `/catalog/:id/check-approach`, `/admin/stats`,
+`/internal/browser-token`.

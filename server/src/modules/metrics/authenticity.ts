@@ -104,3 +104,72 @@ export async function auditProjectAuthenticity(projectId: string): Promise<Proje
 
   return { overallConfidence, suspiciousFlags, signals };
 }
+
+/**
+ * Runs `auditProjectAuthenticity` and persists the result as an
+ * AuthenticityAudit + per-member AuthenticitySignal rows, optionally linked to
+ * the EvaluationReport cycle that consumed it. Idempotent per
+ * (projectId, periodStart, periodEnd) via the schema's unique constraint —
+ * safe to re-run for the same window (e.g. a re-triggered evaluation).
+ *
+ * These are academic-integrity records about a specific person and must
+ * survive that person's account being archived, which is why
+ * AuthenticitySignal.userId is RESTRICT rather than CASCADE in the schema.
+ */
+export async function persistAuthenticityAudit(
+  projectId: string,
+  window: { periodStart: Date; periodEnd: Date },
+  options: { evaluationReportId?: string; computeRunId?: string } = {},
+): Promise<{ report: ProjectAuthenticityReport; auditId: string }> {
+  const report = await auditProjectAuthenticity(projectId);
+
+  const audit = await prisma.authenticityAudit.upsert({
+    where: {
+      projectId_periodStart_periodEnd: {
+        projectId,
+        periodStart: window.periodStart,
+        periodEnd: window.periodEnd,
+      },
+    },
+    create: {
+      projectId,
+      overallConfidence: report.overallConfidence,
+      signalCount: report.signals.length,
+      suspiciousCount: report.signals.filter((s) => s.suspicious).length,
+      periodStart: window.periodStart,
+      periodEnd: window.periodEnd,
+      evaluationReportId: options.evaluationReportId,
+      computeRunId: options.computeRunId,
+    },
+    update: {
+      overallConfidence: report.overallConfidence,
+      signalCount: report.signals.length,
+      suspiciousCount: report.signals.filter((s) => s.suspicious).length,
+      evaluationReportId: options.evaluationReportId,
+      computeRunId: options.computeRunId,
+    },
+  });
+
+  // Replace the signal set for this window rather than accumulating
+  // duplicates across re-runs — the audit represents the current read of the
+  // window, not a history of every re-computation.
+  await prisma.authenticitySignal.deleteMany({ where: { auditId: audit.id } });
+  if (report.signals.length > 0) {
+    await prisma.authenticitySignal.createMany({
+      data: report.signals.map((s) => ({
+        auditId: audit.id,
+        userId: s.userId,
+        date: new Date(s.date),
+        logClaimed: s.logClaimed,
+        hoursClaimed: s.hoursClaimed,
+        commitCount: s.commitCount,
+        docActivityCount: s.docActivityCount,
+        suspicious: s.suspicious,
+        reason: s.reason,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  return { report, auditId: audit.id };
+}

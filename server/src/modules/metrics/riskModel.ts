@@ -1,3 +1,5 @@
+import { prisma } from '../../shared/database';
+
 export interface RiskInput {
   percentTimeElapsed: number;       // 0 - 100
   percentMilestonesDone: number;    // 0 - 100
@@ -28,25 +30,53 @@ export const RISK_WEIGHTS = {
   fairness: 0.10,
 } as const;
 
+// Matches RISK_WEIGHTS / the band cutoffs below — getActiveRiskModel() below
+// auto-seeds RiskModelVersion v1 from these exact constants on first use. If
+// these constants are ever retuned, create a NEW RiskModelVersion row rather
+// than editing v1 in place, so historical ProjectRiskScore rows stay
+// reproducible against the model version that actually produced them.
+export const RISK_BAND_THRESHOLDS = { amber: 33, red: 66 } as const;
+
+export type RiskDriverKey =
+  | 'MILESTONE_SLIPPAGE'
+  | 'LOG_NONCOMPLIANCE'
+  | 'OPEN_FLAGS'
+  | 'COMMIT_DECLINE'
+  | 'CONTRIBUTION_IMBALANCE';
+
+interface DriverBreakdownEntry {
+  key: RiskDriverKey;
+  label: string;
+  weightedScore: number;
+}
+
 function clamp01(val: number): number {
   return Math.max(0, Math.min(1, val));
 }
 
-function topDrivers(components: RiskResult['components']): string[] {
-  const drivers: Array<{ name: string; score: number }> = [
-    { name: 'Milestone slippage (behind timeline)', score: components.slippage * RISK_WEIGHTS.slip },
-    { name: 'Low daily log compliance rate', score: components.logNonCompliance * RISK_WEIGHTS.logs },
-    { name: 'Open project flags / blockers', score: components.flagSeverity * RISK_WEIGHTS.flags },
-    { name: 'Declining commit velocity', score: components.commitDrop * RISK_WEIGHTS.commits },
-    { name: 'Uneven member contribution distribution', score: components.contributionImbalance * RISK_WEIGHTS.fairness },
+function driverBreakdown(components: RiskResult['components']): DriverBreakdownEntry[] {
+  const entries: DriverBreakdownEntry[] = [
+    { key: 'MILESTONE_SLIPPAGE', label: 'Milestone slippage (behind timeline)', weightedScore: components.slippage * RISK_WEIGHTS.slip },
+    { key: 'LOG_NONCOMPLIANCE', label: 'Low daily log compliance rate', weightedScore: components.logNonCompliance * RISK_WEIGHTS.logs },
+    { key: 'OPEN_FLAGS', label: 'Open project flags / blockers', weightedScore: components.flagSeverity * RISK_WEIGHTS.flags },
+    { key: 'COMMIT_DECLINE', label: 'Declining commit velocity', weightedScore: components.commitDrop * RISK_WEIGHTS.commits },
+    { key: 'CONTRIBUTION_IMBALANCE', label: 'Uneven member contribution distribution', weightedScore: components.contributionImbalance * RISK_WEIGHTS.fairness },
   ];
-
-  return drivers
-    .sort((a, b) => b.score - a.score)
-    .filter((d) => d.score > 0.05)
-    .map((d) => `${d.name} (${Math.round(d.score * 100)}% risk weight)`);
+  return entries.sort((a, b) => b.weightedScore - a.weightedScore);
 }
 
+function topDrivers(components: RiskResult['components']): string[] {
+  return driverBreakdown(components)
+    .filter((d) => d.weightedScore > 0.05)
+    .map((d) => `${d.label} (${Math.round(d.weightedScore * 100)}% risk weight)`);
+}
+
+/**
+ * Pure risk-scoring function. Deliberately has no side effects and no database
+ * access — callers that need the score persisted (for trend analysis, the
+ * early-warning board, or intervention effectiveness) must go through
+ * `computeAndPersistProjectRisk` below, which wraps this with storage.
+ */
 export function teamRisk(i: RiskInput): RiskResult {
   const slip = clamp01((i.percentTimeElapsed - i.percentMilestonesDone) / 100);
   const logNonCompliance = clamp01(1 - i.logComplianceRate);
@@ -63,7 +93,8 @@ export function teamRisk(i: RiskInput): RiskResult {
   );
 
   const score = Math.round(rawScore);
-  const band: 'GREEN' | 'AMBER' | 'RED' = score >= 66 ? 'RED' : score >= 33 ? 'AMBER' : 'GREEN';
+  const band: 'GREEN' | 'AMBER' | 'RED' =
+    score >= RISK_BAND_THRESHOLDS.red ? 'RED' : score >= RISK_BAND_THRESHOLDS.amber ? 'AMBER' : 'GREEN';
 
   const components = {
     slippage: Number(slip.toFixed(2)),
@@ -79,14 +110,14 @@ export function teamRisk(i: RiskInput): RiskResult {
 }
 
 /**
- * Offline calibration harness for V2 backtesting.
+ * Offline calibration harness for backtesting.
  * Replays early-cycle risk inputs against historical final project outcomes.
  */
 export function calibrateRiskModel(
   records: Array<{ earlyInput: RiskInput; actuallyFailed: boolean }>,
 ) {
   if (records.length === 0) {
-    return { precision: 0, recall: 0, f1Score: 0, sampleSize: 0, redThreshold: 66 };
+    return { precision: 0, recall: 0, f1Score: 0, sampleSize: 0, redThreshold: RISK_BAND_THRESHOLDS.red };
   }
 
   let truePositives = 0;
@@ -119,6 +150,95 @@ export function calibrateRiskModel(
     recall: Number(recall.toFixed(2)),
     f1Score: Number(f1Score.toFixed(2)),
     sampleSize: records.length,
-    redThreshold: 66,
+    redThreshold: RISK_BAND_THRESHOLDS.red,
   };
+}
+
+/**
+ * Returns the RiskModelVersion currently in force. Falls back to seeding v1
+ * from RISK_WEIGHTS/RISK_BAND_THRESHOLDS if no version row exists yet, so a
+ * fresh environment (or one where the seed script hasn't run) never throws —
+ * it just self-heals to the model the pure function already implements.
+ *
+ * Uses upsert on the unique `version` column rather than a plain create, so
+ * two concurrent first-callers (e.g. an admin-triggered compute racing the
+ * nightly scheduler on a brand-new environment) don't both try to insert
+ * version 1 and have the loser crash on a unique-constraint violation.
+ */
+export async function getActiveRiskModel() {
+  const active = await prisma.riskModelVersion.findFirst({ where: { isActive: true } });
+  if (active) return active;
+
+  return prisma.riskModelVersion.upsert({
+    where: { version: 1 },
+    create: {
+      version: 1,
+      weightSlip: RISK_WEIGHTS.slip,
+      weightLogs: RISK_WEIGHTS.logs,
+      weightCommits: RISK_WEIGHTS.commits,
+      weightFlags: RISK_WEIGHTS.flags,
+      weightFairness: RISK_WEIGHTS.fairness,
+      amberThreshold: RISK_BAND_THRESHOLDS.amber,
+      redThreshold: RISK_BAND_THRESHOLDS.red,
+      isActive: true,
+      notes: 'Auto-seeded from the live RISK_WEIGHTS constants at first use.',
+    },
+    // If version 1 already exists (the race we just lost), it's already the
+    // active model from RISK_WEIGHTS — nothing to change on the update path.
+    update: {},
+  });
+}
+
+/**
+ * Computes a risk score with `teamRisk` and persists it as a ProjectRiskScore
+ * row, carrying the exact inputs, components, and the model version used —
+ * so the score stays reproducible and auditable after a recalibration. Also
+ * writes the normalized top-driver rows for `ProjectRiskDriver` queries like
+ * "what's the most common risk driver this term".
+ *
+ * Never call `teamRisk` directly when the score needs to be shown as a trend,
+ * used by the early-warning board, or referenced by an Intervention — those
+ * all depend on this function's persisted output.
+ */
+export async function computeAndPersistProjectRisk(
+  projectId: string,
+  input: RiskInput,
+  computeRunId?: string,
+) {
+  const result = teamRisk(input);
+  const modelVersion = await getActiveRiskModel();
+  const breakdown = driverBreakdown(result.components);
+
+  const riskScore = await prisma.projectRiskScore.create({
+    data: {
+      projectId,
+      modelVersionId: modelVersion.id,
+      score: result.score,
+      band: result.band,
+      percentTimeElapsed: input.percentTimeElapsed,
+      percentMilestonesDone: input.percentMilestonesDone,
+      logComplianceRate: input.logComplianceRate,
+      commitVelocityTrend: input.commitVelocityTrend,
+      openFlagSeverity: input.openFlagSeverity,
+      contributionGini: input.contributionGini,
+      slippage: result.components.slippage,
+      logNonCompliance: result.components.logNonCompliance,
+      commitDrop: result.components.commitDrop,
+      flagSeverity: result.components.flagSeverity,
+      contributionImbalance: result.components.contributionImbalance,
+      computeRunId,
+      drivers: {
+        create: breakdown
+          .filter((d) => d.weightedScore > 0.05)
+          .map((d, idx) => ({
+            driverKey: d.key,
+            weightPct: Math.round(d.weightedScore * 100),
+            rank: idx + 1,
+          })),
+      },
+    },
+    include: { drivers: true },
+  });
+
+  return { result, riskScore };
 }

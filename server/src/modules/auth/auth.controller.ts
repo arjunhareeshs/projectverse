@@ -40,6 +40,23 @@ export class AuthController {
     }
   }
 
+  static async googleLogin(req: Request, res: Response) {
+    try {
+      const result = await AuthService.googleLogin(req.body);
+      res.status(StatusCodes.OK).json(result);
+    } catch (error: any) {
+      console.error('Google login error:', error);
+      if (error instanceof ZodError) {
+        res
+          .status(StatusCodes.BAD_REQUEST)
+          .json({ message: 'Invalid request', issues: error.issues });
+      } else {
+        res.status(StatusCodes.UNAUTHORIZED).json({ message: error.message || 'Google authentication failed' });
+      }
+    }
+  }
+
+
   static async me(req: AuthenticatedRequest, res: Response) {
     try {
       const userId = req.user?.id;

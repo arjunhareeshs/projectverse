@@ -14,7 +14,7 @@ import { renderDocMarkdown } from './render/docMarkdown';
 import { persistExecutionDocNormalized } from './executionDocNormalizer';
 import { intakeSchema, dailyLogSchema, durationCheckSchema, suggestMembersSchema, mentorAskSchema } from './lifecycle.schemas';
 import { draftDailyLog } from './dailyLog.prefill';
-import { detectPersistentBlockers } from '../metrics/blockerEscalation';
+import { persistBlockerEscalations } from '../metrics/blockerEscalation';
 import { teamWorkload } from '../metrics/workload';
 import { rescoreFeature } from '../intelligence/ideaIntelligence.service';
 import { FEATURE_POINTS_CAP } from '../intelligence/ideaIntelligence.schemas';
@@ -307,14 +307,26 @@ export class LifecycleController {
       }
       const log = await dailyLogService.upsertDailyLog(projectId, userId, parsed.data);
 
-      // Check for persistent blockers and raise BLOCKER_ESCALATED event if needed (H2)
+      // Check for persistent blockers and raise BLOCKER_ESCALATED event if needed (H2).
+      // persistBlockerEscalations upserts one BlockerEscalation row per
+      // (project, user, firstSeenDate) and reports isNewOrWorsened so a
+      // ProjectLogEvent (and the notification it can drive) fires only when
+      // the blocker is new or has recurred again — not on every daily log
+      // submission from any team member while the same blocker sits unchanged,
+      // which is what the previous unconditional loop did.
       try {
-        const persistent = await detectPersistentBlockers(projectId);
-        for (const pb of persistent) {
+        const escalations = await persistBlockerEscalations(projectId);
+        for (const { blocker, escalationId, isNewOrWorsened } of escalations) {
+          if (!isNewOrWorsened) continue;
           await projectLogService.appendEvent(projectId, {
             type: 'BLOCKER_ESCALATED',
             actorUserId: 'SYSTEM',
-            data: { id: `blocker-${pb.userId}-${pb.firstSeenDate}`, summary: pb.summary, severity: pb.severity },
+            data: {
+              id: `blocker-${blocker.userId}-${blocker.firstSeenDate}`,
+              escalationId,
+              summary: blocker.summary,
+              severity: blocker.severity,
+            },
           });
         }
       } catch (escErr) {

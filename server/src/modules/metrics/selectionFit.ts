@@ -1,4 +1,5 @@
 import { hasSkill } from '../../shared/skillMatch';
+import { prisma } from '../../shared/database';
 
 export interface FitInput {
   teamSkills: string[];                 // Union of members' UserSkill.skillName
@@ -90,4 +91,89 @@ export function computeFit(input: FitInput): FitResult {
   const reasons = buildReasons(skillCoverage, timeFit, perfFit, covered, input.requiredSkills);
 
   return { score, skillCoverage: Number(skillCoverage.toFixed(2)), reasons };
+}
+
+/**
+ * Resolves required skills for a domain from DomainSkillRequirement first,
+ * falling back to the hardcoded DOMAIN_REQUIRED_SKILLS map, and seeding the
+ * table from that fallback on first use. This is the fix for the defect
+ * where a domain outside the hardcoded 8 silently produced zero required
+ * skills (and therefore a meaningless fit score) with no way to add a domain
+ * short of a code deploy — after this, an admin can add/edit
+ * DomainSkillRequirement rows directly.
+ */
+export async function getRequiredSkillsForDomain(
+  organizationId: string | null,
+  domain: string | null | undefined,
+): Promise<string[]> {
+  if (!domain) return [];
+
+  const existing = await prisma.domainSkillRequirement.findMany({
+    where: {
+      domain,
+      OR: [{ organizationId }, { organizationId: null }],
+      isRequired: true,
+    },
+    orderBy: { weight: 'desc' },
+  });
+
+  if (existing.length > 0) {
+    // Prefer org-specific overrides over the platform default for the same skill.
+    const bySkill = new Map<string, (typeof existing)[number]>();
+    for (const row of existing) {
+      const current = bySkill.get(row.skillName);
+      if (!current || (row.organizationId && !current.organizationId)) {
+        bySkill.set(row.skillName, row);
+      }
+    }
+    return Array.from(bySkill.keys());
+  }
+
+  const fallback = DOMAIN_REQUIRED_SKILLS[domain];
+  if (!fallback) return [];
+
+  // Self-heal: seed the platform-default rows so future lookups hit the table
+  // and an admin has something to edit instead of a hardcoded constant.
+  await prisma.domainSkillRequirement.createMany({
+    data: fallback.map((skillName) => ({ organizationId: null, domain, skillName })),
+    skipDuplicates: true,
+  });
+
+  return fallback;
+}
+
+/**
+ * Computes a fit score with `computeFit` and persists it as a
+ * ProjectFitScore row at the moment a team actually claims a project — this
+ * is the decision the score is meant to justify, not the catalog browse list
+ * (which computes fit for every template on every page load and must stay a
+ * pure, unpersisted calculation to avoid writing a row per browse).
+ */
+export async function persistProjectFitScore(params: {
+  projectId: string;
+  teamId: string;
+  input: FitInput;
+}) {
+  const result = computeFit(params.input);
+
+  return prisma.projectFitScore.create({
+    data: {
+      projectId: params.projectId,
+      teamId: params.teamId,
+      score: result.score,
+      skillCoverage: result.skillCoverage,
+      timeFit: Number(clamp01(params.input.weeksAvailable / Math.max(1, 6 + params.input.difficultyTier * 2)).toFixed(2)),
+      perfFit: Number(clamp01(params.input.avgPerformance / 100).toFixed(2)),
+      avgPerformance: params.input.avgPerformance,
+      weeksAvailable: params.input.weeksAvailable,
+      difficultyTier: params.input.difficultyTier,
+      weightSkillCoverage: WEIGHTS.skillCoverage,
+      weightTimeFit: WEIGHTS.timeFit,
+      weightPerfFit: WEIGHTS.perfFit,
+      reasons: {
+        create: result.reasons.map((text, order) => ({ text, order })),
+      },
+    },
+    include: { reasons: true },
+  });
 }

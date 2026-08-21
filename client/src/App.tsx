@@ -1,10 +1,14 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import { AuthLayout } from './layout/AuthLayout';
 import { MainLayout } from './layout/MainLayout';
 import { AdminLayout } from './layout/AdminLayout';
 import { ProtectedRoute } from './layout/ProtectedRoute';
 import { useAppSelector } from './app/hooks';
+import { authService } from './services/auth.service';
+import { getAuthToken } from './services/api';
+import { setUser, logout, setVerifyingSession } from './features/auth/authSlice';
 
 const TeamRedirect = () => {
   const user = useAppSelector((s) => s.auth.user);
@@ -45,6 +49,34 @@ import { AdminOverlaps } from './pages/Admin/AdminOverlaps';
 import { AdminStandouts } from './pages/Admin/AdminStandouts';
 
 function App() {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    const token = getAuthToken();
+    if (token) {
+      authService
+        .getCurrentUser()
+        .then((res: any) => {
+          if (res?.user) {
+            dispatch(setUser(res.user));
+          } else {
+            dispatch(logout());
+          }
+        })
+        .catch((err: any) => {
+          // If network error (backend starting up), don't immediately wipe session
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            dispatch(logout());
+          }
+        })
+        .finally(() => {
+          dispatch(setVerifyingSession(false));
+        });
+    } else {
+      dispatch(setVerifyingSession(false));
+    }
+  }, [dispatch]);
+
   return (
     <BrowserRouter
       future={{

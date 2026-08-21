@@ -6,7 +6,7 @@ import {
 import { ganttService, GanttTask } from '../services/gantt.service';
 import { cn } from '../utils/cn';
 import axios from 'axios';
-import { getApiBaseUrl } from '../services/api';
+import { getApiBaseUrl, getAuthToken } from '../services/api';
 
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ export const TimelineGantt: React.FC = () => {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const token = localStorage.getItem('pv_token');
+      const token = getAuthToken();
       const apiBase = getApiBaseUrl();
       const res = await axios.get(`${apiBase}/projects/active`, { headers: { Authorization: `Bearer ${token}` } });
       const raw = res.data;

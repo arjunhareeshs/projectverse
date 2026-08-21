@@ -3,10 +3,21 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAppSelector } from '../app/hooks';
 
 export const ProtectedRoute: React.FC = () => {
-  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, user, isVerifyingSession } = useAppSelector((state) => state.auth);
   const location = useLocation();
 
-  if (!isAuthenticated) {
+  if (isVerifyingSession) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -22,3 +33,4 @@ export const ProtectedRoute: React.FC = () => {
 
   return <Outlet />;
 };
+

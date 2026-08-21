@@ -20,61 +20,69 @@ enum ProjectCategory {
 }
 
 model User {
-  id                    String                      @id @default(cuid())
-  email                 String                      @unique
-  regNo                 String?                     @unique
-  fullName              String
-  passwordHash          String
-  mustChangePassword    Boolean                     @default(false)
-  role                  RoleType
-  organizationId        String?
-  teamId                String?
-  githubUsername        String? // self-linked GitHub login, used to attribute repo contributions in ranking
+  id                     String                      @id @default(cuid())
+  email                  String                      @unique
+  regNo                  String?                     @unique
+  fullName               String
+  passwordHash           String
+  mustChangePassword     Boolean                     @default(false)
+  role                   RoleType
+  organizationId         String?
+  teamId                 String?
+  githubUsername         String? // self-linked GitHub login, used to attribute repo contributions in ranking
   // Student profile fields (from Excel data)
-  year                  String? // "I", "II", "III", "IV"
-  department            String? // "Agricultural Engineering", etc.
-  deptCode              String? // "AG", "CSE", "ECE", etc.
-  cluster               String? // "CS", "Non CS"
-  gender                String? // "M", "F"
-  resident              String? // "H" (Hosteller), "D" (Day-scholar)
-  learningMode          String? // "Project-Based Learning Mode", etc.
-  ssgEnrolled           Boolean                     @default(false)
-  ssgDomain             String? // "Hardware", "Software"
-  groupRegistered       Boolean                     @default(false)
-  skillsRegistered      Boolean                     @default(false)
-  rewardPoints          Int                         @default(0)
-  activityPoints        Int                         @default(0)
-  teamRole              String? // "team-captain", "team-member-5", etc.
-  createdAt             DateTime                    @default(now())
-  updatedAt             DateTime                    @updatedAt
-  organization          Organization?               @relation(fields: [organizationId], references: [id])
-  team                  Team?                       @relation(fields: [teamId], references: [id])
-  leadingTeams          Team[]                      @relation("TeamLead")
-  projectMembers        ProjectMember[]
-  teamMemberships       TeamMember[]
-  tasks                 Task[]                      @relation("TaskAssignee")
-  comments              Comment[]
-  files                 FileAsset[]
-  notifications         Notification[]
-  activityLogs          ActivityLog[]
-  auditLogs             AuditLog[]
-  teamMessages          TeamMessage[]
-  teamInvites           TeamInvite[]
-  userSkills            UserSkill[]
-  streaks               UserStreak[]
-  adminAchievements     AdminAchievement[]          @relation("AchievementRecipient")
-  adminChats            AdminChatHistory[]          @relation("AdminChatUser")
-  projectReviews        ProjectReview[]
-  dailyWorkLogs         DailyWorkLog[]
-  proposals             ProblemStatementProposal[]
-  reviewedOverlapFlags  ProjectOverlapFlag[]        @relation("OverlapFlagReviewer")
-  reviewedStandouts     StandoutProject[]           @relation("StandoutReviewer")
-  reviewedOpportunities OpportunityRecommendation[] @relation("OpportunityReviewer")
-  rewardTransactions    RewardTransaction[]
-  phaseSubmissions      PhaseSubmission[]           @relation("PhaseSubmitter")
-  reviewedSubmissions   PhaseSubmission[]           @relation("PhaseReviewer")
-  githubCommits         GithubCommit[]
+  year                   String? // "I", "II", "III", "IV"
+  department             String? // "Agricultural Engineering", etc.
+  deptCode               String? // "AG", "CSE", "ECE", etc.
+  cluster                String? // "CS", "Non CS"
+  gender                 String? // "M", "F"
+  resident               String? // "H" (Hosteller), "D" (Day-scholar)
+  learningMode           String? // "Project-Based Learning Mode", etc.
+  ssgEnrolled            Boolean                     @default(false)
+  ssgDomain              String? // "Hardware", "Software"
+  groupRegistered        Boolean                     @default(false)
+  skillsRegistered       Boolean                     @default(false)
+  rewardPoints           Int                         @default(0)
+  activityPoints         Int                         @default(0)
+  teamRole               String? // "team-captain", "team-member-5", etc.
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  organization           Organization?               @relation(fields: [organizationId], references: [id])
+  team                   Team?                       @relation(fields: [teamId], references: [id])
+  leadingTeams           Team[]                      @relation("TeamLead")
+  projectMembers         ProjectMember[]
+  teamMemberships        TeamMember[]
+  tasks                  Task[]                      @relation("TaskAssignee")
+  comments               Comment[]
+  files                  FileAsset[]
+  notifications          Notification[]
+  activityLogs           ActivityLog[]
+  auditLogs              AuditLog[]
+  teamMessages           TeamMessage[]
+  teamInvites            TeamInvite[]
+  userSkills             UserSkill[]
+  streaks                UserStreak[]
+  adminAchievements      AdminAchievement[]          @relation("AchievementRecipient")
+  adminChats             AdminChatHistory[]          @relation("AdminChatUser")
+  projectReviews         ProjectReview[]
+  dailyWorkLogs          DailyWorkLog[]
+  proposals              ProblemStatementProposal[]
+  reviewedOverlapFlags   ProjectOverlapFlag[]        @relation("OverlapFlagReviewer")
+  reviewedStandouts      StandoutProject[]           @relation("StandoutReviewer")
+  reviewedOpportunities  OpportunityRecommendation[] @relation("OpportunityReviewer")
+  rewardTransactions     RewardTransaction[]
+  phaseSubmissions       PhaseSubmission[]           @relation("PhaseSubmitter")
+  reviewedSubmissions    PhaseSubmission[]           @relation("PhaseReviewer")
+  githubCommits          GithubCommit[]
   evaluationMemberScores EvaluationMemberScore[]
+
+  // Metrics & analytics subsystem (§17)
+  authenticitySignals      AuthenticitySignal[]
+  blockerEscalations       BlockerEscalation[]  @relation("BlockerEscalationUser")
+  acknowledgedBlockers     BlockerEscalation[]  @relation("BlockerEscalationAcknowledger")
+  interventionsActed       Intervention[]
+  metricComputeRuns        MetricComputeRun[]
+  riskModelVersionsCreated RiskModelVersion[]   @relation("RiskModelVersionCreatedBy")
 }
 
 model Organization {
@@ -89,6 +97,14 @@ model Organization {
   teams            Team[]
   hackathons       Hackathon[]
   leetCodeContests LeetCodeContest[]
+
+  // Metrics & analytics subsystem (§17)
+  metricDefinitions       MetricDefinition[]
+  domainSkillRequirements DomainSkillRequirement[]
+  cohortBenchmarks        CohortBenchmark[]
+  cohortMetricSnapshots   CohortMetricSnapshot[]
+  interventions           Intervention[]
+  metricComputeRuns       MetricComputeRun[]
 }
 
 model Team {
@@ -122,6 +138,9 @@ model Team {
   collabRequestsReceived TeamCollaboration[] @relation("ToTeam")
   ranking                GroupRanking?
   achievements           AdminAchievement[]  @relation("AchievementTeam")
+
+  // Metrics & analytics subsystem (§17)
+  fitScores ProjectFitScore[]
 }
 
 model TeamCollaboration {
@@ -251,11 +270,18 @@ model Project {
   executionPhases           ProjectPhase[]
 
   // Normalized catalog child relations
-  useCasesList              ProjectUseCase[]
-  deliverablesList          ProjectDeliverable[]
-  expectedMetricsList       ProjectExpectedMetric[]
-  catalogPhases             ProjectCatalogPhase[]
-  typeSpecificRecord        ProjectTypeSpecific?
+  useCasesList        ProjectUseCase[]
+  deliverablesList    ProjectDeliverable[]
+  expectedMetricsList ProjectExpectedMetric[]
+  catalogPhases       ProjectCatalogPhase[]
+  typeSpecificRecord  ProjectTypeSpecific?
+
+  // Metrics & analytics subsystem (§17)
+  riskScores         ProjectRiskScore[]
+  fitScores          ProjectFitScore[]
+  authenticityAudits AuthenticityAudit[]
+  blockerEscalations BlockerEscalation[]
+  interventions      Intervention[]
 }
 
 model ProblemStatementProposal {
@@ -272,11 +298,11 @@ model ProblemStatementProposal {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  submitter          User     @relation(fields: [submitterId], references: [id])
-  duplicateOf        Project? @relation("ProposalDuplicate", fields: [duplicateOfId], references: [id])
-  publishedProject   Project? @relation("ProposalPublished", fields: [publishedProjectId], references: [id])
-  scoreRecord        ProposalScore?
-  extractionRecord   ProposalExtraction?
+  submitter        User                @relation(fields: [submitterId], references: [id])
+  duplicateOf      Project?            @relation("ProposalDuplicate", fields: [duplicateOfId], references: [id])
+  publishedProject Project?            @relation("ProposalPublished", fields: [publishedProjectId], references: [id])
+  scoreRecord      ProposalScore?
+  extractionRecord ProposalExtraction?
 }
 
 model ProjectMember {
@@ -615,9 +641,9 @@ model GithubRepository {
   lastSyncedAt  DateTime?
   lastSyncError String?
 
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
-  project         Project?                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  project         Project?                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   contributors    GithubContributor[]
   commits         GithubCommit[]
   snapshots       GithubSnapshot[]
@@ -770,12 +796,12 @@ model ProjectCatalogPhase {
 }
 
 model ProjectTypeSpecific {
-  id         String   @id @default(cuid())
-  projectId  String   @unique
-  kind       String   // SOFTWARE | HARDWARE | IOT
-  data       String?  // summary or text representation
+  id         String  @id @default(cuid())
+  projectId  String  @unique
+  kind       String // SOFTWARE | HARDWARE | IOT
+  data       String? // summary or text representation
   attributes Json?
-  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model ProjectLog {
@@ -939,6 +965,9 @@ model ProjectLogFlag {
   message  String
   resolved Boolean    @default(false)
 
+  // Metrics & analytics subsystem (§17) — one fact, two surfaces
+  blockerEscalation BlockerEscalation?
+
   @@unique([logId, flagId])
   @@index([logId])
 }
@@ -1002,24 +1031,24 @@ model EvidenceUrl {
 }
 
 model ExecutionDocument {
-  id                   String                         @id @default(cuid())
-  projectId            String
-  project              Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  version              Int
-  content              Json // ExecutionDocContent (legacy fallback)
-  markdown             String // rendered markdown, source of truth for download
-  createdAt            DateTime                       @default(now())
-  overviewRecord       ExecutionDocOverview?
-  objectivesList       ExecutionDocObjective[]
-  deliverablesList     ExecutionDocDeliverable[]
-  risksList            ExecutionDocRisk[]
-  successCriteriaList  ExecutionDocSuccessCriteria[]
-  skillsRequiredList   ExecutionDocSkillRequired[]
-  workPackagesList     ExecutionDocWorkPackage[]
-  milestonesList       ExecutionDocMilestone[]
+  id                    String                         @id @default(cuid())
+  projectId             String
+  project               Project                        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version               Int
+  content               Json // ExecutionDocContent (legacy fallback)
+  markdown              String // rendered markdown, source of truth for download
+  createdAt             DateTime                       @default(now())
+  overviewRecord        ExecutionDocOverview?
+  objectivesList        ExecutionDocObjective[]
+  deliverablesList      ExecutionDocDeliverable[]
+  risksList             ExecutionDocRisk[]
+  successCriteriaList   ExecutionDocSuccessCriteria[]
+  skillsRequiredList    ExecutionDocSkillRequired[]
+  workPackagesList      ExecutionDocWorkPackage[]
+  milestonesList        ExecutionDocMilestone[]
   learningResourcesList ExecutionDocLearningResource[]
-  featuresList         ExecutionDocFeature[]
-  teamShareList        ExecutionDocTeamShare[]
+  featuresList          ExecutionDocFeature[]
+  teamShareList         ExecutionDocTeamShare[]
 
   @@unique([projectId, version])
 }
@@ -1174,6 +1203,9 @@ model EvaluationReport {
   findings       EvaluationFinding[]
   evidence       EvaluationEvidence[]
 
+  // Metrics & analytics subsystem (§17) — links the audit to the cycle that used it
+  authenticityAudits AuthenticityAudit[]
+
   @@unique([projectId, cycle])
   @@index([overallScore])
 }
@@ -1232,8 +1264,8 @@ model EvaluationEvidence {
 }
 
 model ProposalScore {
-  id             String                @id @default(cuid())
-  proposalId     String                @unique
+  id             String                   @id @default(cuid())
+  proposalId     String                   @unique
   proposal       ProblemStatementProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   overallScore   Float
   feasibility    Float?
@@ -1242,7 +1274,7 @@ model ProposalScore {
   technicalDepth Float?
   clarity        Float?
   rubricScores   ProposalRubricScore[]
-  createdAt      DateTime              @default(now())
+  createdAt      DateTime                 @default(now())
 }
 
 model ProposalRubricScore {
@@ -1461,4 +1493,394 @@ model RewardTransaction {
 
   @@index([userId])
   @@index([projectId])
+}
+
+// --- Metrics & Analytics Subsystem (Section 17 of DATABASE_DESIGN.md) ---------
+// Persists what server/src/modules/metrics/*.ts computes. Every score below
+// carries the inputs and model version it was computed from, so it stays
+// reproducible after a recalibration or a disputed grade.
+
+enum MetricType {
+  NORTH_STAR
+  LEADING
+  LAGGING
+}
+
+enum MetricScope {
+  ORG
+  COHORT
+  TEAM
+  PROJECT
+  USER
+}
+
+enum RiskBand {
+  GREEN
+  AMBER
+  RED
+}
+
+enum RiskDriverKey {
+  MILESTONE_SLIPPAGE
+  LOG_NONCOMPLIANCE
+  OPEN_FLAGS
+  COMMIT_DECLINE
+  CONTRIBUTION_IMBALANCE
+}
+
+enum BlockerStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  STALE
+}
+
+enum CohortReportKind {
+  ONBOARDING_FUNNEL
+  FORMATION_HEALTH
+  SEGMENTATION
+  EARLY_WARNING
+  CATALOG_DEMAND
+  ROI
+}
+
+enum InterventionKind {
+  GENERAL_NUDGE
+  MENTOR_MEETING
+  DEADLINE_EXTENSION
+  TEAM_RESHUFFLE
+  SCOPE_REDUCTION
+  ESCALATION
+}
+
+enum InterventionOutcome {
+  PENDING
+  IMPROVED
+  UNCHANGED
+  WORSENED
+  INCONCLUSIVE
+}
+
+enum MetricRunKind {
+  RISK
+  AUTHENTICITY
+  BLOCKERS
+  COHORT
+  BENCHMARK
+  ALL
+}
+
+model MetricDefinition {
+  id               String            @id @default(cuid())
+  organizationId   String? // null = platform-wide default
+  organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key              String // "NS_01", "L_LOG_COMPLIANCE" -- matches NORTH_STAR_TREE ids
+  name             String
+  metricType       MetricType
+  unit             String
+  description      String
+  targetExpression String? // display target, e.g. "> 85%" -- not a computed bound
+  scope            MetricScope       @default(PROJECT)
+  isActive         Boolean           @default(true)
+  displayOrder     Int               @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  snapshots        MetricSnapshot[]
+  cohortBenchmarks CohortBenchmark[]
+
+  @@unique([organizationId, key])
+  @@index([metricType, isActive])
+}
+
+model MetricSnapshot {
+  id               String            @id @default(cuid())
+  definitionId     String
+  definition       MetricDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  scope            MetricScope
+  subjectId        String // project/team/user/org id per `scope` -- polymorphic by design
+  organizationId   String // denormalized for cohort-wide queries
+  value            Float
+  periodStart      DateTime
+  periodEnd        DateTime
+  sampleSize       Int
+  insufficientData Boolean           @default(false)
+  computeRunId     String?
+  computeRun       MetricComputeRun? @relation(fields: [computeRunId], references: [id], onDelete: SetNull)
+  computedAt       DateTime          @default(now())
+
+  @@unique([definitionId, scope, subjectId, periodStart])
+  @@index([scope, subjectId, computedAt])
+  @@index([organizationId, definitionId, periodStart])
+}
+
+model RiskModelVersion {
+  id             String             @id @default(cuid())
+  version        Int                @unique
+  weightSlip     Float              @default(0.30)
+  weightLogs     Float              @default(0.25)
+  weightCommits  Float              @default(0.15)
+  weightFlags    Float              @default(0.20)
+  weightFairness Float              @default(0.10)
+  amberThreshold Int                @default(33)
+  redThreshold   Int                @default(66)
+  calibratedFrom Int?
+  isActive       Boolean            @default(false)
+  notes          String?
+  createdAt      DateTime           @default(now())
+  createdById    String?
+  createdBy      User?              @relation("RiskModelVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  riskScores     ProjectRiskScore[]
+
+  @@index([isActive])
+}
+
+model ProjectRiskScore {
+  id             String           @id @default(cuid())
+  projectId      String
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  modelVersionId String
+  modelVersion   RiskModelVersion @relation(fields: [modelVersionId], references: [id], onDelete: Restrict)
+  score          Int
+  band           RiskBand
+
+  percentTimeElapsed    Float
+  percentMilestonesDone Float
+  logComplianceRate     Float
+  commitVelocityTrend   Float
+  openFlagSeverity      Float
+  contributionGini      Float
+
+  slippage              Float
+  logNonCompliance      Float
+  commitDrop            Float
+  flagSeverity          Float
+  contributionImbalance Float
+
+  computeRunId             String?
+  computeRun               MetricComputeRun?   @relation(fields: [computeRunId], references: [id], onDelete: SetNull)
+  computedAt               DateTime            @default(now())
+  drivers                  ProjectRiskDriver[]
+  baselineForInterventions Intervention[]      @relation("InterventionBaseline")
+  followUpForInterventions Intervention[]      @relation("InterventionFollowUp")
+
+  @@unique([projectId, computedAt])
+  @@index([projectId, computedAt])
+  @@index([band, computedAt])
+  @@index([computedAt])
+}
+
+model ProjectRiskDriver {
+  id          String           @id @default(cuid())
+  riskScoreId String
+  riskScore   ProjectRiskScore @relation(fields: [riskScoreId], references: [id], onDelete: Cascade)
+  driverKey   RiskDriverKey
+  weightPct   Int
+  rank        Int
+
+  @@unique([riskScoreId, driverKey])
+  @@index([driverKey, weightPct])
+}
+
+model DomainSkillRequirement {
+  id             String        @id @default(cuid())
+  organizationId String? // null = platform default
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  domain         String
+  skillName      String
+  weight         Float         @default(1.0)
+  isRequired     Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, domain, skillName])
+  @@index([domain])
+}
+
+model ProjectFitScore {
+  id                  String             @id @default(cuid())
+  projectId           String
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  teamId              String
+  team                Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  score               Float
+  skillCoverage       Float
+  timeFit             Float
+  perfFit             Float
+  avgPerformance      Float
+  weeksAvailable      Int
+  difficultyTier      Int
+  weightSkillCoverage Float
+  weightTimeFit       Float
+  weightPerfFit       Float
+  computedAt          DateTime           @default(now())
+  reasons             ProjectFitReason[]
+
+  @@unique([projectId, teamId, computedAt])
+  @@index([teamId, computedAt])
+}
+
+model ProjectFitReason {
+  id         String          @id @default(cuid())
+  fitScoreId String
+  fitScore   ProjectFitScore @relation(fields: [fitScoreId], references: [id], onDelete: Cascade)
+  text       String
+  order      Int             @default(0)
+
+  @@index([fitScoreId, order])
+}
+
+model AuthenticityAudit {
+  id                 String               @id @default(cuid())
+  projectId          String
+  project            Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  overallConfidence  Int
+  signalCount        Int
+  suspiciousCount    Int
+  periodStart        DateTime
+  periodEnd          DateTime
+  evaluationReportId String?
+  evaluationReport   EvaluationReport?    @relation(fields: [evaluationReportId], references: [id], onDelete: SetNull)
+  computeRunId       String?
+  computeRun         MetricComputeRun?    @relation(fields: [computeRunId], references: [id], onDelete: SetNull)
+  createdAt          DateTime             @default(now())
+  signals            AuthenticitySignal[]
+
+  @@unique([projectId, periodStart, periodEnd])
+  @@index([projectId, createdAt])
+  @@index([overallConfidence])
+}
+
+model AuthenticitySignal {
+  id               String            @id @default(cuid())
+  auditId          String
+  audit            AuthenticityAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  date             DateTime          @db.Date
+  logClaimed       Boolean
+  hoursClaimed     Float             @default(0)
+  commitCount      Int               @default(0)
+  docActivityCount Int               @default(0)
+  suspicious       Boolean           @default(false)
+  reason           String?
+
+  @@unique([auditId, userId, date])
+  @@index([userId, date])
+  @@index([auditId, suspicious])
+}
+
+model BlockerEscalation {
+  id               String          @id @default(cuid())
+  projectId        String
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User            @relation("BlockerEscalationUser", fields: [userId], references: [id], onDelete: Restrict)
+  summary          String
+  firstSeenDate    DateTime        @db.Date
+  lastSeenDate     DateTime        @db.Date
+  recurrenceCount  Int
+  severity         Int
+  status           BlockerStatus   @default(OPEN)
+  acknowledgedById String?
+  acknowledgedBy   User?           @relation("BlockerEscalationAcknowledger", fields: [acknowledgedById], references: [id], onDelete: SetNull)
+  acknowledgedAt   DateTime?
+  resolvedAt       DateTime?
+  resolutionNote   String?
+  projectLogFlagId String?         @unique
+  projectLogFlag   ProjectLogFlag? @relation(fields: [projectLogFlagId], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([projectId, userId, firstSeenDate])
+  @@index([projectId, status])
+  @@index([status, severity])
+}
+
+model CohortBenchmark {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  definitionId     String
+  definition       MetricDefinition  @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  cohortKey        String
+  periodStart      DateTime
+  periodEnd        DateTime
+  populationSize   Int
+  median           Float
+  mean             Float
+  stdDev           Float
+  p25              Float
+  p75              Float
+  p90              Float
+  insufficientData Boolean           @default(false)
+  computeRunId     String?
+  computeRun       MetricComputeRun? @relation(fields: [computeRunId], references: [id], onDelete: SetNull)
+  computedAt       DateTime          @default(now())
+
+  @@unique([organizationId, definitionId, cohortKey, periodStart])
+  @@index([definitionId, periodStart])
+}
+
+model CohortMetricSnapshot {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reportKind     CohortReportKind
+  cohortKey      String            @default("") // "" = no sub-cohort dimension; non-null so the compound unique index below works with Prisma's upsert (nullable fields cannot appear in a @@unique lookup)
+  periodStart    DateTime
+  periodEnd      DateTime
+  payload        Json
+  sampleSize     Int
+  computeRunId   String?
+  computeRun     MetricComputeRun? @relation(fields: [computeRunId], references: [id], onDelete: SetNull)
+  computedAt     DateTime          @default(now())
+
+  @@unique([organizationId, reportKind, cohortKey, periodStart])
+  @@index([organizationId, reportKind, computedAt])
+}
+
+model Intervention {
+  id                  String              @id @default(cuid())
+  projectId           String
+  project             Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  organizationId      String
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUserId         String
+  actorUser           User                @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  kind                InterventionKind
+  note                String?
+  baselineRiskScoreId String?
+  baselineRiskScore   ProjectRiskScore?   @relation("InterventionBaseline", fields: [baselineRiskScoreId], references: [id], onDelete: SetNull)
+  followUpRiskScoreId String?
+  followUpRiskScore   ProjectRiskScore?   @relation("InterventionFollowUp", fields: [followUpRiskScoreId], references: [id], onDelete: SetNull)
+  followUpDueAt       DateTime
+  riskDelta           Float?
+  outcome             InterventionOutcome @default(PENDING)
+  loggedAt            DateTime            @default(now())
+
+  @@index([projectId, loggedAt])
+  @@index([organizationId, kind, outcome])
+  @@index([followUpDueAt])
+}
+
+model MetricComputeRun {
+  id                 String                 @id @default(cuid())
+  kind               MetricRunKind
+  organizationId     String?
+  organization       Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status             String                 @default("QUEUED")
+  startedAt          DateTime               @default(now())
+  finishedAt         DateTime?
+  subjectsProcessed  Int                    @default(0)
+  snapshotsWritten   Int                    @default(0)
+  errorMessage       String?
+  triggeredById      String?
+  triggeredBy        User?                  @relation(fields: [triggeredById], references: [id], onDelete: SetNull)
+  metricSnapshots    MetricSnapshot[]
+  riskScores         ProjectRiskScore[]
+  authenticityAudits AuthenticityAudit[]
+  cohortSnapshots    CohortMetricSnapshot[]
+  cohortBenchmarks   CohortBenchmark[]
+
+  @@index([kind, startedAt])
 }

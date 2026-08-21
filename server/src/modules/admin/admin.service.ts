@@ -10,7 +10,23 @@ import {
   earlyWarningBoard,
   catalogDemand,
   cohortRoiReport,
+  snapshotCohortReport,
 } from '../metrics/cohortMetrics';
+
+// Fire-and-forget persistence of a cohort report as a CohortMetricSnapshot.
+// Never blocks or fails the request the report was computed for — a snapshot
+// write failure is a lost trend data point, not a reason to 500 an admin
+// analytics page.
+function snapshotInBackground(
+  organizationId: string,
+  reportKind: Parameters<typeof snapshotCohortReport>[1],
+  payload: Parameters<typeof snapshotCohortReport>[2],
+  cohortKey?: string,
+) {
+  snapshotCohortReport(organizationId, reportKind, payload, { cohortKey }).catch((err) => {
+    console.error(`[AdminService] Failed to snapshot ${reportKind} for org ${organizationId}:`, err);
+  });
+}
 
 const analyticsCache = new TtlCache<any>(300000); // 5 min TTL
 
@@ -774,29 +790,41 @@ export class AdminService {
   // ── Analytics (Compute-on-read with TtlCache) ──────────────────────────────
 
   static async getFunnelAnalytics(organizationId: string) {
-    return analyticsCache.wrap(`funnel:${organizationId}`, () => onboardingFunnel(organizationId));
+    const result = await analyticsCache.wrap(`funnel:${organizationId}`, () => onboardingFunnel(organizationId));
+    snapshotInBackground(organizationId, 'ONBOARDING_FUNNEL', result);
+    return result;
   }
 
   static async getFormationHealth(organizationId: string) {
-    return analyticsCache.wrap(`formation:${organizationId}`, () => formationHealth(organizationId));
+    const result = await analyticsCache.wrap(`formation:${organizationId}`, () => formationHealth(organizationId));
+    snapshotInBackground(organizationId, 'FORMATION_HEALTH', result);
+    return result;
   }
 
   static async getSegmentationAnalytics(
     organizationId: string,
     dimension: 'department' | 'deptCode' | 'cluster' | 'year' | 'gender' | 'resident' | 'ssgDomain' = 'department'
   ) {
-    return analyticsCache.wrap(`seg:${organizationId}:${dimension}`, () => cohortSegmentation(organizationId, dimension));
+    const result = await analyticsCache.wrap(`seg:${organizationId}:${dimension}`, () => cohortSegmentation(organizationId, dimension));
+    snapshotInBackground(organizationId, 'SEGMENTATION', result, dimension);
+    return result;
   }
 
   static async getEarlyWarningBoard(organizationId: string) {
-    return analyticsCache.wrap(`early-warning:${organizationId}`, () => earlyWarningBoard(organizationId), 120000);
+    const result = await analyticsCache.wrap(`early-warning:${organizationId}`, () => earlyWarningBoard(organizationId), 120000);
+    snapshotInBackground(organizationId, 'EARLY_WARNING', result);
+    return result;
   }
 
   static async getCatalogDemandAnalytics(organizationId: string) {
-    return analyticsCache.wrap(`demand:${organizationId}`, () => catalogDemand(organizationId));
+    const result = await analyticsCache.wrap(`demand:${organizationId}`, () => catalogDemand(organizationId));
+    snapshotInBackground(organizationId, 'CATALOG_DEMAND', result);
+    return result;
   }
 
   static async getRoiReport(organizationId: string) {
-    return analyticsCache.wrap(`roi:${organizationId}`, () => cohortRoiReport(organizationId));
+    const result = await analyticsCache.wrap(`roi:${organizationId}`, () => cohortRoiReport(organizationId));
+    snapshotInBackground(organizationId, 'ROI', result);
+    return result;
   }
 }

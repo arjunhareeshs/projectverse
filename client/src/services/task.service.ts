@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { add401Interceptor, getApiBaseUrl } from './api';
+import { add401Interceptor, getApiBaseUrl, getAuthToken } from './api';
 
 const API_URL = getApiBaseUrl();
 
@@ -9,7 +9,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('pv_token');
+  const token = getAuthToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }

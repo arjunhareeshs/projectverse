@@ -7,7 +7,7 @@ import { ProjectCategory } from '../../shared/projectLog.types';
 import { wordOverlapRatio, jaccardSimilarity } from '../../shared/stringUtils';
 import { MAX_TEAMS_PER_STATEMENT, APPROACH_OVERLAP_THRESHOLD, availability } from './selection.constants';
 import { getTeamSelectionReadiness } from './selection.readiness';
-import { computeFit, DOMAIN_REQUIRED_SKILLS } from '../metrics/selectionFit';
+import { computeFit, DOMAIN_REQUIRED_SKILLS, getRequiredSkillsForDomain, persistProjectFitScore } from '../metrics/selectionFit';
 import {
   validateIdea,
   extractFeaturesForCombinedStatement,
@@ -767,6 +767,40 @@ export const catalogController = {
 
         return created;
       });
+
+      // Best-effort: persist the fit score at the actual decision point (the
+      // claim), not on every catalog browse — computeFit's browse-time usage
+      // above stays a pure, unpersisted calculation on purpose (it runs once
+      // per template per page load and would otherwise write a row on every
+      // listing request). A failure here must never fail the claim itself,
+      // since the project and its features/phases are already committed.
+      try {
+        const template = await prisma.project.findUnique({
+          where: { id: targetId },
+          select: { organizationId: true, domain: true, difficultyLevel: true, suggestedDurationWeeks: true },
+        });
+        const teamMembersForFit = await prisma.user.findMany({
+          where: { teamId },
+          select: { userSkills: { select: { skillName: true } } },
+        });
+        const teamSkills = Array.from(
+          new Set(teamMembersForFit.flatMap((m) => m.userSkills.map((s) => s.skillName))),
+        );
+        const requiredSkills = await getRequiredSkillsForDomain(template?.organizationId ?? null, template?.domain);
+        await persistProjectFitScore({
+          projectId: newProject.id,
+          teamId,
+          input: {
+            teamSkills,
+            requiredSkills,
+            avgPerformance: 50,
+            weeksAvailable: template?.suggestedDurationWeeks || 12,
+            difficultyTier: Number(template?.difficultyLevel || 2),
+          },
+        });
+      } catch (fitErr) {
+        console.error('Error persisting project fit score (non-fatal):', fitErr);
+      }
 
       res.status(StatusCodes.CREATED).json(newProject);
     } catch (error: any) {

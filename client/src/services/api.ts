@@ -12,6 +12,10 @@ export const getBackendHostUrl = () => {
   return `http://${host}:4000`;
 };
 
+import { getAuthToken, clearAuthSession } from '../utils/token';
+
+export { getAuthToken, clearAuthSession };
+
 export const api = axios.create({
   baseURL: getApiBaseUrl(),
   headers: {
@@ -20,7 +24,7 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('pv_token');
+  const token = getAuthToken();
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -32,11 +36,13 @@ export function add401Interceptor(instance: AxiosInstance) {
     (response) => response,
     (error) => {
       if (error.response && error.response.status === 401) {
-        const isAuthEndpoint = error.config?.url?.includes('/auth/login') || error.config?.url?.includes('/auth/register');
+        const isAuthEndpoint =
+          error.config?.url?.includes('/auth/login') ||
+          error.config?.url?.includes('/auth/register') ||
+          error.config?.url?.includes('/auth/google');
         if (!isAuthEndpoint) {
-          const hadToken = !!localStorage.getItem('pv_token');
-          localStorage.removeItem('pv_token');
-          localStorage.removeItem('pv_user');
+          const hadToken = !!getAuthToken();
+          clearAuthSession();
           if (hadToken && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
             window.location.href = '/login';
           }

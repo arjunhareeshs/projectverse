@@ -5,6 +5,7 @@ import { bootstrapSocket } from './infrastructure/socket';
 import { logger } from './shared/logger';
 import { startEvaluationScheduler } from './modules/lifecycle/evaluation.scheduler';
 import { startInsightsScheduler } from './modules/insights/insights.scheduler';
+import { startMetricsScheduler } from './modules/metrics/metrics.scheduler';
 import { recoverStalePendingProposals } from './modules/projects/proposal.worker';
 import { getLocalNetworkIPs } from './config/network';
 
@@ -14,6 +15,7 @@ const httpServer = createServer(app);
 bootstrapSocket(httpServer);
 startEvaluationScheduler();
 startInsightsScheduler();
+startMetricsScheduler();
 // Proposal analysis runs in-process, so a restart mid-analysis would otherwise
 // leave the submitter's proposal PENDING forever.
 void recoverStalePendingProposals();

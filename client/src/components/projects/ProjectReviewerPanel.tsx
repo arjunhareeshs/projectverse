@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Star, CheckCircle, AlertCircle, FileText, Send } from 'lucide-react';
+import { getAuthToken } from '../../utils/token';
 
 interface ProjectReviewerPanelProps {
   projectId: string;
@@ -23,7 +24,7 @@ export const ProjectReviewerPanel: React.FC<ProjectReviewerPanelProps> = ({ proj
 
   const fetchReviews = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       const res = await axios.get(`/api/projects/${projectId}/reviews`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -39,7 +40,7 @@ export const ProjectReviewerPanel: React.FC<ProjectReviewerPanelProps> = ({ proj
     if (!newReview.comments) return;
     setSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       await axios.post(`/api/projects/${projectId}/reviews`, newReview, {
         headers: { Authorization: `Bearer ${token}` },
       });

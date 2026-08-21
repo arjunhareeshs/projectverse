@@ -4,7 +4,7 @@ import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { useDispatch } from 'react-redux';
 import { authService } from '../services/auth.service';
-import { setCredentials } from '../features/auth/authSlice';
+import { setUser } from '../features/auth/authSlice';
 
 export const MainLayout: React.FC = () => {
   const dispatch = useDispatch();
@@ -14,8 +14,7 @@ export const MainLayout: React.FC = () => {
       try {
         const res = await authService.getCurrentUser();
         if (res && res.user) {
-          const token = localStorage.getItem('pv_token') || '';
-          dispatch(setCredentials({ user: res.user, token }));
+          dispatch(setUser(res.user));
         }
       } catch (err) {
         console.error('Failed to sync current user profile:', err);
