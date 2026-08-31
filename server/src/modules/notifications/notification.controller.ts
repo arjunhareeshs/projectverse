@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { notificationService } from './notification.service';
+import { teamService } from '../teams/team.service';
 
 export const notificationController = {
   async getNotifications(req: Request, res: Response) {
@@ -59,6 +60,33 @@ export const notificationController = {
     } catch (error) {
       console.error('Error creating notification:', error);
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Failed to create notification' });
+    }
+  },
+
+  async respondToRequest(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user || !user.organizationId) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+
+      const action = req.body?.action;
+      if (action !== 'accept' && action !== 'decline') {
+        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'action must be "accept" or "decline"' });
+      }
+
+      const id = req.params['id'] as string;
+      const result = await teamService.respondToNotificationRequest(
+        user.organizationId,
+        id,
+        action,
+        user.id,
+        user.role,
+      );
+      res.json(result);
+    } catch (error: any) {
+      console.error('Error responding to notification request:', error);
+      res.status(StatusCodes.BAD_REQUEST).json({ message: error.message || 'Failed to respond to request' });
     }
   },
 

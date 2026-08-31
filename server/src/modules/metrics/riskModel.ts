@@ -240,5 +240,30 @@ export async function computeAndPersistProjectRisk(
     include: { drivers: true },
   });
 
+  // Best-effort trigger for AI risk notification on AMBER or RED bands
+  if (result.band !== 'GREEN') {
+    import('../notifications/notification.service').then(async ({ notificationService }) => {
+      try {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { name: true, teamId: true },
+        });
+        if (project) {
+          await notificationService.createAiRiskNotification({
+            projectId,
+            teamId: project.teamId,
+            projectName: project.name,
+            riskScore: result.score,
+            riskBand: result.band,
+            topDrivers: result.drivers,
+          });
+        }
+      } catch (notifErr) {
+        console.error('[RiskModel] Failed dispatching risk alert notification (non-fatal):', notifErr);
+      }
+    }).catch((impErr) => console.error('[RiskModel] Failed importing notificationService:', impErr));
+  }
+
   return { result, riskScore };
 }
+

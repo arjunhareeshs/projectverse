@@ -11,5 +11,6 @@ router.post('/', notificationController.createNotification);
 router.patch('/:id/read', notificationController.markRead);
 router.post('/read-all', notificationController.markAllRead);
 router.post('/deadline-alert', notificationController.createDeadlineAlert);
+router.post('/:id/respond', notificationController.respondToRequest);
 
 export const notificationRoutes = router;

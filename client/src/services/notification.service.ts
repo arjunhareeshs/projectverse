@@ -45,5 +45,10 @@ export const notificationService = {
     const response = await api.post('/deadline-alert');
     return response.data;
   },
+
+  respondToRequest: async (id: string, action: 'accept' | 'decline') => {
+    const response = await api.post(`/${id}/respond`, { action });
+    return response.data;
+  },
 };
 export default notificationService;

@@ -9,6 +9,9 @@ export interface NotificationItem {
   body: string;
   readAt: string | null;
   createdAt: string;
+  type: string | null;
+  refId: string | null;
+  status: string | null;
 }
 
 interface NotificationContextType {
@@ -16,6 +19,7 @@ interface NotificationContextType {
   unreadCount: number;
   markAsRead: (id: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
+  respondToRequest: (id: string, action: 'accept' | 'decline') => Promise<void>;
   socket: Socket | null;
 }
 
@@ -24,6 +28,7 @@ const NotificationContext = createContext<NotificationContextType>({
   unreadCount: 0,
   markAsRead: async () => {},
   markAllAsRead: async () => {},
+  respondToRequest: async () => {},
   socket: null,
 });
 
@@ -111,12 +116,26 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const respondToRequest = async (id: string, action: 'accept' | 'decline') => {
+    if (!token) return;
+    const status = action === 'accept' ? 'accepted' : 'declined';
+    try {
+      await notificationService.respondToRequest(id, action);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, status, readAt: n.readAt || new Date().toISOString() } : n)),
+      );
+    } catch (err) {
+      console.error('Failed to respond to request', err);
+      throw err;
+    }
+  };
+
   const unreadCount = Array.isArray(notifications)
     ? notifications.filter((n) => !n.readAt).length
     : 0;
 
   return (
-    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, socket }}>
+    <NotificationContext.Provider value={{ notifications, unreadCount, markAsRead, markAllAsRead, respondToRequest, socket }}>
       {children}
     </NotificationContext.Provider>
   );

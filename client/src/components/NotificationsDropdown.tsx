@@ -58,7 +58,8 @@ export const NotificationsDropdown: React.FC = () => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, respondToRequest } = useNotifications();
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   // Show top 5 in dropdown
   const items = notifications.slice(0, 5);
@@ -84,8 +85,21 @@ export const NotificationsDropdown: React.FC = () => {
   };
 
   const handleItemClick = async (n: NotificationItem) => {
+    if (n.status === 'pending') return; // actionable requests use the buttons, not the row click
     if (n.readAt) return;
     await markAsRead(n.id);
+  };
+
+  const handleRespond = async (e: React.MouseEvent, id: string, action: 'accept' | 'decline') => {
+    e.stopPropagation();
+    setRespondingId(id);
+    try {
+      await respondToRequest(id, action);
+    } catch (err) {
+      alert('Failed to respond to request.');
+    } finally {
+      setRespondingId(null);
+    }
   };
 
   return (
@@ -133,13 +147,18 @@ export const NotificationsDropdown: React.FC = () => {
             ) : (
               items.map((n) => {
                 const { Icon, color } = getNotificationIcon(n.title);
+                const isActionable = n.type === 'JOIN_REQUEST';
+                const isPending = isActionable && n.status === 'pending';
                 return (
-                  <button
+                  <div
                     key={n.id}
                     onClick={() => handleItemClick(n)}
+                    role="button"
+                    tabIndex={0}
                     className={cn(
                       'flex w-full items-start gap-3 px-4 py-3 text-left transition-colors border-b border-border/60 hover:bg-muted/60',
                       !n.readAt && 'bg-primary/5 font-medium',
+                      !isPending && 'cursor-pointer',
                     )}
                   >
                     <span
@@ -151,20 +170,54 @@ export const NotificationsDropdown: React.FC = () => {
                       <Icon className="h-4 w-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-foreground leading-snug">
-                        {n.title}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-semibold text-foreground leading-snug">
+                          {n.title}
+                        </p>
+                        {isActionable && (
+                          <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary">
+                            Request
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-muted-foreground leading-normal mt-0.5">
                         {n.body}
                       </p>
                       <p className="text-[9px] text-muted-foreground/60 mt-1">
                         {formatTimeAgo(n.createdAt)}
                       </p>
+                      {isPending ? (
+                        <div className="flex items-center gap-2 mt-2">
+                          <button
+                            onClick={(e) => handleRespond(e, n.id, 'accept')}
+                            disabled={respondingId === n.id}
+                            className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-600 text-[10px] font-semibold hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={(e) => handleRespond(e, n.id, 'decline')}
+                            disabled={respondingId === n.id}
+                            className="px-2.5 py-1 rounded-md bg-red-500/10 text-red-600 text-[10px] font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      ) : isActionable && n.status ? (
+                        <span
+                          className={cn(
+                            'inline-block mt-2 rounded-full px-1.5 py-0.5 text-[9px] font-semibold capitalize',
+                            n.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600',
+                          )}
+                        >
+                          {n.status}
+                        </span>
+                      ) : null}
                     </div>
-                    {!n.readAt && (
+                    {!n.readAt && !isPending && (
                       <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
                     )}
-                  </button>
+                  </div>
                 );
               })
             )}

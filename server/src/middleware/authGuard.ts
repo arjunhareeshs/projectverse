@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { verifyAccessToken } from '../config/jwt';
 import { prisma } from '../shared/database';
+import { runWithUserContext } from './userContext';
 
 export interface AuthenticatedRequest extends Request {
   user?: any;
@@ -29,7 +30,9 @@ export async function authGuard(req: AuthenticatedRequest, res: Response, next: 
     }
 
     req.user = user;
-    next();
+    runWithUserContext(user.id, () => {
+      next();
+    });
   } catch (error) {
     res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Invalid access token' });
   }

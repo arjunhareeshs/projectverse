@@ -18,6 +18,7 @@ import { internalRoutes } from './modules/internal/internal.routes';
 import { githubRoutes } from './modules/github/github.routes';
 import { lifecycleRoutes } from './modules/lifecycle/lifecycle.routes';
 import { proposalRoutes } from './modules/projects/proposals.routes';
+import { aiProviderRoutes } from './modules/ai/aiProvider.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
@@ -60,6 +61,7 @@ export function createApp() {
   app.use('/api/internal', internalRoutes);
   app.use('/api/github', githubRoutes);
   app.use('/api/lifecycle', lifecycleRoutes);
+  app.use('/api/ai/providers', aiProviderRoutes);
 
   // This is a JSON API with no root page of its own — the actual app lives
   // on the frontend dev server (http://localhost:7333). Anyone landing here

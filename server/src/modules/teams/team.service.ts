@@ -835,11 +835,43 @@ export const teamService = {
       notificationService.createForUser(
         team.leadId,
         'New Join Request',
-        `${user.fullName} requested to join team "${team.name}".`
+        `${user.fullName} requested to join team "${team.name}".`,
+        { type: 'JOIN_REQUEST', refId: request.id, status: 'pending' },
       ).catch((err) => logger.error('Failed sending join-request notification', err));
     }
 
     return request;
+  },
+
+  async respondToNotificationRequest(
+    organizationId: string,
+    notificationId: string,
+    action: 'accept' | 'decline',
+    responderId: string,
+    responderRole: string,
+  ) {
+    const notification = await prisma.notification.findFirst({
+      where: { id: notificationId, userId: responderId },
+    });
+    if (!notification) throw new Error('Notification not found');
+    if (notification.type !== 'JOIN_REQUEST' || !notification.refId) {
+      throw new Error('This notification has no action to take');
+    }
+    if (notification.status !== 'pending') {
+      throw new Error('This request has already been actioned');
+    }
+
+    const invite = await prisma.teamInvite.findUnique({ where: { id: notification.refId } });
+    if (!invite) throw new Error('Join request not found');
+
+    return teamService.respondToInvite(
+      organizationId,
+      invite.teamId,
+      invite.id,
+      action,
+      responderId,
+      responderRole,
+    );
   },
 
   async respondToInvite(
@@ -865,6 +897,7 @@ export const teamService = {
 
     if (action === 'decline') {
       await prisma.teamInvite.update({ where: { id: inviteId }, data: { status: 'declined' } });
+      await notificationService.syncStatusByRefId(inviteId, 'declined');
       return { success: true };
     }
 
@@ -874,6 +907,7 @@ export const teamService = {
 
     await teamService.addMember(organizationId, teamId, invite.userId, invite.roleLabel);
     await prisma.teamInvite.update({ where: { id: inviteId }, data: { status: 'accepted' } });
+    await notificationService.syncStatusByRefId(inviteId, 'accepted');
     await prisma.activityLog.create({
       data: {
         userId: invite.userId,

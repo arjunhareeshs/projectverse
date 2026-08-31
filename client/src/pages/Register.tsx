@@ -9,6 +9,7 @@ import { Button } from '../common/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../common/Card';
 import { authService } from '../services/auth.service';
 import { setCredentials, setLoading, setError } from '../features/auth/authSlice';
+import { GoogleSignInButton } from '../components/auth/GoogleSignInButton';
 
 const registerSchema = z.object({
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
@@ -114,6 +115,19 @@ export const Register: React.FC = () => {
             {isSubmitting ? 'Creating account...' : 'Create account'}
           </Button>
         </form>
+
+        <div className="relative flex items-center justify-center my-4">
+          <div className="border-t border-border w-full" />
+          <span className="bg-card px-3 text-xs lowercase tracking-wider text-muted-foreground font-medium shrink-0">
+            or
+          </span>
+          <div className="border-t border-border w-full" />
+        </div>
+
+        <GoogleSignInButton
+          onError={(msg) => setLocalError(msg)}
+          disabled={isSubmitting}
+        />
       </CardContent>
       <CardFooter>
         <p className="text-sm text-center text-muted-foreground w-full">

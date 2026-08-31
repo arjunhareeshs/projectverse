@@ -22,7 +22,7 @@ import { Landing } from './pages/Landing';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 
-import { Dashboard } from './pages/Dashboard';
+import { Dashboard } from './pages/Dashboard/index';
 import { AllProjects } from './pages/AllProjects';
 import { ProjectCatalogPage } from './pages/ProjectCatalogPage';
 import { ProposeProblem } from './pages/ProposeProblem';

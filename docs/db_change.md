@@ -6,6 +6,51 @@ most entries should have **none**.
 
 ---
 
+## Notifications — Accept/Reject Join Requests — 2026-08-22
+
+**Schema/migration change:**
+- `Notification` model — added `type` (String?, e.g. `"JOIN_REQUEST"`), `refId` (String?, the
+  related `TeamInvite.id`), `status` (String?, `"pending" | "accepted" | "declined"`). All
+  nullable, so every existing/plain notification row is unaffected and reads as before.
+- Applied via `prisma db push` (no `_prisma_migrations` baseline exists yet — `migrate dev`
+  fails building the shadow DB against the untracked history; same known gap noted in the
+  Dashboard entry below, still owed).
+
+**Reason:** the `Notification` table had no way to distinguish an actionable request (team
+join request) from a plain informational message, so accept/reject could only happen by
+navigating to the team page — the notification itself was inert.
+
+**Logic changes:**
+- `server/src/modules/notifications/notification.service.ts` — `createForUser` takes an
+  optional `{ type, refId, status }`. New `syncStatusByRefId(refId, status)` flips a
+  notification's status/readAt when the underlying request is actioned elsewhere.
+- `server/src/modules/teams/team.service.ts` — `requestToJoin` now tags the join-request
+  notification with `type: 'JOIN_REQUEST'`, `refId: <TeamInvite.id>`, `status: 'pending'`.
+  `respondToInvite` (used by the team page's Accept/Decline) now also calls
+  `syncStatusByRefId` so the notification's status stays consistent no matter which surface
+  actioned it. New `respondToNotificationRequest(organizationId, notificationId, action,
+  responderId, responderRole)` resolves the notification → `TeamInvite` → delegates to the
+  existing `respondToInvite`, so there is one authorization/mutation path, not two.
+- `server/src/modules/notifications/notification.controller.ts` /
+  `notification.routes.ts` — new `POST /notifications/:id/respond` (`{ action: 'accept' |
+  'decline' }`).
+
+**Frontend changes:**
+- `NotificationContext`, `NotificationsDropdown`, `Notifications` page — `NotificationItem`
+  now carries `type`/`refId`/`status`. Notifications with `type === 'JOIN_REQUEST'` get a
+  "Request" badge; while `status === 'pending'` they show Accept/Reject buttons (calling the
+  new endpoint) instead of the plain mark-as-read affordance; once actioned they show an
+  Accepted/Declined badge instead of buttons. Plain notifications are unchanged.
+
+**Verified:** `tsc --noEmit` clean on client + server. Schema pushed successfully to the live
+DB; Prisma client regenerated.
+
+**Remaining risk:** same pre-existing `_prisma_migrations` baseline gap (see Dashboard entry) —
+not introduced or worsened here, but this change was applied via `db push` rather than a
+tracked migration because of it.
+
+---
+
 ## Dashboard — 2026-08-12
 
 **Schema/migration change:** none. All tables already existed in the live DB

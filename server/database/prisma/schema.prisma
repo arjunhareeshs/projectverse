@@ -83,6 +83,13 @@ model User {
   interventionsActed       Intervention[]
   metricComputeRuns        MetricComputeRun[]
   riskModelVersionsCreated RiskModelVersion[]   @relation("RiskModelVersionCreatedBy")
+
+  // BYOK AI Provider System
+  aiProviders UserAIProvider[]
+  aiUsageLogs AIUsageLog[]
+
+  // 10-Field Rubric Evaluation Scores
+  studentCycleScores10 StudentCycleScore10[]
 }
 
 model Organization {
@@ -141,6 +148,10 @@ model Team {
 
   // Metrics & analytics subsystem (§17)
   fitScores ProjectFitScore[]
+
+  // 10-Field Rubric Evaluation Scores
+  teamCycleScores10    TeamCycleScore10[]
+  studentCycleScores10 StudentCycleScore10[]
 }
 
 model TeamCollaboration {
@@ -282,6 +293,11 @@ model Project {
   authenticityAudits AuthenticityAudit[]
   blockerEscalations BlockerEscalation[]
   interventions      Intervention[]
+
+  // 10-Field Rubric Evaluation Scores
+  studentCycleScores10 StudentCycleScore10[]
+  teamCycleScores10    TeamCycleScore10[]
+  projectCycleScores10 ProjectCycleScore10[]
 }
 
 model ProblemStatementProposal {
@@ -415,6 +431,9 @@ model Notification {
   body      String
   readAt    DateTime?
   createdAt DateTime  @default(now())
+  type      String? // e.g. "JOIN_REQUEST"; null for plain informational notifications
+  refId     String? // id of the related record (e.g. TeamInvite.id) when type is actionable
+  status    String? // "pending" | "accepted" | "declined"; only set for actionable notifications
   user      User      @relation(fields: [userId], references: [id])
 }
 
@@ -1206,6 +1225,11 @@ model EvaluationReport {
   // Metrics & analytics subsystem (§17) — links the audit to the cycle that used it
   authenticityAudits AuthenticityAudit[]
 
+  // 10-Field Rubric Evaluation Scores
+  studentCycleScores10 StudentCycleScore10[]
+  teamCycleScores10    TeamCycleScore10[]
+  projectCycleScores10 ProjectCycleScore10[]
+
   @@unique([projectId, cycle])
   @@index([overallScore])
 }
@@ -1884,3 +1908,175 @@ model MetricComputeRun {
 
   @@index([kind, startedAt])
 }
+
+enum AIProvider {
+  GROQ
+  NVIDIA
+}
+
+model UserAIProvider {
+  id              String      @id @default(cuid())
+  userId          String
+  provider        AIProvider
+  encryptedApiKey String
+  keyFingerprint  String
+  isEnabled       Boolean     @default(true)
+  lastValidatedAt DateTime?
+  lastUsedAt      DateTime?
+  lastErrorCode   String?
+  lastErrorAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@index([provider])
+}
+
+model AIUsageLog {
+  id           String     @id @default(cuid())
+  userId       String
+  provider     AIProvider
+  model        String?
+  requestId    String?
+  inputTokens  Int?
+  outputTokens Int?
+  totalTokens  Int?
+  latencyMs    Int?
+  status       String
+  errorCode    String?
+  createdAt    DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([provider, createdAt])
+}
+
+// ─── 10-Field Tri-Level Rubric Models (0-10 Scale each) ──────────────────────
+
+model StudentCycleScore10 {
+  id                           String            @id @default(cuid())
+  regNo                        String            // Student Register Number (e.g. "21CS101")
+  userId                       String
+  projectId                    String
+  teamId                       String?
+  reportId                     String?
+  cycle                        Int               // 1, 2, 3...
+  periodStart                  DateTime
+  periodEnd                    DateTime
+
+  // 5 On-Project Marks (0 to 10 each)
+  scopeAlignmentScore          Int               // 0-10
+  technicalComplexityScore     Int               // 0-10
+  milestoneCompletionScore     Int               // 0-10
+  commitAuthenticityScore      Int               // 0-10
+  riskMitigationScore          Int               // 0-10
+
+  // 5 Out-of-Project / Discipline Marks (0 to 10 each)
+  taskPunctualityScore         Int               // 0-10 (Task deadline adherence)
+  dailyLogDiligenceScore       Int               // 0-10 (Log compliance & detail)
+  taskOwnershipScore           Int               // 0-10 (Role responsibility)
+  teamCollaborationScore       Int               // 0-10 (Peer review & teamwork)
+  growthInnovationScore        Int               // 0-10 (Skill acquisition & initiative)
+
+  totalMarks                   Int               // Sum out of 100 (0 to 100)
+  relativeTeamRank             Int?              // 1st, 2nd, 3rd in team
+  contributionRatio            Float?            // Member share of team output (0.00 - 1.00)
+  previousCycleTotalMarks      Int?              // Previous cycle score (for clean delta tracking)
+  deltaMarks                   Int?              // +/- change from previous cycle
+  qualitativeStrengths         String[]          @default([])
+  qualitativeGrowthAreas       String[]          @default([])
+  personalizedActionPlan       String?
+
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
+
+  user                         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project                      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team                         Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  report                       EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, projectId, cycle])
+  @@index([regNo, cycle])
+  @@index([projectId, cycle])
+}
+
+model TeamCycleScore10 {
+  id                           String            @id @default(cuid())
+  teamId                       String
+  projectId                    String
+  reportId                     String?
+  cycle                        Int
+  periodStart                  DateTime
+  periodEnd                    DateTime
+
+  // 10 Team Dimensions (0 to 10 each)
+  workDistributionEquity       Int               // 0-10 (Gini fairness)
+  milestoneVelocity            Int               // 0-10
+  blockerResolutionSpeed       Int               // 0-10
+  interMemberCollaboration     Int               // 0-10
+  teamCommitCadence            Int               // 0-10
+  sharedDocumentation          Int               // 0-10
+  technicalConsistency         Int               // 0-10
+  timelineDiscipline           Int               // 0-10
+  peerReviewParticipation      Int               // 0-10
+  collectiveOutputQuality      Int               // 0-10
+
+  totalTeamMarks               Int               // Sum out of 100
+  teamSynergyLevel             String            // "HIGH" | "BALANCED" | "IMBALANCED" | "CRITICAL"
+  previousCycleTotalMarks      Int?
+  deltaMarks                   Int?
+  bottlenecks                  String[]          @default([])
+  teamFeedback                 String?
+
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
+
+  team                         Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  project                      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  report                       EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@unique([teamId, projectId, cycle])
+  @@index([teamId, cycle])
+}
+
+model ProjectCycleScore10 {
+  id                           String            @id @default(cuid())
+  projectId                    String
+  reportId                     String?
+  cycle                        Int
+  periodStart                  DateTime
+  periodEnd                    DateTime
+
+  // 10 Project Dimensions (0 to 10 each)
+  scopeAlignment               Int               // 0-10
+  architectureRobustness       Int               // 0-10
+  hardwareSoftwareProgress     Int               // 0-10
+  deliverablesReadiness        Int               // 0-10
+  authenticityConfidence       Int               // 0-10
+  plagiarismSafety             Int               // 0-10
+  testCoverageVerification     Int               // 0-10
+  standardsCompliance          Int               // 0-10
+  innovationDifferentiation    Int               // 0-10
+  publicationFeasibility       Int               // 0-10
+
+  totalProjectMarks            Int               // Sum out of 100
+  projectHealthBand            String            // "EXCELLENT" | "GOOD" | "NEEDS_ATTENTION" | "AT_RISK" | "CRITICAL"
+  previousCycleTotalMarks      Int?
+  trajectoryDelta              Float?
+  keyMilestonesAchieved        String[]          @default([])
+  criticalRisks                String[]          @default([])
+
+  createdAt                    DateTime          @default(now())
+  updatedAt                    DateTime          @updatedAt
+
+  project                      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  report                       EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, cycle])
+  @@index([projectId, cycle])
+}
+

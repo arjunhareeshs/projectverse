@@ -104,11 +104,81 @@ async function runPromptSerializerTest() {
 
   logger.info('✓ Test 1 Passed: Zero PII and zero CUID leaks in serialized prompt.');
 
-  // Test 2: De-aliasing and Zod validation check
+  // Test 2: De-aliasing and Zod validation check with 10-Field Rubric outputs
   const mockLlmResponse = {
     cycle: 1,
     periodStart: '2026-08-01',
     periodEnd: '2026-08-15',
+    studentScores10: [
+      {
+        userId: 'M1',
+        scopeAlignmentScore: 9,
+        technicalComplexityScore: 8,
+        milestoneCompletionScore: 9,
+        commitAuthenticityScore: 8,
+        riskMitigationScore: 8,
+        taskPunctualityScore: 9,
+        dailyLogDiligenceScore: 8,
+        taskOwnershipScore: 9,
+        teamCollaborationScore: 8,
+        growthInnovationScore: 8,
+        totalMarks: 84,
+        relativeTeamRank: 1,
+        qualitativeStrengths: ['Strong ESP32 firmware', 'Clean commits'],
+        qualitativeGrowthAreas: ['Unit test edge cases'],
+        personalizedActionPlan: 'Complete MQTT telemetry integration.',
+      },
+      {
+        userId: 'M2',
+        scopeAlignmentScore: 8,
+        technicalComplexityScore: 8,
+        milestoneCompletionScore: 7,
+        commitAuthenticityScore: 7,
+        riskMitigationScore: 7,
+        taskPunctualityScore: 8,
+        dailyLogDiligenceScore: 7,
+        taskOwnershipScore: 8,
+        teamCollaborationScore: 8,
+        growthInnovationScore: 8,
+        totalMarks: 76,
+        relativeTeamRank: 2,
+        qualitativeStrengths: ['YOLOv8 training pipeline'],
+        qualitativeGrowthAreas: ['Daily log frequency'],
+        personalizedActionPlan: 'Increase daily log submission consistency.',
+      },
+    ],
+    teamScores10: {
+      workDistributionEquity: 8,
+      milestoneVelocity: 8,
+      blockerResolutionSpeed: 7,
+      interMemberCollaboration: 8,
+      teamCommitCadence: 8,
+      sharedDocumentation: 8,
+      technicalConsistency: 8,
+      timelineDiscipline: 8,
+      peerReviewParticipation: 7,
+      collectiveOutputQuality: 8,
+      totalTeamMarks: 78,
+      teamSynergyLevel: 'BALANCED',
+      bottlenecks: ['API documentation synchronization'],
+      teamFeedback: 'Good collaboration across firmware and AI components.',
+    },
+    projectScores10: {
+      scopeAlignment: 8,
+      architectureRobustness: 8,
+      hardwareSoftwareProgress: 8,
+      deliverablesReadiness: 8,
+      authenticityConfidence: 8,
+      plagiarismSafety: 9,
+      testCoverageVerification: 7,
+      standardsCompliance: 8,
+      innovationDifferentiation: 8,
+      publicationFeasibility: 7,
+      totalProjectMarks: 79,
+      projectHealthBand: 'GOOD',
+      keyMilestonesAchieved: ['Milestone 1 architecture validation'],
+      criticalRisks: ['Sensor calibration latency'],
+    },
     scopeAdherence: { score: 85, notes: 'Good scope match' },
     technicalProgress: { score: 80, notes: 'Solid commits' },
     timelineCompliance: { score: 90, notes: 'On schedule' },
@@ -131,6 +201,8 @@ async function runPromptSerializerTest() {
 
   const dealiased = dealiasEvaluationReport(mockLlmResponse, aliasToUserId);
 
+  assert.strictEqual(dealiased.studentScores10[0].userId, 'cuid-user-1');
+  assert.strictEqual(dealiased.studentScores10[1].userId, 'cuid-user-2');
   assert.strictEqual(dealiased.memberParticipation.perMember[0].userId, 'cuid-user-1');
   assert.strictEqual(dealiased.memberParticipation.perMember[1].userId, 'cuid-user-2');
 
@@ -138,10 +210,49 @@ async function runPromptSerializerTest() {
   assert.strictEqual(parsed.success, true, 'Dealiased report must match Zod schema');
 
   logger.info('✓ Test 2 Passed: De-aliasing and Zod validation work perfectly.');
-  logger.info('All Leak-Free LLM Boundary tests passed successfully!');
+
+  // Test 3: Cycle 2 memory with clean previous marks (NO raw text appended)
+  const cycle2Input: RawEvaluationInput = {
+    ...fixtureInput,
+    cycle: 2,
+    previousCycleMarks: {
+      students: {
+        'cuid-user-1': {
+          scopeAlignmentScore: 9,
+          technicalComplexityScore: 8,
+          milestoneCompletionScore: 9,
+          commitAuthenticityScore: 8,
+          riskMitigationScore: 8,
+          taskPunctualityScore: 9,
+          dailyLogDiligenceScore: 8,
+          taskOwnershipScore: 9,
+          teamCollaborationScore: 8,
+          growthInnovationScore: 8,
+          total: 84,
+        },
+      },
+      team: { totalTeamMarks: 78 },
+      project: { totalProjectMarks: 79 },
+      overallScore: 80,
+    },
+  };
+
+  const cycle2Result = serializeEvaluationPrompt(cycle2Input);
+  const cycle2UserPrompt = cycle2Result.prompt.find((p) => p.role === 'user')?.content || '';
+
+  // Confirm previous marks are passed cleanly
+  assert.strictEqual(cycle2UserPrompt.includes('Previous Cycle Benchmark Marks'), true);
+  assert.strictEqual(cycle2UserPrompt.includes('"total": 84'), true);
+  assert.strictEqual(cycle2UserPrompt.includes('"previousOverall": 80'), true);
+  // Confirm NO raw user IDs or raw texts from past are leaked
+  assert.strictEqual(cycle2UserPrompt.includes('cuid-user-1'), false);
+
+  logger.info('✓ Test 3 Passed: Cycle 2 historical marks passed cleanly without text appending.');
+  logger.info('All Tri-Level 10-Field Rubric Evaluation tests passed successfully!');
 }
 
 runPromptSerializerTest().catch((e) => {
   logger.error('Prompt serializer test failed:', e);
   process.exit(1);
 });
+

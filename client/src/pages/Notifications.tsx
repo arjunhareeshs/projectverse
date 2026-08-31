@@ -13,6 +13,9 @@ interface NotificationItem {
   body: string;
   createdAt: string;
   readAt: string | null;
+  type: string | null;
+  refId: string | null;
+  status: string | null;
 }
 
 function getNotificationIcon(title: string) {
@@ -61,6 +64,7 @@ export const Notifications: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [alerting, setAlerting] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -124,6 +128,22 @@ export const Notifications: React.FC = () => {
       console.error('Failed to create notification:', err);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleRespond = async (id: string, action: 'accept' | 'decline') => {
+    setRespondingId(id);
+    const status = action === 'accept' ? 'accepted' : 'declined';
+    try {
+      await notificationService.respondToRequest(id, action);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, status, readAt: n.readAt || new Date().toISOString() } : n))
+      );
+    } catch (err) {
+      console.error('Failed to respond to request:', err);
+      alert('Failed to respond to request.');
+    } finally {
+      setRespondingId(null);
     }
   };
 
@@ -212,6 +232,8 @@ export const Notifications: React.FC = () => {
           {notifications.map((n) => {
             const { Icon, color } = getNotificationIcon(n.title);
             const isUnread = !n.readAt;
+            const isActionable = n.type === 'JOIN_REQUEST';
+            const isPending = isActionable && n.status === 'pending';
             return (
               <div
                 key={n.id}
@@ -226,6 +248,11 @@ export const Notifications: React.FC = () => {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-sm text-foreground">{n.title}</h3>
+                    {isActionable && (
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                        Request
+                      </span>
+                    )}
                     {isUnread && (
                       <span className="h-2 w-2 rounded-full bg-primary shrink-0" />
                     )}
@@ -236,8 +263,35 @@ export const Notifications: React.FC = () => {
                   <span className="text-[10px] text-muted-foreground/60 mt-2 block">
                     {formatTimeAgo(n.createdAt)}
                   </span>
+                  {isPending ? (
+                    <div className="flex items-center gap-2 mt-3">
+                      <button
+                        onClick={() => handleRespond(n.id, 'accept')}
+                        disabled={respondingId === n.id}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 text-xs font-semibold hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleRespond(n.id, 'decline')}
+                        disabled={respondingId === n.id}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-600 text-xs font-semibold hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  ) : isActionable && n.status ? (
+                    <span
+                      className={cn(
+                        'inline-block mt-3 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize',
+                        n.status === 'accepted' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600',
+                      )}
+                    >
+                      {n.status}
+                    </span>
+                  ) : null}
                 </div>
-                {isUnread && (
+                {isUnread && !isPending && (
                   <button
                     onClick={() => handleMarkRead(n.id)}
                     title="Mark as read"

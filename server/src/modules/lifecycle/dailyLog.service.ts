@@ -65,6 +65,35 @@ export class DailyLogService {
       console.error('Failed to increment user points for daily log:', ptsErr);
     }
 
+    // Best-effort asynchronous scan for persistent blockers if blockers were reported
+    if (data.blockers && data.blockers.trim().length > 0 && data.blockers.trim().toLowerCase() !== 'none') {
+      import('../metrics/blockerEscalation').then(async ({ persistBlockerEscalations }) => {
+        try {
+          const escalations = await persistBlockerEscalations(projectId);
+          const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { name: true, teamId: true },
+          });
+
+          for (const item of escalations) {
+            if (item.isNewOrWorsened && item.blocker.recurrenceCount >= 3) {
+              const { notificationService } = await import('../notifications/notification.service');
+              await notificationService.createAiBlockerNotification({
+                projectId,
+                teamId: project?.teamId,
+                projectName: project?.name || 'Project',
+                blockerSummary: item.blocker.summary,
+                recurrenceCount: item.blocker.recurrenceCount,
+                userId: item.blocker.userId,
+              });
+            }
+          }
+        } catch (escErr) {
+          console.error('[DailyLogService] Blocker escalation check failed (non-fatal):', escErr);
+        }
+      }).catch((impErr) => console.error('[DailyLogService] Failed importing blockerEscalation:', impErr));
+    }
+
     return {
       id: record.id,
       projectId: record.projectId,

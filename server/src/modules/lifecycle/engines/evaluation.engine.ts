@@ -152,10 +152,94 @@ export class EvaluationEngine {
       }
     }
 
-    // Previous eval
-    const previousEval = evalCtx.lastEvaluationSummary;
+    // Attach real student registration numbers (regNo) for official records
+    const teamUserIds = evalCtx.team.members.map((m: any) => m.userId);
+    const userRecords = await prisma.user.findMany({
+      where: { id: { in: teamUserIds } },
+      select: { id: true, regNo: true, fullName: true },
+    });
+    const regNoMap = new Map<string, string>();
+    userRecords.forEach((u) => {
+      if (u.regNo) regNoMap.set(u.id, u.regNo);
+    });
+    evalCtx.team.members.forEach((m: any) => {
+      m.regNo = regNoMap.get(m.userId) || m.userId;
+    });
 
-    // Build leak-free serialized LLM payload
+    // Query Previous Cycle's Exact 10 Numerical Marks (Clean Baseline — Zero Raw Text Appended)
+    let previousCycleMarks: any = null;
+    let prevStudentsMap = new Map<string, any>();
+    let prevTeamRecord: any = null;
+    let prevProjectRecord: any = null;
+
+    if (targetCycle > 1) {
+      const [prevStudents, prevTeam, prevProject] = await Promise.all([
+        prisma.studentCycleScore10.findMany({
+          where: { projectId, cycle: targetCycle - 1 },
+        }),
+        prisma.teamCycleScore10.findFirst({
+          where: { projectId, cycle: targetCycle - 1 },
+        }),
+        prisma.projectCycleScore10.findFirst({
+          where: { projectId, cycle: targetCycle - 1 },
+        }),
+      ]);
+
+      prevStudents.forEach((ps) => prevStudentsMap.set(ps.userId, ps));
+      prevTeamRecord = prevTeam;
+      prevProjectRecord = prevProject;
+
+      if (prevStudents.length > 0 || prevTeam || prevProject) {
+        const studentMarksMap: Record<string, any> = {};
+        prevStudents.forEach((ps) => {
+          studentMarksMap[ps.userId] = {
+            scopeAlignment: ps.scopeAlignmentScore,
+            technicalComplexity: ps.technicalComplexityScore,
+            milestoneCompletion: ps.milestoneCompletionScore,
+            commitAuthenticity: ps.commitAuthenticityScore,
+            riskMitigation: ps.riskMitigationScore,
+            taskPunctuality: ps.taskPunctualityScore,
+            dailyLogDiligence: ps.dailyLogDiligenceScore,
+            taskOwnership: ps.taskOwnershipScore,
+            teamCollaboration: ps.teamCollaborationScore,
+            growthInnovation: ps.growthInnovationScore,
+            total: ps.totalMarks,
+          };
+        });
+
+        previousCycleMarks = {
+          students: studentMarksMap,
+          team: prevTeam ? {
+            workDistributionEquity: prevTeam.workDistributionEquity,
+            milestoneVelocity: prevTeam.milestoneVelocity,
+            blockerResolutionSpeed: prevTeam.blockerResolutionSpeed,
+            interMemberCollaboration: prevTeam.interMemberCollaboration,
+            teamCommitCadence: prevTeam.teamCommitCadence,
+            sharedDocumentation: prevTeam.sharedDocumentation,
+            technicalConsistency: prevTeam.technicalConsistency,
+            timelineDiscipline: prevTeam.timelineDiscipline,
+            peerReviewParticipation: prevTeam.peerReviewParticipation,
+            collectiveOutputQuality: prevTeam.collectiveOutputQuality,
+            total: prevTeam.totalTeamMarks,
+          } : null,
+          project: prevProject ? {
+            scopeAlignment: prevProject.scopeAlignment,
+            architectureRobustness: prevProject.architectureRobustness,
+            hardwareSoftwareProgress: prevProject.hardwareSoftwareProgress,
+            deliverablesReadiness: prevProject.deliverablesReadiness,
+            authenticityConfidence: prevProject.authenticityConfidence,
+            plagiarismSafety: prevProject.plagiarismSafety,
+            testCoverageVerification: prevProject.testCoverageVerification,
+            standardsCompliance: prevProject.standardsCompliance,
+            innovationDifferentiation: prevProject.innovationDifferentiation,
+            publicationFeasibility: prevProject.publicationFeasibility,
+            total: prevProject.totalProjectMarks,
+          } : null,
+        };
+      }
+    }
+
+    // Build leak-free serialized LLM payload with 10-field rubrics
     const { prompt, aliasToUserId } = serializeEvaluationPrompt({
       cycle: targetCycle,
       periodStart: periodStart.toISOString(),
@@ -163,10 +247,12 @@ export class EvaluationEngine {
       evalContext: evalCtx,
       logsGroupedByMember,
       githubCommits,
-      previousEval,
+      previousCycleMarks,
+      previousEval: evalCtx.lastEvaluationSummary,
       suspiciousPairs,
     });
 
+    let rawLlmParsed: any = null;
     let reportContent: EvaluationReportContent;
     const isFallback = !isLlmConfigured();
 
@@ -180,6 +266,7 @@ export class EvaluationEngine {
       // Validate schema
       const parseResult = EvaluationReportSchema.safeParse(dealiased);
       if (parseResult.success) {
+        rawLlmParsed = parseResult.data;
         reportContent = parseResult.data as unknown as EvaluationReportContent;
       } else {
         reportContent = fallback;
@@ -201,7 +288,6 @@ export class EvaluationEngine {
       }
 
       // 3.4 Contradiction Guardrail: 0 commits & 0 logs but high technical/scope score
-      // Uses real attributed linkedUserId
       const memberCommits = githubCommits.filter((c) => c.linkedUserId === m.userId);
       if (stats?.entryCount === 0 && memberCommits.length === 0) {
         if (reportContent.technicalProgress.score > 60) {
@@ -250,7 +336,7 @@ export class EvaluationEngine {
       if (reportContent.plagiarismRisk === 'LOW') reportContent.plagiarismRisk = 'MEDIUM';
     }
 
-    // 3.5 Attach Score Evidence Receipts
+    // Attach Score Evidence Receipts
     const totalLogs = logs.length;
     const totalCommits = githubCommits.length;
 
@@ -261,7 +347,7 @@ export class EvaluationEngine {
     reportContent.documentationQuality.evidence = { totalLogs, lowEffortCount };
     reportContent.authenticityConfidence.evidence = { maxOverlapFound: Math.round(maxOverlapFound * 100), memberSelfSim };
 
-    // 3.3 Category-Weighted Average Score
+    // Category-Weighted Average Score
     const weightsByCategory: Record<string, Record<string, number>> = {
       RESEARCH: {
         technicalProgress: 0.25,
@@ -331,6 +417,242 @@ export class EvaluationEngine {
       },
     });
 
+    // Persist 10-Field Project Marks (ProjectCycleScore10)
+    const p10 = rawLlmParsed?.projectScores10;
+    const projectTotalMarks = p10?.totalProjectMarks ?? overallScore;
+    const prevProjTotal = prevProjectRecord?.totalProjectMarks ?? null;
+    const projDelta = prevProjTotal != null ? projectTotalMarks - prevProjTotal : null;
+
+    await prisma.projectCycleScore10.upsert({
+      where: { projectId_cycle: { projectId, cycle: targetCycle } },
+      create: {
+        projectId,
+        reportId: reportRecord.id,
+        cycle: targetCycle,
+        periodStart,
+        periodEnd,
+        scopeAlignment: p10?.scopeAlignment ?? Math.min(10, Math.round(reportContent.scopeAdherence.score / 10)),
+        architectureRobustness: p10?.architectureRobustness ?? Math.min(10, Math.round(reportContent.technicalProgress.score / 10)),
+        hardwareSoftwareProgress: p10?.hardwareSoftwareProgress ?? Math.min(10, Math.round(reportContent.technicalProgress.score / 10)),
+        deliverablesReadiness: p10?.deliverablesReadiness ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10)),
+        authenticityConfidence: p10?.authenticityConfidence ?? Math.min(10, Math.round(reportContent.authenticityConfidence.score / 10)),
+        plagiarismSafety: p10?.plagiarismSafety ?? (reportContent.plagiarismRisk === 'HIGH' ? 2 : reportContent.plagiarismRisk === 'MEDIUM' ? 6 : 9),
+        testCoverageVerification: p10?.testCoverageVerification ?? 7,
+        standardsCompliance: p10?.standardsCompliance ?? 8,
+        innovationDifferentiation: p10?.innovationDifferentiation ?? 7,
+        publicationFeasibility: p10?.publicationFeasibility ?? 7,
+        totalProjectMarks: projectTotalMarks,
+        projectHealthBand: p10?.projectHealthBand ?? (overallScore >= 75 ? 'GOOD' : overallScore >= 60 ? 'NEEDS_ATTENTION' : 'AT_RISK'),
+        previousCycleTotalMarks: prevProjTotal,
+        trajectoryDelta: projDelta,
+        keyMilestonesAchieved: p10?.keyMilestonesAchieved ?? [],
+        criticalRisks: p10?.criticalRisks ?? [],
+      },
+      update: {
+        reportId: reportRecord.id,
+        periodStart,
+        periodEnd,
+        scopeAlignment: p10?.scopeAlignment ?? Math.min(10, Math.round(reportContent.scopeAdherence.score / 10)),
+        architectureRobustness: p10?.architectureRobustness ?? Math.min(10, Math.round(reportContent.technicalProgress.score / 10)),
+        hardwareSoftwareProgress: p10?.hardwareSoftwareProgress ?? Math.min(10, Math.round(reportContent.technicalProgress.score / 10)),
+        deliverablesReadiness: p10?.deliverablesReadiness ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10)),
+        authenticityConfidence: p10?.authenticityConfidence ?? Math.min(10, Math.round(reportContent.authenticityConfidence.score / 10)),
+        plagiarismSafety: p10?.plagiarismSafety ?? (reportContent.plagiarismRisk === 'HIGH' ? 2 : reportContent.plagiarismRisk === 'MEDIUM' ? 6 : 9),
+        testCoverageVerification: p10?.testCoverageVerification ?? 7,
+        standardsCompliance: p10?.standardsCompliance ?? 8,
+        innovationDifferentiation: p10?.innovationDifferentiation ?? 7,
+        publicationFeasibility: p10?.publicationFeasibility ?? 7,
+        totalProjectMarks: projectTotalMarks,
+        projectHealthBand: p10?.projectHealthBand ?? (overallScore >= 75 ? 'GOOD' : overallScore >= 60 ? 'NEEDS_ATTENTION' : 'AT_RISK'),
+        previousCycleTotalMarks: prevProjTotal,
+        trajectoryDelta: projDelta,
+        keyMilestonesAchieved: p10?.keyMilestonesAchieved ?? [],
+        criticalRisks: p10?.criticalRisks ?? [],
+      },
+    });
+
+    // Persist 10-Field Team Marks (TeamCycleScore10)
+    if (evalCtx.team?.teamId) {
+      const t10 = rawLlmParsed?.teamScores10;
+      const teamTotal = t10?.totalTeamMarks ?? overallScore;
+      const prevTeamTotal = prevTeamRecord?.totalTeamMarks ?? null;
+      const teamDelta = prevTeamTotal != null ? teamTotal - prevTeamTotal : null;
+
+      await prisma.teamCycleScore10.upsert({
+        where: { teamId_projectId_cycle: { teamId: evalCtx.team.teamId, projectId, cycle: targetCycle } },
+        create: {
+          teamId: evalCtx.team.teamId,
+          projectId,
+          reportId: reportRecord.id,
+          cycle: targetCycle,
+          periodStart,
+          periodEnd,
+          workDistributionEquity: t10?.workDistributionEquity ?? 8,
+          milestoneVelocity: t10?.milestoneVelocity ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10)),
+          blockerResolutionSpeed: t10?.blockerResolutionSpeed ?? 7,
+          interMemberCollaboration: t10?.interMemberCollaboration ?? Math.min(10, Math.round(reportContent.memberParticipation.score / 10)),
+          teamCommitCadence: t10?.teamCommitCadence ?? (totalCommits > 5 ? 8 : 4),
+          sharedDocumentation: t10?.sharedDocumentation ?? Math.min(10, Math.round(reportContent.documentationQuality.score / 10)),
+          technicalConsistency: t10?.technicalConsistency ?? 8,
+          timelineDiscipline: t10?.timelineDiscipline ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10)),
+          peerReviewParticipation: t10?.peerReviewParticipation ?? 7,
+          collectiveOutputQuality: t10?.collectiveOutputQuality ?? Math.min(10, Math.round(overallScore / 10)),
+          totalTeamMarks: teamTotal,
+          teamSynergyLevel: t10?.teamSynergyLevel ?? 'BALANCED',
+          previousCycleTotalMarks: prevTeamTotal,
+          deltaMarks: teamDelta,
+          bottlenecks: t10?.bottlenecks ?? [],
+          teamFeedback: t10?.teamFeedback ?? reportContent.mentorFeedback,
+        },
+        update: {
+          reportId: reportRecord.id,
+          periodStart,
+          periodEnd,
+          workDistributionEquity: t10?.workDistributionEquity ?? 8,
+          milestoneVelocity: t10?.milestoneVelocity ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10)),
+          blockerResolutionSpeed: t10?.blockerResolutionSpeed ?? 7,
+          interMemberCollaboration: t10?.interMemberCollaboration ?? Math.min(10, Math.round(reportContent.memberParticipation.score / 10)),
+          teamCommitCadence: t10?.teamCommitCadence ?? (totalCommits > 5 ? 8 : 4),
+          sharedDocumentation: t10?.sharedDocumentation ?? Math.min(10, Math.round(reportContent.documentationQuality.score / 10)),
+          technicalConsistency: t10?.technicalConsistency ?? 8,
+          timelineDiscipline: t10?.timelineDiscipline ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10)),
+          peerReviewParticipation: t10?.peerReviewParticipation ?? 7,
+          collectiveOutputQuality: t10?.collectiveOutputQuality ?? Math.min(10, Math.round(overallScore / 10)),
+          totalTeamMarks: teamTotal,
+          teamSynergyLevel: t10?.teamSynergyLevel ?? 'BALANCED',
+          previousCycleTotalMarks: prevTeamTotal,
+          deltaMarks: teamDelta,
+          bottlenecks: t10?.bottlenecks ?? [],
+          teamFeedback: t10?.teamFeedback ?? reportContent.mentorFeedback,
+        },
+      });
+
+      // Dispatch Rich Team Notification
+      await notificationService.createRichTeamEvaluationNotification({
+        teamId: evalCtx.team.teamId,
+        projectId,
+        projectName: project?.name || 'Project',
+        cycle: targetCycle,
+        totalTeamMarks: teamTotal,
+        synergyLevel: t10?.teamSynergyLevel || 'BALANCED',
+        deltaMarks: teamDelta,
+        feedback: t10?.teamFeedback || reportContent.mentorFeedback,
+      });
+    }
+
+    // Persist 10-Field Student Marks (StudentCycleScore10) with Registration Number (regNo)
+    const studentScoresList = rawLlmParsed?.studentScores10 || [];
+    for (const member of evalCtx.team.members) {
+      const s10 = studentScoresList.find((s: any) => s.userId === member.userId);
+      const studentStats = logsGroupedByMember[member.userId];
+      const memberCommits = githubCommits.filter((c) => c.linkedUserId === member.userId);
+
+      const scopeScore = s10?.scopeAlignmentScore ?? Math.min(10, Math.round(reportContent.scopeAdherence.score / 10));
+      const techScore = s10?.technicalComplexityScore ?? Math.min(10, Math.round(reportContent.technicalProgress.score / 10));
+      const mileScore = s10?.milestoneCompletionScore ?? Math.min(10, Math.round(reportContent.timelineCompliance.score / 10));
+      const authScore = s10?.commitAuthenticityScore ?? (memberCommits.length > 0 ? 8 : studentStats?.entryCount > 0 ? 5 : 1);
+      const riskScore = s10?.riskMitigationScore ?? 7;
+      const puncScore = s10?.taskPunctualityScore ?? (studentStats?.entryCount > 0 ? 8 : 2);
+      const logScore = s10?.dailyLogDiligenceScore ?? (studentStats?.entryCount >= 8 ? 9 : studentStats?.entryCount >= 4 ? 6 : studentStats?.entryCount > 0 ? 4 : 0);
+      const ownerScore = s10?.taskOwnershipScore ?? (studentStats?.entryCount > 0 ? 8 : 2);
+      const collabScore = s10?.teamCollaborationScore ?? 8;
+      const growthScore = s10?.growthInnovationScore ?? 7;
+
+      const calculatedTotal = scopeScore + techScore + mileScore + authScore + riskScore + puncScore + logScore + ownerScore + collabScore + growthScore;
+      const finalStudentTotal = s10?.totalMarks ?? calculatedTotal;
+
+      const prevStudentRec = prevStudentsMap.get(member.userId);
+      const prevStudentTotal = prevStudentRec?.totalMarks ?? null;
+      const studentDelta = prevStudentTotal != null ? finalStudentTotal - prevStudentTotal : null;
+
+      const regNo = member.regNo || regNoMap.get(member.userId) || member.userId;
+
+      await prisma.studentCycleScore10.upsert({
+        where: {
+          userId_projectId_cycle: {
+            userId: member.userId,
+            projectId,
+            cycle: targetCycle,
+          },
+        },
+        create: {
+          regNo,
+          userId: member.userId,
+          projectId,
+          teamId: evalCtx.team?.teamId,
+          reportId: reportRecord.id,
+          cycle: targetCycle,
+          periodStart,
+          periodEnd,
+          scopeAlignmentScore: scopeScore,
+          technicalComplexityScore: techScore,
+          milestoneCompletionScore: mileScore,
+          commitAuthenticityScore: authScore,
+          riskMitigationScore: riskScore,
+          taskPunctualityScore: puncScore,
+          dailyLogDiligenceScore: logScore,
+          taskOwnershipScore: ownerScore,
+          teamCollaborationScore: collabScore,
+          growthInnovationScore: growthScore,
+          totalMarks: finalStudentTotal,
+          relativeTeamRank: s10?.relativeTeamRank ?? null,
+          previousCycleTotalMarks: prevStudentTotal,
+          deltaMarks: studentDelta,
+          qualitativeStrengths: s10?.qualitativeStrengths ?? [],
+          qualitativeGrowthAreas: s10?.qualitativeGrowthAreas ?? [],
+          personalizedActionPlan: s10?.personalizedActionPlan ?? reportContent.next15DayRecommendations?.[0] ?? 'Continue submitting verified daily logs.',
+        },
+        update: {
+          regNo,
+          reportId: reportRecord.id,
+          periodStart,
+          periodEnd,
+          scopeAlignmentScore: scopeScore,
+          technicalComplexityScore: techScore,
+          milestoneCompletionScore: mileScore,
+          commitAuthenticityScore: authScore,
+          riskMitigationScore: riskScore,
+          taskPunctualityScore: puncScore,
+          dailyLogDiligenceScore: logScore,
+          taskOwnershipScore: ownerScore,
+          teamCollaborationScore: collabScore,
+          growthInnovationScore: growthScore,
+          totalMarks: finalStudentTotal,
+          relativeTeamRank: s10?.relativeTeamRank ?? null,
+          previousCycleTotalMarks: prevStudentTotal,
+          deltaMarks: studentDelta,
+          qualitativeStrengths: s10?.qualitativeStrengths ?? [],
+          qualitativeGrowthAreas: s10?.qualitativeGrowthAreas ?? [],
+          personalizedActionPlan: s10?.personalizedActionPlan ?? reportContent.next15DayRecommendations?.[0] ?? 'Continue submitting verified daily logs.',
+        },
+      });
+
+      // Dispatch Rich Student Scorecard Notification
+      await notificationService.createRichStudentEvaluationNotification({
+        userId: member.userId,
+        projectId,
+        projectName: project?.name || 'Project',
+        cycle: targetCycle,
+        regNo,
+        totalMarks: finalStudentTotal,
+        deltaMarks: studentDelta,
+        rank: s10?.relativeTeamRank,
+        marks10: {
+          scopeAlignment: scopeScore,
+          technicalComplexity: techScore,
+          milestoneCompletion: mileScore,
+          commitAuthenticity: authScore,
+          riskMitigation: riskScore,
+          taskPunctuality: puncScore,
+          dailyLogDiligence: logScore,
+          taskOwnership: ownerScore,
+          teamCollaboration: collabScore,
+          growthInnovation: growthScore,
+        },
+        actionPlan: s10?.personalizedActionPlan || reportContent.next15DayRecommendations?.[0],
+      });
+    }
+
     // Normalized child records: Category Scores
     const categoryEntries = [
       { category: 'scopeAdherence', score: reportContent.scopeAdherence.score, notes: reportContent.scopeAdherence.notes },
@@ -396,12 +718,7 @@ export class EvaluationEngine {
       await prisma.evaluationEvidence.createMany({ data: evidenceRows });
     }
 
-    // Best-effort: persist the cross-source authenticity audit for this cycle,
-    // linked to the report that consumed it. This is additive — it does not
-    // change overallScore or authenticityConfidence.score above, which are
-    // already computed by this engine's own logic; it gives the audit a
-    // durable, per-member record (AuthenticitySignal) that survives even if
-    // the report content JSON is later regenerated.
+    // Best-effort: persist the cross-source authenticity audit for this cycle
     try {
       await persistAuthenticityAudit(
         projectId,
@@ -426,15 +743,6 @@ export class EvaluationEngine {
         reportId: reportRecord.id,
       },
     });
-
-    // Create notifications for team members with Socket.IO push
-    for (const member of evalCtx.team.members) {
-      await notificationService.createForUser(
-        member.userId,
-        `15-Day Evaluation Ready (Cycle #${targetCycle})`,
-        `Cycle #${targetCycle} evaluation report is ready. Overall Score: ${overallScore}/100. Plagiarism Risk: ${reportContent.plagiarismRisk}.`,
-      );
-    }
 
     return {
       reportId: reportRecord.id,
@@ -480,3 +788,4 @@ export class EvaluationEngine {
 }
 
 export const evaluationEngine = new EvaluationEngine();
+
