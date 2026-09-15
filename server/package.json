@@ -10,13 +10,18 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "npx prisma generate --schema ./database/prisma/schema.prisma",
     "prisma:migrate:dev": "npx prisma migrate dev --schema ./database/prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema ./database/prisma/schema.prisma",
     "prisma:seed": "tsx src/scripts/seed.ts",
     "seed:lifecycle": "tsx src/scripts/seedLifecycle.ts",
     "seed:catalog": "tsx src/scripts/seedProblemStatements.ts",
-    "verify:catalog": "tsx src/scripts/verifyCatalog.ts"
+    "seed:capstone": "tsx src/scripts/seedCapstone.ts",
+    "verify:catalog": "tsx src/scripts/verifyCatalog.ts",
+    "verify:capstone": "tsx src/scripts/verifyCapstone.ts",
+    "test:capstone": "tsx src/scripts/testGithubAndAllFuncs.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.18.1",
     "axios-retry": "^4.5.0",
     "bcrypt": "^6.0.0",
@@ -32,6 +37,7 @@
     "multer": "^2.0.2",
     "node-cron": "^4.6.0",
     "pdfkit": "^0.19.1",
+    "redis": "^6.2.1",
     "socket.io": "^4.8.1",
     "xlsx": "^0.18.5",
     "zod": "^4.0.5"

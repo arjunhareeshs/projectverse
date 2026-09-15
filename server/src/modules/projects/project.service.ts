@@ -45,6 +45,17 @@ export interface MyProjectItemDto {
   domain: string | null;
   sector: string | null;
   category: string | null;
+  mode?: 'NORMAL' | 'CAPSTONE';
+  capstone?: {
+    id: string;
+    status: string;
+    dueAt: string;
+    submittedAt?: string | null;
+    githubUrl?: string | null;
+    mcqScore?: number | null;
+    totalQuestions: number;
+    completedAt?: string | null;
+  } | null;
   /** Raw persisted status. */
   status: string;
   statusLabel: ProjectStatusLabel;
@@ -196,6 +207,7 @@ export const projectService = {
         sector: true,
         category: true,
         status: true,
+        mode: true,
         teamId: true,
         collaboratingTeamId: true,
         updatedAt: true,
@@ -205,6 +217,19 @@ export const projectService = {
             name: true,
             color: true,
             _count: { select: { members: true } },
+          },
+        },
+        capstoneSelections: {
+          where: { userId },
+          select: {
+            id: true,
+            status: true,
+            dueAt: true,
+            submittedAt: true,
+            githubUrl: true,
+            mcqScore: true,
+            totalQuestions: true,
+            completedAt: true,
           },
         },
       },
@@ -217,12 +242,27 @@ export const projectService = {
 
     const items: MyProjectItemDto[] = projects.map((p) => {
       const progress = progressById.get(p.id);
+      const capstone = p.capstoneSelections?.[0]
+        ? {
+            id: p.capstoneSelections[0].id,
+            status: p.capstoneSelections[0].status,
+            dueAt: p.capstoneSelections[0].dueAt.toISOString(),
+            submittedAt: p.capstoneSelections[0].submittedAt?.toISOString() || null,
+            githubUrl: p.capstoneSelections[0].githubUrl,
+            mcqScore: p.capstoneSelections[0].mcqScore,
+            totalQuestions: p.capstoneSelections[0].totalQuestions,
+            completedAt: p.capstoneSelections[0].completedAt?.toISOString() || null,
+          }
+        : null;
+
       return {
         id: p.id,
         name: p.name,
         domain: p.domain,
         sector: p.sector,
         category: p.category,
+        mode: p.mode,
+        capstone,
         status: p.status,
         statusLabel: toProjectStatusLabel(p.status),
         team: p.team

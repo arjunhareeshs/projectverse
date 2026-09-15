@@ -1,0 +1,31 @@
+# Stage 1: Build client static bundle
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
+ENV HUSKY=0
+
+COPY package.json package-lock.json ./
+COPY client/package.json ./client/
+COPY server/package.json ./server/
+
+RUN npm ci
+
+COPY client ./client
+
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
+RUN npm run build -w client
+
+# Stage 2: Serve static files with Nginx
+FROM nginx:1.27-alpine AS runtime
+
+COPY --from=build /app/client/dist /usr/share/nginx/html
+COPY docker/nginx/client.conf /etc/nginx/conf.d/default.conf
+
+RUN touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
+
+USER nginx
+EXPOSE 8080
+
+CMD ["nginx", "-g", "daemon off;"]

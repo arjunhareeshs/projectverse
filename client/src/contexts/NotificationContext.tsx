@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAppSelector } from '../app/hooks';
 import { notificationService } from '../services/notification.service';
+import { getSocketUrl } from '../services/api';
 
 export interface NotificationItem {
   id: string;
@@ -66,8 +67,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return;
     }
 
-    const socketHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || `http://${socketHost}:4000`;
+    const socketUrl = getSocketUrl();
 
     const newSocket = io(socketUrl, {
       auth: { token },

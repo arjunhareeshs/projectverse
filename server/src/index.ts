@@ -9,30 +9,43 @@ import { startMetricsScheduler } from './modules/metrics/metrics.scheduler';
 import { recoverStalePendingProposals } from './modules/projects/proposal.worker';
 import { getLocalNetworkIPs } from './config/network';
 
-const app = createApp();
-const httpServer = createServer(app);
+async function start() {
+  const app = createApp();
+  const httpServer = createServer(app);
 
-bootstrapSocket(httpServer);
-startEvaluationScheduler();
-startInsightsScheduler();
-startMetricsScheduler();
-// Proposal analysis runs in-process, so a restart mid-analysis would otherwise
-// leave the submitter's proposal PENDING forever.
-void recoverStalePendingProposals();
+  await bootstrapSocket(httpServer);
 
-httpServer.listen(env.SERVER_PORT, () => {
-  logger.info(`Server running on port ${env.SERVER_PORT}`);
-
-  // Auto-detect and log every LAN IP so the developer always knows
-  // which network addresses are reachable from other devices.
-  const lanIPs = getLocalNetworkIPs();
-  if (lanIPs.length > 0) {
-    logger.info(`Network access (CORS auto-allowed):`);
-    lanIPs.forEach((ip) => {
-      logger.info(`  → http://${ip}:7333  (frontend)`);
-      logger.info(`    http://${ip}:${env.SERVER_PORT}  (API)`);
-    });
+  if (env.RUN_SCHEDULER === 'true') {
+    logger.info('RUN_SCHEDULER=true: Starting background schedulers and worker recovery...');
+    startEvaluationScheduler();
+    startInsightsScheduler();
+    startMetricsScheduler();
+    // Proposal analysis runs in-process, so a restart mid-analysis would otherwise
+    // leave the submitter's proposal PENDING forever.
+    void recoverStalePendingProposals();
   } else {
-    logger.info('No active LAN interfaces detected — only localhost is allowed.');
+    logger.info('RUN_SCHEDULER=false: Schedulers disabled on this instance (API mode).');
   }
+
+  httpServer.listen(env.SERVER_PORT, () => {
+    logger.info(`Server running on port ${env.SERVER_PORT}`);
+
+    // Auto-detect and log every LAN IP so the developer always knows
+    // which network addresses are reachable from other devices.
+    const lanIPs = getLocalNetworkIPs();
+    if (lanIPs.length > 0) {
+      logger.info(`Network access (CORS auto-allowed):`);
+      lanIPs.forEach((ip) => {
+        logger.info(`  → http://${ip}:7333  (frontend)`);
+        logger.info(`    http://${ip}:${env.SERVER_PORT}  (API)`);
+      });
+    } else {
+      logger.info('No active LAN interfaces detected — only localhost is allowed.');
+    }
+  });
+}
+
+start().catch((err) => {
+  logger.error('Fatal startup error:', err);
+  process.exit(1);
 });

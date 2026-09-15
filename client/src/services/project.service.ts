@@ -35,6 +35,17 @@ export interface MyProjectItem {
   domain: string | null;
   sector: string | null;
   category: string | null;
+  mode?: 'NORMAL' | 'CAPSTONE';
+  capstone?: {
+    id: string;
+    status: 'CLAIMED' | 'SUBMITTED' | 'MCQ_READY' | 'COMPLETED' | 'EXPIRED';
+    dueAt: string;
+    submittedAt?: string | null;
+    githubUrl?: string | null;
+    mcqScore?: number | null;
+    totalQuestions: number;
+    completedAt?: string | null;
+  } | null;
   status: string;
   statusLabel: ProjectStatusLabel;
   team: { id: string; name: string; color: string | null; memberCount: number } | null;

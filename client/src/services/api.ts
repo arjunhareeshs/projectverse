@@ -1,16 +1,25 @@
 import axios, { AxiosInstance } from 'axios';
 
-export const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-  return `http://${host}:4000/api`;
-};
+export const resolveOrigin = (type: 'api' | 'backend' | 'socket' = 'api') => {
+  if (type === 'api' && import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (type === 'backend' && import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL;
+  if (type === 'socket' && import.meta.env.VITE_SOCKET_URL) return import.meta.env.VITE_SOCKET_URL;
 
-export const getBackendHostUrl = () => {
-  if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL;
+  // In production (e.g. deployed container behind reverse proxy), use same-origin
+  if (import.meta.env.PROD) {
+    if (type === 'api') return '/api';
+    return typeof window !== 'undefined' && window.location.origin ? window.location.origin : '';
+  }
+
+  // Development fallback
   const host = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+  if (type === 'api') return `http://${host}:4000/api`;
   return `http://${host}:4000`;
 };
+
+export const getApiBaseUrl = () => resolveOrigin('api');
+export const getBackendHostUrl = () => resolveOrigin('backend');
+export const getSocketUrl = () => resolveOrigin('socket');
 
 import { getAuthToken, clearAuthSession } from '../utils/token';
 

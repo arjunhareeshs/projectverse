@@ -13,7 +13,11 @@
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d --build",
+    "docker:down": "docker compose -f docker/docker-compose.yml down",
+    "docker:logs": "docker compose -f docker/docker-compose.yml logs -f",
+    "docker:seed": "docker compose -f docker/docker-compose.yml --profile seed run --rm seed"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",

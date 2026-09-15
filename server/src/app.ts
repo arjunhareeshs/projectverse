@@ -19,10 +19,13 @@ import { githubRoutes } from './modules/github/github.routes';
 import { lifecycleRoutes } from './modules/lifecycle/lifecycle.routes';
 import { proposalRoutes } from './modules/projects/proposals.routes';
 import { aiProviderRoutes } from './modules/ai/aiProvider.routes';
+import { capstoneRoutes } from './modules/capstone/capstone.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
   const app = express();
+
+  app.set('trust proxy', 1);
 
   app.use(helmet({
     crossOriginResourcePolicy: false, // Allow loading files in frontend via static server
@@ -62,6 +65,7 @@ export function createApp() {
   app.use('/api/github', githubRoutes);
   app.use('/api/lifecycle', lifecycleRoutes);
   app.use('/api/ai/providers', aiProviderRoutes);
+  app.use('/api/capstone', capstoneRoutes);
 
   // This is a JSON API with no root page of its own — the actual app lives
   // on the frontend dev server (http://localhost:7333). Anyone landing here

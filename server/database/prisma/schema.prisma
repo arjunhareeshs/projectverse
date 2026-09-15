@@ -19,6 +19,19 @@ enum ProjectCategory {
   RESEARCH
 }
 
+enum ProjectMode {
+  NORMAL
+  CAPSTONE
+}
+
+enum CapstoneStatus {
+  CLAIMED
+  SUBMITTED
+  MCQ_READY
+  COMPLETED
+  EXPIRED
+}
+
 model User {
   id                     String                      @id @default(cuid())
   email                  String                      @unique
@@ -90,6 +103,9 @@ model User {
 
   // 10-Field Rubric Evaluation Scores
   studentCycleScores10 StudentCycleScore10[]
+
+  // Capstone System
+  capstoneSelections CapstoneSelection[]
 }
 
 model Organization {
@@ -112,6 +128,9 @@ model Organization {
   cohortMetricSnapshots   CohortMetricSnapshot[]
   interventions           Intervention[]
   metricComputeRuns       MetricComputeRun[]
+
+  // Capstone System
+  capstoneProblemStatements CapstoneProblemStatement[]
 }
 
 model Team {
@@ -205,6 +224,7 @@ model Project {
   domain              String?
   difficultyLevel     String?
   type                String? // "Hardware", "Software"
+  mode                ProjectMode @default(NORMAL)
   approved            Boolean  @default(false)
   repoLink            String?
   problemStatement    String?
@@ -298,6 +318,9 @@ model Project {
   studentCycleScores10 StudentCycleScore10[]
   teamCycleScores10    TeamCycleScore10[]
   projectCycleScores10 ProjectCycleScore10[]
+
+  // Capstone System
+  capstoneSelections   CapstoneSelection[]
 }
 
 model ProblemStatementProposal {
@@ -2078,5 +2101,88 @@ model ProjectCycleScore10 {
 
   @@unique([projectId, cycle])
   @@index([projectId, cycle])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CAPSTONE PROJECT SUBSYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+model CapstoneProblemStatement {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  problemText    String
+  domain         String?
+  difficulty     String?
+  technologies   String[] @default([])
+  isActive       Boolean  @default(true)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  selections     CapstoneSelection[]
+
+  @@index([organizationId, isActive])
+}
+
+model CapstoneSelection {
+  id             String         @id @default(cuid())
+  userId         String
+  projectId      String
+  problemId      String?
+  selectedAt     DateTime       @default(now())
+  dueAt          DateTime
+  submittedAt    DateTime?
+  githubUrl      String?
+  status         CapstoneStatus @default(CLAIMED)
+  githubAnalysis Json?
+  codeAnalysis   Json?
+  mcqScore       Int?
+  totalQuestions Int            @default(15)
+  completedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  problem        CapstoneProblemStatement? @relation(fields: [problemId], references: [id], onDelete: SetNull)
+  questions      CapstoneMcqQuestion[]
+  answers        CapstoneMcqAnswer[]
+
+  @@unique([userId, projectId])
+  @@index([userId, status])
+  @@index([projectId])
+  @@index([dueAt])
+}
+
+model CapstoneMcqQuestion {
+  id             String   @id @default(cuid())
+  selectionId    String
+  question       String
+  options        Json
+  correctOption  Int
+  explanation    String?
+  difficulty     String?
+  topic          String?
+  createdAt      DateTime @default(now())
+
+  selection      CapstoneSelection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+
+  @@index([selectionId])
+}
+
+model CapstoneMcqAnswer {
+  id             String   @id @default(cuid())
+  selectionId    String
+  questionText   String
+  selectedOption Int
+  correctOption  Int
+  isCorrect      Boolean
+  createdAt      DateTime @default(now())
+
+  selection      CapstoneSelection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+
+  @@index([selectionId])
 }
 

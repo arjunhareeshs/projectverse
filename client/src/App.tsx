@@ -47,6 +47,10 @@ import { AdminTopTeams } from './pages/Admin/AdminTopTeams';
 import { AdminTopStudents } from './pages/Admin/AdminTopStudents';
 import { AdminOverlaps } from './pages/Admin/AdminOverlaps';
 import { AdminStandouts } from './pages/Admin/AdminStandouts';
+import { AdminCapstoneProblems } from './pages/Admin/AdminCapstoneProblems';
+
+// Capstone Assessment
+import { CapstoneMcqPage } from './pages/CapstoneMcqPage';
 
 function App() {
   const dispatch = useDispatch();
@@ -120,6 +124,9 @@ function App() {
               <Route path="/profile" element={<Profile />} />
             </Route>
 
+            {/* Dedicated Capstone MCQ Evaluation Assessment */}
+            <Route path="/capstone/:selectionId/mcq" element={<CapstoneMcqPage />} />
+
             {/* Admin Portal Routes — separate layout */}
             <Route element={<AdminLayout />}>
               <Route path="/admin" element={<Navigate to="/admin/top-teams" replace />} />
@@ -127,6 +134,7 @@ function App() {
               <Route path="/admin/top-students" element={<AdminTopStudents />} />
               <Route path="/admin/overlaps" element={<AdminOverlaps />} />
               <Route path="/admin/standouts" element={<AdminStandouts />} />
+              <Route path="/admin/capstone-problems" element={<AdminCapstoneProblems />} />
               <Route path="/admin/upload" element={<AdminUpload />} />
               {/* Legacy redirects */}
               <Route path="/admin/directory" element={<Navigate to="/admin/top-teams" replace />} />

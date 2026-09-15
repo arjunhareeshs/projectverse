@@ -6,7 +6,9 @@ config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   SERVER_PORT: z.coerce.number().default(4000),
-  CLIENT_ORIGIN: z.string().url(),
+  CLIENT_ORIGIN: z.string().url().default('http://localhost:7333'),
+  REDIS_URL: z.string().optional(),
+  RUN_SCHEDULER: z.enum(['true', 'false']).default('false'),
   DATABASE_URL: z.string().min(1),
   JWT_ACCESS_SECRET: z.string().min(20),
   JWT_REFRESH_SECRET: z.string().min(20),

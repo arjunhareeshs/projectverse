@@ -158,6 +158,32 @@ npm run prisma:seed
 npm run seed:catalog
 ⚠️ prisma:seed deletes existing demo data. seed:catalog is idempotent and safe to re-run — it upserts by problem ID and never removes catalog entries a team has already selected.
 
+---
+
+## 🐳 Full Docker Deployment (Frontend, Backend & DB)
+
+To run the entire ProjectVerse stack in Docker (Frontend, Backend, Database, Redis, and Edge Nginx Proxy):
+
+```bash
+# 1. Prepare Docker environment file
+cp docker/.env.example docker/.env
+
+# 2. Build and start all services
+npm run docker:up
+
+# 3. Seed demo accounts & problem statements catalog
+npm run docker:seed
+
+# 4. Access the application
+# Frontend + API gateway: http://localhost:8080
+```
+
+To stop: `npm run docker:down`  
+To view logs: `npm run docker:logs`  
+For detailed documentation on the Docker deployment architecture, see [docker/README.md](docker/README.md).
+
+---
+
 🎨 Design System
 Primary Blue: #2563EB · Secondary Purple: #7C3AED
 Typography: Inter
