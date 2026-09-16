@@ -22,10 +22,10 @@ export const capstoneController = {
   async createProblem(req: Request, res: Response) {
     try {
       const user = (req as any).user;
-      const { title, problemText, domain, difficulty, technologies, isActive } = req.body;
+      const { title, problemText, domain, difficulty, technologies, isActive, questionCount } = req.body;
 
       const created = await capstoneService.createProblem(
-        { title, problemText, domain, difficulty, technologies, isActive },
+        { title, problemText, domain, difficulty, technologies, isActive, questionCount },
         user.id,
         user.organizationId
       );
@@ -40,7 +40,7 @@ export const capstoneController = {
   async updateProblem(req: Request, res: Response) {
     try {
       const id = req.params.id as string;
-      const { title, problemText, domain, difficulty, technologies, isActive } = req.body;
+      const { title, problemText, domain, difficulty, technologies, isActive, questionCount } = req.body;
 
       const updated = await capstoneService.updateProblem(id, {
         title,
@@ -49,6 +49,7 @@ export const capstoneController = {
         difficulty,
         technologies,
         isActive,
+        questionCount,
       });
 
       res.status(StatusCodes.OK).json(updated);
@@ -147,6 +148,24 @@ export const capstoneController = {
     } catch (error: any) {
       const status = error instanceof CapstoneServiceError ? error.statusCode : StatusCodes.BAD_REQUEST;
       res.status(status).json({ message: error.message || 'Failed to submit assessment answers' });
+    }
+  },
+
+  async getCapstoneByProjectId(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      const projectId = req.params.projectId as string;
+      const isAdmin = user?.role === 'ADMIN' || user?.role === 'FACULTY';
+
+      const result = await capstoneService.getCapstoneByProjectId(projectId, user.id, isAdmin);
+      if (!result) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Capstone project not found' });
+      }
+
+      res.status(StatusCodes.OK).json(result);
+    } catch (error: any) {
+      const status = error instanceof CapstoneServiceError ? error.statusCode : StatusCodes.INTERNAL_SERVER_ERROR;
+      res.status(status).json({ message: error.message || 'Failed to retrieve capstone project' });
     }
   },
 

@@ -47,6 +47,7 @@ export const AdminCapstoneProblems: React.FC = () => {
     difficulty: 'Medium',
     technologies: '',
     isActive: true,
+    questionCount: 15,
   });
 
   const fetchData = async () => {
@@ -80,6 +81,7 @@ export const AdminCapstoneProblems: React.FC = () => {
       difficulty: 'Medium',
       technologies: '',
       isActive: true,
+      questionCount: 15,
     });
     setFormError(null);
     setIsModalOpen(true);
@@ -94,6 +96,7 @@ export const AdminCapstoneProblems: React.FC = () => {
       difficulty: p.difficulty || 'Medium',
       technologies: p.technologies?.join(', ') || '',
       isActive: p.isActive,
+      questionCount: p.questionCount ?? 15,
     });
     setFormError(null);
     setIsModalOpen(true);
@@ -122,6 +125,7 @@ export const AdminCapstoneProblems: React.FC = () => {
         difficulty: formData.difficulty.trim(),
         technologies: techList,
         isActive: formData.isActive,
+        questionCount: Number(formData.questionCount) || 15,
       };
 
       if (editingProblem) {
@@ -346,7 +350,13 @@ export const AdminCapstoneProblems: React.FC = () => {
 
                   <td className="py-4 px-4 align-middle">
                     <span className="font-medium text-slate-700 block">{p.domain || 'General'}</span>
-                    <span className="text-[10px] text-slate-500 block">{p.difficulty || 'Medium'}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-slate-500">{p.difficulty || 'Medium'}</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {p.questionCount ?? 15} MCQs
+                      </span>
+                    </div>
                   </td>
 
                   <td className="py-4 px-4 text-center align-middle">
@@ -440,7 +450,7 @@ export const AdminCapstoneProblems: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                     Domain
@@ -449,7 +459,7 @@ export const AdminCapstoneProblems: React.FC = () => {
                     type="text"
                     value={formData.domain}
                     onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-                    placeholder="e.g. Full-Stack Web, AI/ML, Cloud"
+                    placeholder="e.g. Full-Stack Web"
                     className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:border-indigo-500 outline-none"
                   />
                 </div>
@@ -467,6 +477,27 @@ export const AdminCapstoneProblems: React.FC = () => {
                     <option value="Medium">Medium</option>
                     <option value="Hard">Hard</option>
                   </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    No. of Questions
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    required
+                    value={formData.questionCount}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        questionCount: Math.max(1, parseInt(e.target.value) || 1),
+                      })
+                    }
+                    placeholder="15"
+                    className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:border-indigo-500 outline-none"
+                  />
                 </div>
               </div>
 

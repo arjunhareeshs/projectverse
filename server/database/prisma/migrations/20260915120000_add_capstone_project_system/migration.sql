@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS "CapstoneProblemStatement" (
     "difficulty" TEXT,
     "technologies" TEXT[],
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "questionCount" INTEGER NOT NULL DEFAULT 15,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "createdById" TEXT,

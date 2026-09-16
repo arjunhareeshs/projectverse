@@ -9,6 +9,7 @@ export interface CapstoneProblem {
   difficulty?: string | null;
   technologies: string[];
   isActive: boolean;
+  questionCount?: number;
   createdAt: string;
   stats?: {
     selectionsCount: number;
@@ -81,11 +82,42 @@ export interface CreateCapstoneProblemDto {
   difficulty?: string;
   technologies?: string[];
   isActive?: boolean;
+  questionCount?: number;
+}
+
+export interface CapstoneProjectWorkspaceData {
+  isCapstone: boolean;
+  project: {
+    id: string;
+    name: string;
+    problemStatement: string;
+    description?: string;
+    domain?: string | null;
+    difficultyLevel?: string | null;
+    technologies: string[];
+    mode: 'NORMAL' | 'CAPSTONE';
+    status: string;
+    differentiationApproach?: string | null;
+    createdAt: string;
+  };
+  selection: CapstoneSelectionItem;
+  problem: CapstoneProblem;
+  metrics: {
+    daysBalance: number;
+    elapsedDays: number;
+    totalDays: number;
+    isSubmissionWindowOpen: boolean;
+  };
 }
 
 export const capstoneService = {
   getProblems: async (params?: { domain?: string; difficulty?: string }) => {
     const { data } = await api.get<CapstoneProblem[]>('/capstone/problems', { params });
+    return data;
+  },
+
+  getByProjectId: async (projectId: string) => {
+    const { data } = await api.get<CapstoneProjectWorkspaceData>(`/capstone/project/${projectId}`);
     return data;
   },
 
@@ -146,3 +178,4 @@ export const capstoneService = {
     return data;
   },
 };
+

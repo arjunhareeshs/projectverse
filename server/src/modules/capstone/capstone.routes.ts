@@ -18,6 +18,7 @@ router.get('/admin/stats', requireRole('ADMIN'), capstoneController.getAdminStat
 
 // ─── Student Selections & Submissions ────────────────────────────────────────
 router.get('/my', capstoneController.getMySelections);
+router.get('/project/:projectId', capstoneController.getCapstoneByProjectId);
 router.post('/:problemId/claim', capstoneController.claimProblem);
 router.post('/:selectionId/submit-github', capstoneController.submitGithub);
 router.get('/:selectionId/mcq', capstoneController.getMcqQuestions);

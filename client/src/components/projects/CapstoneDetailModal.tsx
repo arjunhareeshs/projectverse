@@ -102,7 +102,7 @@ export const CapstoneDetailModal: React.FC<CapstoneDetailModalProps> = ({
               </span>
               Once claimed, you will have exactly <strong>7 days</strong> to build your solution.
               After 7 days, you will submit your GitHub repository link and take an AI-generated
-              <strong> 15-question technical MCQ assessment</strong> tailored to your actual codebase.
+              <strong> {problem.questionCount || 15}-question technical MCQ assessment</strong> tailored to your actual codebase.
             </div>
           </div>
 

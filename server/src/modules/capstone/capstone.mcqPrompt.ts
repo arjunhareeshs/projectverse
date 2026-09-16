@@ -72,7 +72,11 @@ JSON format:
   ]
 }`;
 
-export function buildMcqUserPrompt(problemStatement: string, repoSummary: CapstoneRepoSummary): string {
+export function buildMcqUserPrompt(
+  problemStatement: string,
+  repoSummary: CapstoneRepoSummary,
+  targetCount = 15
+): string {
   const inspectedFilesText = repoSummary.inspectedFiles
     .map(
       (f) => `--- File: ${f.path} ---\n${f.snippet.slice(0, 1500)}`
@@ -97,16 +101,17 @@ Submitted Repository Summary:
 Source Code Excerpts from Submitted Repository:
 ${inspectedFilesText || 'No source files directly inspected.'}
 
-Generate exactly 15 deep technical questions testing the student's mastery and authentic authorship of this specific codebase.`;
+Generate exactly ${targetCount} deep technical questions testing the student's mastery and authentic authorship of this specific codebase.`;
 }
 
 /**
  * Fallback generator in case the LLM provider is degraded or unconfigured.
- * Generates 15 authentic, framework-aware, 6-option MCQs.
+ * Generates authentic, framework-aware, 6-option MCQs according to targetCount.
  */
 export function generateFallbackMcqs(
   problemStatement: string,
-  repoSummary: CapstoneRepoSummary
+  repoSummary: CapstoneRepoSummary,
+  targetCount = 15
 ): GeneratedMcqQuestion[] {
   const fw = repoSummary.framework || 'Web Application';
   const db = repoSummary.databaseUsage || 'Data Storage';
@@ -327,8 +332,8 @@ export function generateFallbackMcqs(
   ];
 
   // Distribute correctOption randomly between 0 and 5
-  return templates.map((t, idx) => {
-    const targetCorrect = idx % 6; // guarantees uniform 0-5 distribution across 15 questions
+  const formatted = templates.map((t, idx) => {
+    const targetCorrect = idx % 6; // guarantees uniform 0-5 distribution
     const options = [...t.options];
     if (targetCorrect !== 0) {
       // swap index 0 with targetCorrect
@@ -345,4 +350,23 @@ export function generateFallbackMcqs(
       explanation: t.explanation,
     };
   });
+
+  const count = Math.max(1, targetCount);
+  if (formatted.length >= count) {
+    return formatted.slice(0, count);
+  }
+
+  // If targetCount is greater than the base 15 templates, repeat with slight variations
+  const result: GeneratedMcqQuestion[] = [...formatted];
+  let cycle = 1;
+  while (result.length < count) {
+    const base = formatted[(result.length - formatted.length) % formatted.length];
+    result.push({
+      ...base,
+      question: `[Section ${cycle + 1}] ${base.question}`,
+      correctOption: (base.correctOption + cycle) % 6,
+    });
+    cycle++;
+  }
+  return result;
 }

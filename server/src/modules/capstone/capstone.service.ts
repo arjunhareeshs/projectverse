@@ -90,6 +90,7 @@ export const capstoneService = {
       difficulty?: string;
       technologies?: string[];
       isActive?: boolean;
+      questionCount?: number;
     },
     adminUserId: string,
     organizationId?: string
@@ -126,6 +127,7 @@ export const capstoneService = {
         difficulty: data.difficulty || 'Medium',
         technologies: data.technologies || [],
         isActive: data.isActive ?? true,
+        questionCount: data.questionCount !== undefined && data.questionCount > 0 ? Number(data.questionCount) : 15,
         createdById: adminUserId,
       },
     });
@@ -143,6 +145,7 @@ export const capstoneService = {
       difficulty?: string;
       technologies?: string[];
       isActive?: boolean;
+      questionCount?: number;
     }
   ) {
     const existing = await prisma.capstoneProblemStatement.findUnique({ where: { id } });
@@ -159,6 +162,9 @@ export const capstoneService = {
         ...(data.difficulty !== undefined ? { difficulty: data.difficulty } : {}),
         ...(data.technologies !== undefined ? { technologies: data.technologies } : {}),
         ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        ...(data.questionCount !== undefined && data.questionCount > 0
+          ? { questionCount: Number(data.questionCount) }
+          : {}),
       },
     });
   },
@@ -253,6 +259,7 @@ export const capstoneService = {
           selectedAt,
           dueAt,
           status: 'CLAIMED',
+          totalQuestions: problem.questionCount || 15,
         },
       });
 
@@ -285,8 +292,111 @@ export const capstoneService = {
   },
 
   /**
+   * Retrieves capstone project details and metrics for a specific project.
+   * Includes problem statement, days balance, submission info, and MCQ status.
+   */
+  async getCapstoneByProjectId(projectId: string, userId: string, isAdmin = false) {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        capstoneSelections: {
+          include: {
+            problem: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!project) {
+      throw new CapstoneServiceError('Project not found', StatusCodes.NOT_FOUND);
+    }
+
+    if (project.mode !== 'CAPSTONE') {
+      return null;
+    }
+
+    let selection = project.capstoneSelections.find((s) => s.userId === userId);
+    if (!selection && isAdmin && project.capstoneSelections.length > 0) {
+      selection = project.capstoneSelections[0];
+    }
+
+    if (!selection) {
+      const member = await prisma.projectMember.findFirst({
+        where: { projectId, userId },
+      });
+      if (member && project.capstoneSelections.length > 0) {
+        selection = project.capstoneSelections[0];
+      }
+    }
+
+    if (!selection) {
+      // If user claimed it or project was just created as capstone
+      if (project.capstoneSelections.length > 0) {
+        selection = project.capstoneSelections[0];
+      } else {
+        throw new CapstoneServiceError('Capstone selection not found for this project', StatusCodes.NOT_FOUND);
+      }
+    }
+
+    const now = new Date();
+    const dueAt = new Date(selection.dueAt);
+    const selectedAt = new Date(selection.selectedAt);
+    const diffMs = dueAt.getTime() - now.getTime();
+    const daysBalance = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    const totalDays = 7;
+    const elapsedDays = Math.min(totalDays, Math.max(0, Math.floor((now.getTime() - selectedAt.getTime()) / (1000 * 60 * 60 * 24))));
+    const isSubmissionWindowOpen = now.getTime() >= dueAt.getTime();
+
+    return {
+      isCapstone: true,
+      project: {
+        id: project.id,
+        name: project.name,
+        problemStatement: project.problemStatement,
+        description: project.description,
+        domain: project.domain,
+        difficultyLevel: project.difficultyLevel,
+        technologies: project.technologies,
+        mode: project.mode,
+        status: project.status,
+        differentiationApproach: project.differentiationApproach,
+        createdAt: project.createdAt,
+      },
+      selection: {
+        id: selection.id,
+        userId: selection.userId,
+        status: selection.status,
+        selectedAt: selection.selectedAt,
+        dueAt: selection.dueAt,
+        submittedAt: selection.submittedAt,
+        githubUrl: selection.githubUrl,
+        mcqScore: selection.mcqScore,
+        totalQuestions: selection.totalQuestions,
+        completedAt: selection.completedAt,
+        githubAnalysis: selection.githubAnalysis,
+      },
+      problem: selection.problem || {
+        id: '',
+        title: project.name,
+        problemText: project.problemStatement || project.description,
+        domain: project.domain,
+        difficulty: project.difficultyLevel,
+        technologies: project.technologies,
+        questionCount: selection.totalQuestions || 15,
+      },
+      metrics: {
+        daysBalance,
+        elapsedDays,
+        totalDays,
+        isSubmissionWindowOpen,
+      },
+    };
+  },
+
+  /**
    * Student submits their GitHub URL after 7 days.
-   * Runs deep code analysis and generates 15 MCQs with 6 options.
+   * Runs deep code analysis and generates configured MCQs with 6 options.
    */
   async submitGithub(selectionId: string, userId: string, githubUrl: string, isDevBypass = false) {
     const selection = await prisma.capstoneSelection.findUnique({
@@ -317,18 +427,21 @@ export const capstoneService = {
       );
     }
 
+    // Target question count configured by admin (fallback to 15)
+    const targetCount = selection.totalQuestions || selection.problem?.questionCount || 15;
+
     // 1. Run deep code analysis from GitHub
-    logger.info('Starting deep code analysis for capstone submission', { selectionId, githubUrl });
+    logger.info('Starting deep code analysis for capstone submission', { selectionId, githubUrl, targetCount });
     const repoSummary = await analyzeCapstoneRepository(githubUrl);
 
-    // 2. Generate exactly 15 MCQs (6 options each)
+    // 2. Generate exactly targetCount MCQs (6 options each)
     let generatedQuestions: GeneratedMcqQuestion[] = [];
     const problemText = selection.problem?.problemText || selection.project.problemStatement || selection.project.name;
 
     try {
       const messages: ChatMessage[] = [
         { role: 'system', content: MCQ_SYSTEM_PROMPT },
-        { role: 'user', content: buildMcqUserPrompt(problemText, repoSummary) },
+        { role: 'user', content: buildMcqUserPrompt(problemText, repoSummary, targetCount) },
       ];
 
       const llmResult = await chatJSON<{ questions: GeneratedMcqQuestion[] }>(
@@ -337,9 +450,9 @@ export const capstoneService = {
         { feature: 'capstone_mcq_generation', maxTokens: 4000, userId }
       );
 
-      if (llmResult?.questions && Array.isArray(llmResult.questions) && llmResult.questions.length >= 10) {
+      if (llmResult?.questions && Array.isArray(llmResult.questions) && llmResult.questions.length >= Math.min(5, targetCount)) {
         // Sanitize options count to exactly 6
-        generatedQuestions = llmResult.questions.slice(0, 15).map((q, idx) => {
+        generatedQuestions = llmResult.questions.slice(0, targetCount).map((q, idx) => {
           let opts = Array.isArray(q.options) ? q.options.filter(Boolean) : [];
           while (opts.length < 6) {
             opts.push(`Alternative technical implementation approach ${opts.length + 1}`);
@@ -365,9 +478,9 @@ export const capstoneService = {
     }
 
     // If LLM returned empty or failed, use high-fidelity fallback generator
-    if (generatedQuestions.length < 15) {
-      logger.info('Using framework-aware deterministic MCQ generator for capstone', { selectionId });
-      generatedQuestions = generateFallbackMcqs(problemText, repoSummary);
+    if (generatedQuestions.length < targetCount) {
+      logger.info('Using framework-aware deterministic MCQ generator for capstone', { selectionId, targetCount });
+      generatedQuestions = generateFallbackMcqs(problemText, repoSummary, targetCount);
     }
 
     // Persist questions and update selection
@@ -395,6 +508,7 @@ export const capstoneService = {
           githubUrl,
           submittedAt: new Date(),
           status: 'MCQ_READY',
+          totalQuestions: generatedQuestions.length,
           githubAnalysis: {
             owner: repoSummary.owner,
             repo: repoSummary.repo,

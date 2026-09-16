@@ -17,6 +17,13 @@ async function main() {
   `;
   console.log('Project columns:', projectCols);
 
+  const problemCols: any[] = await prisma.$queryRaw`
+    SELECT column_name, data_type, column_default
+    FROM information_schema.columns 
+    WHERE table_name = 'CapstoneProblemStatement';
+  `;
+  console.log('CapstoneProblemStatement columns:', problemCols);
+
   const enums: any[] = await prisma.$queryRaw`
     SELECT t.typname, e.enumlabel
     FROM pg_type t

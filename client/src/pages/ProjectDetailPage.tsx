@@ -17,6 +17,8 @@ import {
   ExecutionPlanTab,
   WorkspaceTabId,
 } from '../components/projects/workspace';
+import { CapstoneWorkspace } from '../components/projects/CapstoneWorkspace';
+import { capstoneService, CapstoneProjectWorkspaceData } from '../services/capstone.service';
 
 export const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +32,7 @@ export const ProjectDetailPage: React.FC = () => {
       ? initialTabParam
       : 'log'
   );
+  const [capstoneData, setCapstoneData] = useState<CapstoneProjectWorkspaceData | null>(null);
   const [logState, setLogState] = useState<ProjectLogState | null>(null);
   const [, setUnresolvedFlagsCount] = useState(0);
   const [showWizard, setShowWizard] = useState(false);
@@ -53,15 +56,36 @@ export const ProjectDetailPage: React.FC = () => {
     setSearchParams({ tab }, { replace: true });
   };
 
-  const fetchLogState = async () => {
+  const fetchProjectData = async () => {
     if (!projectId) {
       setError('Invalid project ID specified in URL.');
       return;
     }
     setLoading(true);
     setError(null);
+
+    // 1. Check if this is a Capstone project
+    try {
+      const capData = await capstoneService.getByProjectId(projectId);
+      if (capData && capData.isCapstone) {
+        setCapstoneData(capData);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Not a capstone project or not found under capstone endpoint, fallback to standard lifecycle
+    }
+
+    // 2. Load standard lifecycle project log state
     try {
       const state = await lifecycleService.getLogState(projectId);
+      if ((state as any)?.isCapstone) {
+        // In case getLogState caught a capstone mode
+        const capData = await capstoneService.getByProjectId(projectId);
+        setCapstoneData(capData);
+        setLoading(false);
+        return;
+      }
       setLogState(state);
       if (state && state.flags) {
         const count = state.flags.filter((f) => !f.resolved).length;
@@ -76,7 +100,7 @@ export const ProjectDetailPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchLogState();
+    fetchProjectData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -97,8 +121,13 @@ export const ProjectDetailPage: React.FC = () => {
   const ws = useProjectWorkspace({
     projectId,
     logState,
-    onSaved: fetchLogState,
+    onSaved: fetchProjectData,
   });
+
+  // Dedicated Capstone Workspace rendering
+  if (capstoneData) {
+    return <CapstoneWorkspace data={capstoneData} onRefresh={fetchProjectData} />;
+  }
 
   // Guard for missing project ID or load error
   if (!projectId || error) {

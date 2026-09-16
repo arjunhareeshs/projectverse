@@ -105,6 +105,14 @@ export class LifecycleController {
       }
       const state = await projectLogService.getState(projectId);
       if (!state) {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { mode: true },
+        });
+        if (project?.mode === 'CAPSTONE') {
+          res.status(StatusCodes.OK).json({ isCapstone: true, projectId });
+          return;
+        }
         res.status(StatusCodes.NOT_FOUND).json({ message: 'Project log state not found' });
         return;
       }

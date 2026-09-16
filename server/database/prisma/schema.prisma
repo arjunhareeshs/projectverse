@@ -2116,6 +2116,7 @@ model CapstoneProblemStatement {
   difficulty     String?
   technologies   String[] @default([])
   isActive       Boolean  @default(true)
+  questionCount  Int      @default(15)
   createdById    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

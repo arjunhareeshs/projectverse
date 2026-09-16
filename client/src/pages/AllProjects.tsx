@@ -432,7 +432,9 @@ export const AllProjects: React.FC = () => {
                         ) : isCapstone ? (
                           <div className="text-center text-xs font-medium text-slate-500">
                             {cap?.status === 'MCQ_READY' ? (
-                              <span className="text-blue-600 font-semibold">15 MCQs Ready</span>
+                              <span className="text-blue-600 font-semibold">
+                                {cap?.totalQuestions || 15} MCQs Ready
+                              </span>
                             ) : (
                               <span>7-Day Build Cycle</span>
                             )}
@@ -519,7 +521,7 @@ export const AllProjects: React.FC = () => {
                             ) : cap.status === 'COMPLETED' ? (
                               <div className="flex items-center gap-1.5">
                                 <span className="px-2.5 py-1 rounded-btn bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">
-                                  Score: {cap.mcqScore ?? 0}/15
+                                  Score: {cap.mcqScore ?? 0}/{cap.totalQuestions || 15}
                                 </span>
                                 <button
                                   onClick={(e) => {
