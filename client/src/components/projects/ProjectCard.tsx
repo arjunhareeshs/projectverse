@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, ArrowRight, Cpu, Layers, HardDrive, Shield } from 'lucide-react';
+import { Activity, ArrowRight, Cpu, HardDrive, Shield } from 'lucide-react';
 
 export interface ProjectCardData {
   id: string;

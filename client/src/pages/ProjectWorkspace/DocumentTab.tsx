@@ -63,7 +63,6 @@ export const DocumentTab: React.FC<DocumentTabProps> = ({
   useEffect(() => {
     setWasFallback(!!initialFallback);
     fetchDoc(selectedVersion);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, selectedVersion]);
 
   const handleVersionChange = (v: number) => {

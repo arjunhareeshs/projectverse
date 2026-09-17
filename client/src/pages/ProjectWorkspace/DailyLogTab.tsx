@@ -85,7 +85,6 @@ export const DailyLogTab: React.FC<DailyLogTabProps> = ({ projectId }) => {
 
   useEffect(() => {
     fetchLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const handleAddEvidenceUrl = () => {

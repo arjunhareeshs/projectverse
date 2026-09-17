@@ -4,11 +4,9 @@ import {
   Sparkles,
   CheckCircle2,
   AlertCircle,
-  HelpCircle,
   Loader2,
   ArrowRight,
   Trophy,
-  Layers,
   ChevronLeft,
 } from 'lucide-react';
 import {

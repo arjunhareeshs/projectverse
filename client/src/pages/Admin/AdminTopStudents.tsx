@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, Github, Users, Award, ChevronDown, ChevronUp } from 'lucide-react';
+import { GraduationCap, Github } from 'lucide-react';
 import { adminService } from '../../services/admin.service';
 import { ScoreRing } from './components/ScoreRing';
 import { CategoryBars } from './components/CategoryBars';

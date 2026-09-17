@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Star, CheckCircle, AlertCircle, FileText, Send } from 'lucide-react';
+import { Star, Send } from 'lucide-react';
 import { getAuthToken } from '../../utils/token';
 
 interface ProjectReviewerPanelProps {

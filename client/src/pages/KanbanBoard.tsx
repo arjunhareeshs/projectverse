@@ -6,14 +6,12 @@ import {
   ChevronDown,
   Filter,
   User,
-  Tag,
   Loader2,
   Circle,
   CheckCircle2,
   ArrowRight,
   Eye,
   X,
-  Calendar,
   AlertCircle
 } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -156,7 +154,7 @@ export const KanbanBoard: React.FC = () => {
     }
     setCreating(true);
     try {
-      const newTask = await taskService.createTask({
+      await taskService.createTask({
         projectId: selectedProjectId,
         title: taskTitle,
         description: taskDesc || undefined,

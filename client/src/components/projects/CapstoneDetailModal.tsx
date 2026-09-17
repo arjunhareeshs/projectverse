@@ -3,12 +3,9 @@ import {
   X,
   Clock,
   Code2,
-  Layers,
   Sparkles,
   AlertCircle,
-  CheckCircle2,
   Loader2,
-  ShieldAlert,
 } from 'lucide-react';
 import { capstoneService, CapstoneProblem } from '../../services/capstone.service';
 

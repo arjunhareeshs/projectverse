@@ -10,7 +10,6 @@ import {
   Crown,
   X,
   Handshake,
-  FolderKanban,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { teamService } from '../services/team.service';

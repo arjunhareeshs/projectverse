@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sparkles, Shield, Key, Sliders, ExternalLink } from 'lucide-react';
+import { Sparkles, Shield, Key } from 'lucide-react';
 import { AISettingsModal } from '../components/ai/AISettingsModal';
 
 export const SettingsPage: React.FC = () => {

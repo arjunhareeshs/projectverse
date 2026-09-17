@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, Github, AlertCircle, ChevronDown, ChevronUp, Users, FolderGit2 } from 'lucide-react';
+import { Trophy, Github, AlertCircle, ChevronDown, ChevronUp, Users } from 'lucide-react';
 import { adminService } from '../../services/admin.service';
 import { ScoreRing } from './components/ScoreRing';
 import { CategoryBars } from './components/CategoryBars';

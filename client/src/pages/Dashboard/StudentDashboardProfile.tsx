@@ -1,16 +1,12 @@
 import React from 'react';
 import { useAppSelector } from '../../app/hooks';
 import {
-  Award,
   BookOpen,
   GraduationCap,
   Star,
   Shield,
-  HelpCircle,
   Layers,
-  CheckCircle,
 } from 'lucide-react';
-import { cn } from '../../utils/cn';
 import { GitHubAnalyticsPanel } from '../../components/github/GitHubAnalyticsPanel';
 
 export const StudentDashboardProfile: React.FC = () => {

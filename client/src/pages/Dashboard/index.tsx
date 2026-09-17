@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Sparkles,
   CheckCircle2,
   Folder,
   Clock,
@@ -12,9 +11,7 @@ import {
   Activity,
   ArrowRight,
   FileText,
-  CheckSquare,
   ChevronDown,
-  Plus,
   TrendingUp,
 } from 'lucide-react';
 import {
@@ -31,11 +28,7 @@ import {
   Cell,
 } from 'recharts';
 import { dashboardService } from '../../services/dashboard.service';
-import { useAppSelector } from '../../app/hooks';
-
 export const Dashboard: React.FC = () => {
-  const { user } = useAppSelector((state) => state.auth);
-  
   // States for backend data — initialized empty so we never show hardcoded values.
   const [streakData, setStreakData] = useState<any>(null);
   const [kpis, setKpis] = useState<any>({
@@ -51,8 +44,6 @@ export const Dashboard: React.FC = () => {
   const [hackathons, setHackathons] = useState<any[]>([]);
   const [contests, setContests] = useState<any[]>([]);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
-
-  const [loading, setLoading] = useState(true);
 
   // Fetch all data from dashboard APIs
   const fetchDashboardData = async () => {
@@ -87,8 +78,6 @@ export const Dashboard: React.FC = () => {
       setRecentActivities(resRecent || []);
     } catch (err) {
       console.error('Error loading dashboard datasets:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -148,7 +137,7 @@ export const Dashboard: React.FC = () => {
 
     type MonthLabel = { label: string; colIndex: number };
     const monthLabels: MonthLabel[] = [];
-    let seenMonths = new Set<string>();
+    const seenMonths = new Set<string>();
 
     weekCols.forEach((week, colIndex) => {
       const validCells = week.filter(c => c.isValid);
@@ -291,9 +280,6 @@ export const Dashboard: React.FC = () => {
     { name: 'On Hold', value: projectActivity?.onHold ?? 0, color: '#F59E0B' },
     { name: 'To Do', value: projectActivity?.todo ?? 0, color: '#8B5CF6' },
   ];
-
-  const safeKpi = (key: 'tasksCompleted' | 'projectsActive' | 'hoursFocused' | 'pendingTasks' | 'teamMembers') =>
-    kpis?.[key] ?? { value: 0, change: '0%', trendUp: true, sparkline: [0, 0, 0, 0, 0, 0, 0] };
 
   const containerVariants = {
     hidden: { opacity: 0, y: 15 },

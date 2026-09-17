@@ -8,7 +8,6 @@ import {
   ArrowRight,
   AlertTriangle,
   CheckCircle2,
-  RefreshCw,
   Bookmark,
   FileText,
   Lightbulb,

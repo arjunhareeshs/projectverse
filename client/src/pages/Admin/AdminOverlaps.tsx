@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GitCompareArrows, CheckCircle2, XCircle, ShieldAlert, AlertTriangle, Info, RefreshCw, Loader2, Zap } from 'lucide-react';
+import { GitCompareArrows, CheckCircle2, XCircle, AlertTriangle, RefreshCw, Loader2, Zap } from 'lucide-react';
 import { adminService } from '../../services/admin.service';
 import { SeverityBadge } from './components/SeverityBadge';
 

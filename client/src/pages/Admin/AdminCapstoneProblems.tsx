@@ -6,9 +6,6 @@ import {
   Edit2,
   Trash2,
   CheckCircle2,
-  XCircle,
-  Clock,
-  Code2,
   Users,
   Trophy,
   Loader2,
@@ -197,6 +194,13 @@ export const AdminCapstoneProblems: React.FC = () => {
           Add Problem Statement
         </button>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+          <span>{error}</span>
+        </div>
+      )}
 
       {/* Top Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

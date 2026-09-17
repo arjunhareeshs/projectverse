@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, AlertCircle, Info, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Info, ShieldAlert } from 'lucide-react';
 
 interface SeverityBadgeProps {
   severity: 'DISTINCT' | 'PARTIAL_OVERLAP' | 'SUBSTANTIAL_OVERLAP' | 'NEAR_DUPLICATE' | string;

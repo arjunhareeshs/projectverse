@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Search, UserPlus, Check, X, User } from 'lucide-react';
+import { Sparkles, Search, Check, X, User } from 'lucide-react';
 import { teamService } from '../../services/team.service';
 import { lifecycleService } from '../../services/lifecycle.service';
 

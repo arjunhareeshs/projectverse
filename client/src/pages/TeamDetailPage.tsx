@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import {
   Users, Mail, Crown, Activity, CheckCircle, Clock,
   AlertTriangle, BarChart2, MessageSquare,
-  RefreshCw, ArrowLeft,
+  RefreshCw,
   Send, Plus, X, UserPlus, FolderKanban, TrendingUp,
   Settings, ClipboardList, Layers, CircleDot, LogOut,
   Handshake, Search as SearchIcon, ShieldCheck, Github, Pencil,
@@ -537,7 +537,12 @@ export const TeamDetailPage: React.FC = () => {
                 </button>
               </>
             ) : isMember ? (
-              null
+              <button
+                onClick={handleLeaveTeam}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors font-semibold cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Leave Team
+              </button>
             ) : (
               <button
                 onClick={handleRequestJoin}

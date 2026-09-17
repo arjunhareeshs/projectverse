@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
-import { useNavigate, Link } from 'react-router-dom';
-import { ArrowRight, Bot, LayoutDashboard, BarChart3, Zap, Shield, Sparkles, Activity, Layers, Trophy, Code2, ExternalLink, Calendar, Tag } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowRight, Bot, LayoutDashboard, BarChart3, Sparkles, Trophy, Code2, ExternalLink, Calendar, Tag } from 'lucide-react';
 import { useAppSelector } from '../app/hooks';
 import { landingService, PublicHackathon, PublicLeetCodeContest } from '../services/landing.service';
 

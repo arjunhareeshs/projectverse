@@ -15,7 +15,6 @@ import {
   Award,
   Code2,
   CheckCircle,
-  AlertTriangle,
 } from 'lucide-react';
 import {
   CapstoneProjectWorkspaceData,

@@ -3,14 +3,12 @@ import {
   AlertCircle, 
   CheckCircle2, 
   Mail, 
-  Terminal, 
   Clipboard, 
   Check, 
   Calendar, 
   Users, 
   BarChart3, 
-  Clock, 
-  Info 
+  Clock 
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 

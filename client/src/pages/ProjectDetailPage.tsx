@@ -101,7 +101,6 @@ export const ProjectDetailPage: React.FC = () => {
 
   useEffect(() => {
     fetchProjectData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const teamId = logState?.team?.teamId || user?.teamId;
@@ -150,7 +149,7 @@ export const ProjectDetailPage: React.FC = () => {
             All Projects
           </button>
           <button
-            onClick={fetchLogState}
+            onClick={fetchProjectData}
             className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-btn shadow-sm transition interactive-tap"
           >
             <RotateCcw className="w-3.5 h-3.5" /> Retry
@@ -214,7 +213,7 @@ export const ProjectDetailPage: React.FC = () => {
           onComplete={(fallback) => {
             setShowWizard(false);
             setJustGeneratedFallback(!!fallback);
-            fetchLogState();
+            fetchProjectData();
             navigate(`/projects/${projectId}/execution-doc`);
           }}
           onClose={() => setShowWizard(false)}

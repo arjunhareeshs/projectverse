@@ -7,7 +7,6 @@ type EntryMode = 'manual' | 'bulk';
 
 const DOMAINS = ['AI', 'Web', 'Mobile', 'IoT', 'Data Science', 'Cybersecurity', 'Cloud', 'Blockchain'];
 const STATUSES = ['planned', 'in-progress', 'completed', 'at-risk'];
-const YEARS = ['I', 'II', 'III', 'IV'];
 
 interface Toast {
   type: 'success' | 'error';

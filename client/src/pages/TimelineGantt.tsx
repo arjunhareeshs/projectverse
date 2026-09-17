@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
-  Plus, X, ChevronLeft, ChevronRight, AlertCircle, Trash2,
-  Calendar, User, Tag, Clock, TrendingUp,
+  Plus, X, AlertCircle, Trash2,
+  Calendar, Clock, TrendingUp,
 } from 'lucide-react';
 import { ganttService, GanttTask } from '../services/gantt.service';
 import { cn } from '../utils/cn';

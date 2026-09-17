@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   CheckCheck,
@@ -95,7 +95,7 @@ export const NotificationsDropdown: React.FC = () => {
     setRespondingId(id);
     try {
       await respondToRequest(id, action);
-    } catch (err) {
+    } catch {
       alert('Failed to respond to request.');
     } finally {
       setRespondingId(null);

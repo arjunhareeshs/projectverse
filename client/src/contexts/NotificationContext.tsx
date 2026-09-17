@@ -75,7 +75,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
 
     newSocket.on('connect', () => {
-      console.log('Connected to notification service');
+      console.info('Connected to notification service');
     });
 
     newSocket.on('notification', (newNotification: NotificationItem) => {

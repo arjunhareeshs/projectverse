@@ -10,9 +10,7 @@ import {
   ChevronRight,
   Filter,
   Clock,
-  Code2,
   Sparkles,
-  Layers,
   ArrowRight,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
