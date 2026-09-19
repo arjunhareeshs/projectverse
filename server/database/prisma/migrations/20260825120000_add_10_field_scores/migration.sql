@@ -1,5 +1,10 @@
--- CreateEnum
-CREATE TYPE "AIProvider" AS ENUM ('GROQ', 'NVIDIA');
+-- CreateEnum if it was not created by the preceding AI provider migration.
+DO $$
+BEGIN
+  CREATE TYPE "AIProvider" AS ENUM ('GROQ', 'NVIDIA');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- CreateTable
 CREATE TABLE IF NOT EXISTS "UserAIProvider" (

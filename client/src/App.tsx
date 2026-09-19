@@ -83,6 +83,7 @@ function App() {
 
   return (
     <BrowserRouter
+      basename="/verse"
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true,

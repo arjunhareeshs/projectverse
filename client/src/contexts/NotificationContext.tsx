@@ -72,6 +72,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const newSocket = io(socketUrl, {
       auth: { token },
       withCredentials: true,
+      path: import.meta.env.PROD ? '/verse/socket.io' : '/socket.io',
     });
 
     newSocket.on('connect', () => {

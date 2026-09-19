@@ -1,3 +1,89 @@
+-- EvaluationReport was present in the Prisma schema but missing from the
+-- migration history. Create the table before metrics reference it.
+CREATE TABLE IF NOT EXISTS "EvaluationReport" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "cycle" INTEGER NOT NULL,
+    "periodStart" TIMESTAMP(3) NOT NULL,
+    "periodEnd" TIMESTAMP(3) NOT NULL,
+    "overallScore" INTEGER,
+    "plagiarismRisk" TEXT,
+    "isFallback" BOOLEAN NOT NULL DEFAULT false,
+    "statusNote" TEXT,
+    "mentorFeedback" TEXT,
+    "content" JSONB,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "EvaluationReport_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "EvaluationReport_projectId_cycle_key"
+ON "EvaluationReport"("projectId", "cycle");
+
+CREATE INDEX IF NOT EXISTS "EvaluationReport_overallScore_idx"
+ON "EvaluationReport"("overallScore");
+
+DO $$
+BEGIN
+    ALTER TABLE "EvaluationReport"
+    ADD CONSTRAINT "EvaluationReport_projectId_fkey"
+    FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ProjectLog and ProjectLogFlag were present in the Prisma schema but missing
+-- from the migration history. Metrics references ProjectLogFlag below.
+CREATE TABLE IF NOT EXISTS "ProjectLog" (
+    "id" TEXT NOT NULL,
+    "projectId" TEXT NOT NULL,
+    "version" INTEGER NOT NULL DEFAULT 0,
+    "state" JSONB NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ProjectLog_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "ProjectLog_projectId_key"
+ON "ProjectLog"("projectId");
+
+DO $$
+BEGIN
+    ALTER TABLE "ProjectLog"
+    ADD CONSTRAINT "ProjectLog_projectId_fkey"
+    FOREIGN KEY ("projectId") REFERENCES "Project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS "ProjectLogFlag" (
+    "id" TEXT NOT NULL,
+    "logId" TEXT NOT NULL,
+    "flagId" TEXT NOT NULL,
+    "at" TIMESTAMP(3) NOT NULL,
+    "type" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "resolved" BOOLEAN NOT NULL DEFAULT false,
+
+    CONSTRAINT "ProjectLogFlag_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "ProjectLogFlag_logId_flagId_key"
+ON "ProjectLogFlag"("logId", "flagId");
+
+CREATE INDEX IF NOT EXISTS "ProjectLogFlag_logId_idx"
+ON "ProjectLogFlag"("logId");
+
+DO $$
+BEGIN
+    ALTER TABLE "ProjectLogFlag"
+    ADD CONSTRAINT "ProjectLogFlag_logId_fkey"
+    FOREIGN KEY ("logId") REFERENCES "ProjectLog"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
 -- CreateEnum
 CREATE TYPE "MetricType" AS ENUM ('NORTH_STAR', 'LEADING', 'LAGGING');
 
