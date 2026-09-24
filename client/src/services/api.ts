@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { BASE_PATH } from '../config/basePath';
 
 export const resolveOrigin = (type: 'api' | 'backend' | 'socket' = 'api') => {
   if (type === 'api' && import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
@@ -7,7 +8,8 @@ export const resolveOrigin = (type: 'api' | 'backend' | 'socket' = 'api') => {
 
   // In production (e.g. deployed container behind reverse proxy), use same-origin
   if (import.meta.env.PROD) {
-    if (type === 'api') return '/api';
+    if (type === 'api') return `${BASE_PATH}/api`;
+    if (type === 'backend') return BASE_PATH;
     return typeof window !== 'undefined' && window.location.origin ? window.location.origin : '';
   }
 
@@ -52,8 +54,9 @@ export function add401Interceptor(instance: AxiosInstance) {
         if (!isAuthEndpoint) {
           const hadToken = !!getAuthToken();
           clearAuthSession();
-          if (hadToken && !window.location.pathname.includes('/login') && window.location.pathname !== '/') {
-            window.location.href = '/login';
+          const path = window.location.pathname;
+          if (hadToken && !path.includes(`${BASE_PATH}/login`) && path !== `${BASE_PATH}/` && path !== (BASE_PATH || '/')) {
+            window.location.href = `${BASE_PATH}/login`;
           }
         }
       }

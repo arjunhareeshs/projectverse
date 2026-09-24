@@ -26,6 +26,11 @@ export const adminService = {
     return data;
   },
 
+  updateStudentRegNo: async (userId: string, regNo: string) => {
+    const { data } = await api.patch(`/admin/students/${userId}/regno`, { regNo });
+    return data;
+  },
+
   bulkUploadStudents: async (file: File) => {
     const form = new FormData();
     form.append('file', file);

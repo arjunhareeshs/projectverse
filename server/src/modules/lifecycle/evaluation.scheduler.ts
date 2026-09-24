@@ -2,10 +2,11 @@ import cron from 'node-cron';
 import { prisma } from '../../shared/database';
 import { logger } from '../../shared/logger';
 import { evaluationEngine } from './engines/evaluation.engine';
+import { withLock } from '../../shared/redis';
 
 export function startEvaluationScheduler() {
   // Run daily at 01:00 AM
-  cron.schedule('0 1 * * *', async () => {
+  cron.schedule('0 1 * * *', () => withLock('cron:evaluation', 60 * 60_000, async () => {
     logger.info('[EvaluationScheduler] Running daily 15-day project evaluation check...');
     try {
       const activeProjects = await prisma.project.findMany({
@@ -44,5 +45,5 @@ export function startEvaluationScheduler() {
     } catch (err: any) {
       logger.error('[EvaluationScheduler] Error running daily evaluation check:', { message: err.message });
     }
-  });
+  }));
 }

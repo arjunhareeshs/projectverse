@@ -7,6 +7,7 @@ const prisma = new PrismaClient();
 
 const EXCEL_PATH = path.resolve(__dirname, '../../../data/Final Groups and Project Registration.xlsx');
 const DEFAULT_PASSWORD = 'password123';
+const ADMIN_PASSWORD = 'adminverse123';
 const TEAM_COLORS = [
   '#7C3AED', '#2F6FED', '#1E2A45', '#F0653B', '#F5B400', '#E94F94',
   '#059669', '#DC2626', '#6366F1', '#8B5CF6', '#14B8A6', '#F97316',
@@ -86,11 +87,12 @@ async function main() {
 
   // ── 2. Create Admin user ────────────────────────────────────────
   console.log('\n👤 Creating Admin user...');
+  const adminPasswordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@projectverse.com',
       fullName: 'Admin User',
-      passwordHash,
+      passwordHash: adminPasswordHash,
       role: RoleType.ADMIN,
       organizationId: org.id,
       regNo: 'ADMIN001',
@@ -539,7 +541,7 @@ async function main() {
   console.log(`  Projects:       ${finalCounts.projects}`);
   console.log('');
   console.log('  Login accounts:');
-  console.log('    Admin  → admin@projectverse.com / password123');
+  console.log('    Admin  → admin@projectverse.com / adminverse123');
   console.log('    Any student email from Excel / password123');
   console.log('═'.repeat(50));
 }

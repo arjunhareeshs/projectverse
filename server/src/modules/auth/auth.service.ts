@@ -7,6 +7,18 @@ import { signAccessToken } from '../../config/jwt';
 import { RoleType } from '@prisma/client';
 import { env } from '../../config/env';
 
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const ALLOWED_STUDENT_EMAIL_DOMAIN = '@bitsathy.ac.in';
+
+// Parses the domain out explicitly rather than a raw string suffix check, so an
+// email like "user@bitsathy.ac.in.evil.com" or "bitsathy.ac.in@evil.com" can't
+// slip through a naive endsWith('@bitsathy.ac.in') / endsWith('bitsathy.ac.in').
+function isAllowedStudentEmail(email: string): boolean {
+  const domain = email.toLowerCase().trim().split('@').pop() || '';
+  return domain === ALLOWED_STUDENT_EMAIL_DOMAIN.slice(1);
+}
+
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
 const registerSchema = z.object({
@@ -33,6 +45,10 @@ const githubUsernameSchema = z.object({
 export class AuthService {
   static async register(data: unknown) {
     const parsed = registerSchema.parse(data);
+
+    if (!isAllowedStudentEmail(parsed.email)) {
+      throw new Error(`Only ${ALLOWED_STUDENT_EMAIL_DOMAIN} email addresses are allowed`);
+    }
 
     const existing = await prisma.user.findUnique({
       where: { email: parsed.email },
@@ -161,6 +177,11 @@ export class AuthService {
     }
 
     const email = String(tokenInfo.email).toLowerCase().trim();
+
+    if (!isAllowedStudentEmail(email)) {
+      throw new Error(`Only ${ALLOWED_STUDENT_EMAIL_DOMAIN} email addresses are allowed to sign in`);
+    }
+
     const fullName = tokenInfo.name || tokenInfo.given_name || email.split('@')[0];
 
     // Find existing user or create a new student account

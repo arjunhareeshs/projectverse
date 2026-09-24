@@ -61,6 +61,26 @@ export const MyProposals: React.FC = () => {
     };
   }, []);
 
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  const handleClaim = async (proposalId: string) => {
+    try {
+      setClaimingId(proposalId);
+      setError(null);
+      const res = await proposalService.claimProposal(proposalId);
+      if (res.projectId) {
+        navigate(`/projects/${res.projectId}`);
+      } else {
+        navigate('/projects');
+      }
+    } catch (err: any) {
+      console.error('Failed to claim proposal:', err);
+      setError(err.response?.data?.message || 'Failed to claim project. Please ensure you are part of a team.');
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
@@ -99,6 +119,7 @@ export const MyProposals: React.FC = () => {
           {proposals.map((p) => {
             const badge = statusBadge(p.status);
             const Icon = badge.icon;
+            const isClaiming = claimingId === p.id;
             return (
               <div
                 key={p.id}
@@ -126,11 +147,21 @@ export const MyProposals: React.FC = () => {
 
                   {p.canClaim && (
                     <button
-                      onClick={() => navigate(`/projects/catalog?project=${p.publishedProjectId}`)}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 transition"
+                      onClick={() => handleClaim(p.id)}
+                      disabled={isClaiming}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 disabled:opacity-50 transition"
                     >
-                      Claim Project
-                      <ArrowRight className="h-3 w-3" />
+                      {isClaiming ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>Claiming...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Claim Project</span>
+                          <ArrowRight className="h-3 w-3" />
+                        </>
+                      )}
                     </button>
                   )}
 

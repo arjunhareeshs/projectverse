@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { OverlapService } from './overlap/overlap.service';
 import { StandoutService } from './standout/standout.service';
 import { OpportunityService } from '../recommendation/opportunity.service';
+import { withLock } from '../../shared/redis';
 
 let isRunning = false;
 let lastRunAt: Date | null = null;
@@ -52,13 +53,13 @@ export async function runInsightsPipeline(scope: 'overlap' | 'standout' | 'recom
 
 export function startInsightsScheduler(): void {
   // Daily at 02:30 AM (after 01:00 AM evaluation cron)
-  cron.schedule('30 2 * * *', async () => {
+  cron.schedule('30 2 * * *', () => withLock('cron:insights', 60 * 60_000, async () => {
     try {
       await runInsightsPipeline('all');
     } catch (err) {
       console.error('[InsightsScheduler] Daily cron execution failed:', err);
     }
-  });
+  }));
   console.log('[InsightsScheduler] Scheduled daily insights pipeline cron (02:30 AM)');
 }
 

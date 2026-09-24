@@ -15,6 +15,7 @@ router.delete('/problems/:id', requireRole('ADMIN'), capstoneController.deletePr
 
 // ─── Admin Analytics ─────────────────────────────────────────────────────────
 router.get('/admin/stats', requireRole('ADMIN'), capstoneController.getAdminStats);
+router.get('/admin/performance', requireRole('ADMIN'), capstoneController.getStudentPerformance);
 
 // ─── Student Selections & Submissions ────────────────────────────────────────
 router.get('/my', capstoneController.getMySelections);

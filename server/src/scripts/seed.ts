@@ -7,6 +7,8 @@ const prisma = new PrismaClient();
 
 const EXCEL_PATH = path.resolve(__dirname, '../../../data/Final Groups and Project Registration.xlsx');
 const DEFAULT_PASSWORD = 'password123';
+const ADMIN_PASSWORD = 'adminverse123';
+const DEVELOPER_PASSWORD = 'developerverse123';
 const TEAM_COLORS = [
   '#7C3AED', '#2F6FED', '#1E2A45', '#F0653B', '#F5B400', '#E94F94',
   '#059669', '#DC2626', '#6366F1', '#8B5CF6', '#14B8A6', '#F97316',
@@ -104,17 +106,29 @@ async function runSeed() {
 
   // ── 2. Create Admin user ────────────────────────────────────────
   console.log('\n👤 Creating Admin user...');
+  const adminPasswordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   const adminUser = await prisma.user.create({
     data: {
       email: 'admin@projectverse.com',
       fullName: 'Admin User',
-      passwordHash,
+      passwordHash: adminPasswordHash,
       role: RoleType.ADMIN,
       organizationId: org.id,
       regNo: 'ADMIN001',
     },
   });
   console.log('  ✅ Admin created:', adminUser.email);
+
+  // Developer account — the only role that can open the AI/system observability portal.
+  const developerUser = await prisma.user.create({
+    data: {
+      email: 'developer@projectverse.com',
+      fullName: 'Developer',
+      passwordHash: await bcrypt.hash(DEVELOPER_PASSWORD, 12),
+      role: RoleType.DEVELOPER,
+    },
+  });
+  console.log('  ✅ Developer created:', developerUser.email);
 
   // ── 3. Parse student data sheet ────────────
   console.log('\n📊 Parsing student data sheet...');
@@ -950,7 +964,8 @@ async function runSeed() {
   console.log(`  Team Messages:  ${finalCounts.messages}`);
   console.log('');
   console.log('  Login accounts:');
-  console.log('    Admin  → admin@projectverse.com / password123');
+  console.log('    Admin  → admin@projectverse.com / adminverse123');
+  console.log('    Dev    → developer@projectverse.com / developerverse123');
   console.log('    Any student email from Excel / password123');
   console.log('═'.repeat(50));
 }

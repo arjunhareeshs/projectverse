@@ -11,6 +11,7 @@ enum RoleType {
   ADMIN
   STUDENT
   FACULTY
+  DEVELOPER
 }
 
 enum ProjectCategory {
@@ -106,6 +107,9 @@ model User {
 
   // Capstone System
   capstoneSelections CapstoneSelection[]
+
+  // Per-project test scores (student marks)
+  projectScores StudentProjectScore[]
 }
 
 model Organization {
@@ -215,7 +219,7 @@ model TeamMessage {
 }
 
 model Project {
-  id                  String   @id @default(cuid())
+  id                  String      @id @default(cuid())
   organizationId      String
   teamId              String?
   collaboratingTeamId String?
@@ -225,22 +229,22 @@ model Project {
   difficultyLevel     String?
   type                String? // "Hardware", "Software"
   mode                ProjectMode @default(NORMAL)
-  approved            Boolean  @default(false)
+  approved            Boolean     @default(false)
   repoLink            String?
   problemStatement    String?
   objective           String?
   expectedOutcome     String?
-  technologies        String[] @default([])
+  technologies        String[]    @default([])
   requirements        String?
   innovation          String?
   // Problem-statement catalog metadata (SRP S4 combined problem statements)
-  problemId           String?  @unique // e.g. "H0001", "S0001"
+  problemId           String?     @unique // e.g. "H0001", "S0001"
   sector              String? // niche sector within domain, e.g. "Precision Farming / Smart Irrigation"
   shortName           String? // short handle for the problem statement
-  status              String   @default("planned")
-  isTemplate          Boolean  @default(false)
+  status              String      @default("planned")
+  isTemplate          Boolean     @default(false)
   parentProjectId     String?
-  maxTeams            Int      @default(3)
+  maxTeams            Int         @default(3)
 
   // Industry-grade problem metadata (extended catalog fields)
   soul                   String? // one-line essence
@@ -320,7 +324,10 @@ model Project {
   projectCycleScores10 ProjectCycleScore10[]
 
   // Capstone System
-  capstoneSelections   CapstoneSelection[]
+  capstoneSelections CapstoneSelection[]
+
+  // Per-project test scores (student marks)
+  studentScores StudentProjectScore[]
 }
 
 model ProblemStatementProposal {
@@ -1938,18 +1945,18 @@ enum AIProvider {
 }
 
 model UserAIProvider {
-  id              String      @id @default(cuid())
+  id              String     @id @default(cuid())
   userId          String
   provider        AIProvider
   encryptedApiKey String
   keyFingerprint  String
-  isEnabled       Boolean     @default(true)
+  isEnabled       Boolean    @default(true)
   lastValidatedAt DateTime?
   lastUsedAt      DateTime?
   lastErrorCode   String?
   lastErrorAt     DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1978,49 +1985,111 @@ model AIUsageLog {
   @@index([provider, createdAt])
 }
 
+enum SystemLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
+model SystemLog {
+  id        String         @id @default(cuid())
+  level     SystemLogLevel
+  source    String // e.g. "ai.llm", "ai.provider.groq", "auth"
+  message   String
+  userId    String?
+  metadata  Json?
+  createdAt DateTime       @default(now())
+
+  @@index([source, createdAt])
+  @@index([level, createdAt])
+  @@index([userId, createdAt])
+}
+
+model RequestLog {
+  id         String   @id @default(cuid())
+  method     String
+  path       String
+  statusCode Int
+  durationMs Int
+  userId     String?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path, createdAt])
+  @@index([statusCode, createdAt])
+}
+
+model SystemMetricSnapshot {
+  id             String   @id @default(cuid())
+  instance       String   @default("unknown") // container hostname — one series per server/worker replica
+  cpuLoadAvg1m   Float
+  memoryUsedMb   Int
+  memoryTotalMb  Int
+  processRssMb   Int
+  eventLoopLagMs Float
+  uptimeSec      Int
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([instance, createdAt])
+}
+
+model ClientErrorLog {
+  id        String   @id @default(cuid())
+  message   String
+  stack     String?
+  url       String?
+  userAgent String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // ─── 10-Field Tri-Level Rubric Models (0-10 Scale each) ──────────────────────
 
 model StudentCycleScore10 {
-  id                           String            @id @default(cuid())
-  regNo                        String            // Student Register Number (e.g. "21CS101")
-  userId                       String
-  projectId                    String
-  teamId                       String?
-  reportId                     String?
-  cycle                        Int               // 1, 2, 3...
-  periodStart                  DateTime
-  periodEnd                    DateTime
+  id          String   @id @default(cuid())
+  regNo       String // Student Register Number (e.g. "21CS101")
+  userId      String
+  projectId   String
+  teamId      String?
+  reportId    String?
+  cycle       Int // 1, 2, 3...
+  periodStart DateTime
+  periodEnd   DateTime
 
   // 5 On-Project Marks (0 to 10 each)
-  scopeAlignmentScore          Int               // 0-10
-  technicalComplexityScore     Int               // 0-10
-  milestoneCompletionScore     Int               // 0-10
-  commitAuthenticityScore      Int               // 0-10
-  riskMitigationScore          Int               // 0-10
+  scopeAlignmentScore      Int // 0-10
+  technicalComplexityScore Int // 0-10
+  milestoneCompletionScore Int // 0-10
+  commitAuthenticityScore  Int // 0-10
+  riskMitigationScore      Int // 0-10
 
   // 5 Out-of-Project / Discipline Marks (0 to 10 each)
-  taskPunctualityScore         Int               // 0-10 (Task deadline adherence)
-  dailyLogDiligenceScore       Int               // 0-10 (Log compliance & detail)
-  taskOwnershipScore           Int               // 0-10 (Role responsibility)
-  teamCollaborationScore       Int               // 0-10 (Peer review & teamwork)
-  growthInnovationScore        Int               // 0-10 (Skill acquisition & initiative)
+  taskPunctualityScore   Int // 0-10 (Task deadline adherence)
+  dailyLogDiligenceScore Int // 0-10 (Log compliance & detail)
+  taskOwnershipScore     Int // 0-10 (Role responsibility)
+  teamCollaborationScore Int // 0-10 (Peer review & teamwork)
+  growthInnovationScore  Int // 0-10 (Skill acquisition & initiative)
 
-  totalMarks                   Int               // Sum out of 100 (0 to 100)
-  relativeTeamRank             Int?              // 1st, 2nd, 3rd in team
-  contributionRatio            Float?            // Member share of team output (0.00 - 1.00)
-  previousCycleTotalMarks      Int?              // Previous cycle score (for clean delta tracking)
-  deltaMarks                   Int?              // +/- change from previous cycle
-  qualitativeStrengths         String[]          @default([])
-  qualitativeGrowthAreas       String[]          @default([])
-  personalizedActionPlan       String?
+  totalMarks              Int // Sum out of 100 (0 to 100)
+  relativeTeamRank        Int? // 1st, 2nd, 3rd in team
+  contributionRatio       Float? // Member share of team output (0.00 - 1.00)
+  previousCycleTotalMarks Int? // Previous cycle score (for clean delta tracking)
+  deltaMarks              Int? // +/- change from previous cycle
+  qualitativeStrengths    String[] @default([])
+  qualitativeGrowthAreas  String[] @default([])
+  personalizedActionPlan  String?
 
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user                         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project                      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  team                         Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  report                       EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  team    Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  report  EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
 
   @@unique([userId, projectId, cycle])
   @@index([regNo, cycle])
@@ -2028,76 +2097,76 @@ model StudentCycleScore10 {
 }
 
 model TeamCycleScore10 {
-  id                           String            @id @default(cuid())
-  teamId                       String
-  projectId                    String
-  reportId                     String?
-  cycle                        Int
-  periodStart                  DateTime
-  periodEnd                    DateTime
+  id          String   @id @default(cuid())
+  teamId      String
+  projectId   String
+  reportId    String?
+  cycle       Int
+  periodStart DateTime
+  periodEnd   DateTime
 
   // 10 Team Dimensions (0 to 10 each)
-  workDistributionEquity       Int               // 0-10 (Gini fairness)
-  milestoneVelocity            Int               // 0-10
-  blockerResolutionSpeed       Int               // 0-10
-  interMemberCollaboration     Int               // 0-10
-  teamCommitCadence            Int               // 0-10
-  sharedDocumentation          Int               // 0-10
-  technicalConsistency         Int               // 0-10
-  timelineDiscipline           Int               // 0-10
-  peerReviewParticipation      Int               // 0-10
-  collectiveOutputQuality      Int               // 0-10
+  workDistributionEquity   Int // 0-10 (Gini fairness)
+  milestoneVelocity        Int // 0-10
+  blockerResolutionSpeed   Int // 0-10
+  interMemberCollaboration Int // 0-10
+  teamCommitCadence        Int // 0-10
+  sharedDocumentation      Int // 0-10
+  technicalConsistency     Int // 0-10
+  timelineDiscipline       Int // 0-10
+  peerReviewParticipation  Int // 0-10
+  collectiveOutputQuality  Int // 0-10
 
-  totalTeamMarks               Int               // Sum out of 100
-  teamSynergyLevel             String            // "HIGH" | "BALANCED" | "IMBALANCED" | "CRITICAL"
-  previousCycleTotalMarks      Int?
-  deltaMarks                   Int?
-  bottlenecks                  String[]          @default([])
-  teamFeedback                 String?
+  totalTeamMarks          Int // Sum out of 100
+  teamSynergyLevel        String // "HIGH" | "BALANCED" | "IMBALANCED" | "CRITICAL"
+  previousCycleTotalMarks Int?
+  deltaMarks              Int?
+  bottlenecks             String[] @default([])
+  teamFeedback            String?
 
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  team                         Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  project                      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  report                       EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  team    Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  report  EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
 
   @@unique([teamId, projectId, cycle])
   @@index([teamId, cycle])
 }
 
 model ProjectCycleScore10 {
-  id                           String            @id @default(cuid())
-  projectId                    String
-  reportId                     String?
-  cycle                        Int
-  periodStart                  DateTime
-  periodEnd                    DateTime
+  id          String   @id @default(cuid())
+  projectId   String
+  reportId    String?
+  cycle       Int
+  periodStart DateTime
+  periodEnd   DateTime
 
   // 10 Project Dimensions (0 to 10 each)
-  scopeAlignment               Int               // 0-10
-  architectureRobustness       Int               // 0-10
-  hardwareSoftwareProgress     Int               // 0-10
-  deliverablesReadiness        Int               // 0-10
-  authenticityConfidence       Int               // 0-10
-  plagiarismSafety             Int               // 0-10
-  testCoverageVerification     Int               // 0-10
-  standardsCompliance          Int               // 0-10
-  innovationDifferentiation    Int               // 0-10
-  publicationFeasibility       Int               // 0-10
+  scopeAlignment            Int // 0-10
+  architectureRobustness    Int // 0-10
+  hardwareSoftwareProgress  Int // 0-10
+  deliverablesReadiness     Int // 0-10
+  authenticityConfidence    Int // 0-10
+  plagiarismSafety          Int // 0-10
+  testCoverageVerification  Int // 0-10
+  standardsCompliance       Int // 0-10
+  innovationDifferentiation Int // 0-10
+  publicationFeasibility    Int // 0-10
 
-  totalProjectMarks            Int               // Sum out of 100
-  projectHealthBand            String            // "EXCELLENT" | "GOOD" | "NEEDS_ATTENTION" | "AT_RISK" | "CRITICAL"
-  previousCycleTotalMarks      Int?
-  trajectoryDelta              Float?
-  keyMilestonesAchieved        String[]          @default([])
-  criticalRisks                String[]          @default([])
+  totalProjectMarks       Int // Sum out of 100
+  projectHealthBand       String // "EXCELLENT" | "GOOD" | "NEEDS_ATTENTION" | "AT_RISK" | "CRITICAL"
+  previousCycleTotalMarks Int?
+  trajectoryDelta         Float?
+  keyMilestonesAchieved   String[] @default([])
+  criticalRisks           String[] @default([])
 
-  createdAt                    DateTime          @default(now())
-  updatedAt                    DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  project                      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  report                       EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  report  EvaluationReport? @relation(fields: [reportId], references: [id], onDelete: SetNull)
 
   @@unique([projectId, cycle])
   @@index([projectId, cycle])
@@ -2121,8 +2190,8 @@ model CapstoneProblemStatement {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  selections     CapstoneSelection[]
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  selections   CapstoneSelection[]
 
   @@index([organizationId, isActive])
 }
@@ -2145,11 +2214,11 @@ model CapstoneSelection {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  user           User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project        Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  problem        CapstoneProblemStatement? @relation(fields: [problemId], references: [id], onDelete: SetNull)
-  questions      CapstoneMcqQuestion[]
-  answers        CapstoneMcqAnswer[]
+  user      User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project                   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  problem   CapstoneProblemStatement? @relation(fields: [problemId], references: [id], onDelete: SetNull)
+  questions CapstoneMcqQuestion[]
+  answers   CapstoneMcqAnswer[]
 
   @@unique([userId, projectId])
   @@index([userId, status])
@@ -2158,17 +2227,17 @@ model CapstoneSelection {
 }
 
 model CapstoneMcqQuestion {
-  id             String   @id @default(cuid())
-  selectionId    String
-  question       String
-  options        Json
-  correctOption  Int
-  explanation    String?
-  difficulty     String?
-  topic          String?
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  selectionId   String
+  question      String
+  options       Json
+  correctOption Int
+  explanation   String?
+  difficulty    String?
+  topic         String?
+  createdAt     DateTime @default(now())
 
-  selection      CapstoneSelection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  selection CapstoneSelection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
 
   @@index([selectionId])
 }
@@ -2182,8 +2251,32 @@ model CapstoneMcqAnswer {
   isCorrect      Boolean
   createdAt      DateTime @default(now())
 
-  selection      CapstoneSelection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
+  selection CapstoneSelection @relation(fields: [selectionId], references: [id], onDelete: Cascade)
 
   @@index([selectionId])
 }
 
+/// One row per student per project: the MCQ test score for that project and a
+/// materialized count of how many projects this student has taken a test for.
+/// Populated by capstone.service.ts submitMcqAnswers() in the same transaction
+/// that finalizes CapstoneSelection.mcqScore, so it never goes stale.
+model StudentProjectScore {
+  id             String   @id @default(cuid())
+  userId         String
+  email          String
+  regNo          String?
+  projectId      String
+  projectName    String
+  score          Int
+  totalQuestions Int
+  projectCount   Int      @default(1)
+  takenAt        DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@index([email])
+  @@index([regNo])
+}

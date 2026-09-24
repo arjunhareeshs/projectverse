@@ -1,144 +1,105 @@
-# ProjectVerse Docker Deployment
+# ProjectVerse — Docker deployment
 
-Self-contained Docker Compose architecture for ProjectVerse AI: Frontend, Backend API, Background Worker, PostgreSQL Database, Redis, and Nginx Gateway.
-
----
-
-## 🏗️ Architecture
+Everything runs in Docker: frontend, backend, background worker, PostgreSQL, Redis and the nginx edge.
+The app is served under `/verse` (e.g. `https://pcdp.bitsathy.ac.in/verse`).
 
 ```text
-[ Client Browser ]
-        │
-        ▼ (Port 8080)
-┌─────────────────────────────────────────────────────────┐
-│                    edge (Nginx Proxy)                  │
-│                                                         │
-│  /           ──> client (React 18 + Vite static build)  │
-│  /api/       ──> server (Node.js/Express API :4000)     │
-│  /socket.io/ ──> server (WebSocket server :4000)       │
-│  /uploads/   ──> server (Local uploads volume)          │
-└───────────────┬─────────────────────────┬───────────────┘
-                │                         │
-                ▼                         ▼
-      ┌──────────────────┐      ┌──────────────────┐
-      │  db (Postgres 16)│      │  redis (Redis 7) │
-      └──────────────────┘      └──────────────────┘
-                ▲
-                │
-      ┌──────────────────┐
-      │ migrate (Prisma) │ (runs at startup to apply migrations)
-      └──────────────────┘
-                │
-      ┌──────────────────┐
-      │ worker (Cron)    │ (scheduler for lifecycle & streak nudges)
-      └──────────────────┘
+Browser ──► edge (nginx, the only published port)
+              /verse/            ──► client   (static React build)
+              /verse/api/        ──► server ×3 (Express, prefix stripped → /api)
+              /verse/socket.io/  ──► server ×3 (WebSocket)
+              /verse/uploads/    ──► server ×3
+                                        │
+                     ┌──────────────────┼──────────────────┐
+                     ▼                  ▼                  ▼
+                 db (Postgres 16)   redis (7)          worker ×1 (cron jobs)
+                                    socket fan-out,
+                                    rate limits, cron locks
+migrate (one-shot) applies the Prisma migration before server/worker start.
+seed    (one-shot, profile) fills a FRESH database.
 ```
 
----
-
-## 🚀 Quick Start
-
-### 1. Configure Environment
-
-From the project root or the `docker/` folder:
+## Configure
 
 ```bash
 cp docker/.env.example docker/.env
 ```
 
-Review `docker/.env` and update secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`) and API keys (such as `GROQ_API_KEY`) as required.
+Fill in at least `POSTGRES_PASSWORD`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`,
+`AI_API_KEY_ENCRYPTION_KEY` (each `openssl rand -hex 32`), `CLIENT_ORIGIN`, and the Google client IDs.
+The server refuses to start in production without `AI_API_KEY_ENCRYPTION_KEY`; never change it
+after launch or every stored user AI key becomes unreadable.
 
-### 2. Start Services
+If another nginx on the host proxies to this stack, set `TRUST_PROXY=2` so client IPs are correct.
 
-From the project root:
+## Release (build machine)
 
-```bash
-npm run docker:up
-```
-
-*Or using Docker Compose directly:*
-
-```bash
-docker compose -f docker/docker-compose.yml up -d --build
-```
-
-Access the application at: **http://localhost:8080**
-
----
-
-## 📦 Services
-
-| Service | Port (Host) | Internal Port | Description |
-|---|---|---|---|
-| **edge** | `8080` | `80` | Nginx reverse proxy serving client and routing `/api/` & `/socket.io/` to backend |
-| **client** | — | `8080` | Nginx serving production Vite React SPA |
-| **server** | `4000` | `4000` | Express API server handling authentication, projects, and AI integrations |
-| **worker** | — | — | Background task scheduler running daily log nudges and streak tracking |
-| **migrate**| — | — | One-shot container that executes Prisma migrations (`prisma migrate deploy`) |
-| **db** | `5434` | `5432` | PostgreSQL 16 database with persistent volume `pgdata` |
-| **redis** | `6379` | `6379` | Redis 7 in-memory cache and Socket.io adapter |
-
----
-
-## 🔄 Database Seeding
-
-To populate the database with demo users (admin, teams, students) and the 1,400+ problem statements catalog:
-
-### Option A: Using NPM script from project root
+The release version lives in `/VERSION` (currently `1.1.0` → image tag `v1.1.0`).
 
 ```bash
-npm run docker:seed
+docker login                 # once, as the Docker Hub account (default user: pcdpbit)
+./push.sh                    # Linux/macOS   — or  .\push.ps1  on Windows
 ```
 
-### Option B: Using Docker Compose profile
+This builds `linux/amd64` images for **server, client and edge**, tags each `v<VERSION>`,
+`sha-<commit>` and `latest`, and pushes them. Guards:
+
+- refuses uncommitted changes (`ALLOW_DIRTY=1` / `-AllowDirty` to override)
+- refuses to overwrite a version already on Docker Hub — bump `VERSION` instead (`FORCE=1` / `-Force`)
+- `./push.sh --no-push` builds locally only, for rehearsals
+
+`VITE_GOOGLE_CLIENT_ID` is baked into the client at build time; it is read from the environment,
+else `docker/.env`, else the root `.env`.
+
+## Deploy (server)
+
+Copy the repo to the server, create `docker/.env` (see *Configure*), set `IMG_TAG=v1.1.0`, then:
 
 ```bash
-docker compose -f docker/docker-compose.yml --profile seed run --rm seed
+./deploy.sh --seed     # FIRST deploy on a fresh database
+./deploy.sh            # every later release
 ```
 
-### Option C: Running individual seed scripts inside the container
+`deploy.sh` checks required secrets, pulls the images, backs up the database to `backups/`
+(when one exists), runs the migration, starts everything and waits for
+`/verse/api/health/ready`. `--seed` refuses if the database already has users (seeding wipes it).
+
+Rollback: `./deploy.sh --tag v1.0.x`, and restore the matching `backups/*.dump` if that release's
+migration changed the schema:
 
 ```bash
-# Seed demo accounts and groups:
-docker compose -f docker/docker-compose.yml run --rm server node dist/scripts/seed.js
-
-# Seed problem statement catalog:
-docker compose -f docker/docker-compose.yml run --rm server node dist/scripts/seedProblemStatements.js
+docker compose -f docker/docker-compose.yml exec -T db pg_restore -U postgres -d projectverse --clean < backups/<file>.dump
 ```
 
----
+Other flags: `--tag <tag>` deploy a specific tag, `--build` build here instead of pulling,
+`--no-pull` use images already on this machine.
 
-## 📊 Management & Logs
+Seeded logins: `admin@projectverse.com` / `adminverse123`, `developer@projectverse.com` /
+`developerverse123` (AI & system observability portal). Change these passwords after first login.
 
-### View Logs
+## Local full stack (no registry)
 
 ```bash
-# All services
-npm run docker:logs
-# or
-docker compose -f docker/docker-compose.yml logs -f
-
-# Specific service (e.g. server or db)
-docker compose -f docker/docker-compose.yml logs -f server
+npm run docker:up      # build + start everything; migrate runs automatically
+npm run docker:seed    # ONCE on a fresh database
 ```
 
-### Stop Services
+## Scaling
+
+- `SERVER_REPLICAS` (default 3) — API replicas; edge re-resolves them automatically.
+- `DB_POOL_SERVER` × replicas + `DB_POOL_WORKER` must stay under `POSTGRES_MAX_CONNECTIONS`.
+- Keep `worker` at 1 replica (cron jobs are also Redis-locked as a safeguard).
+- Uploads live in a volume shared by all containers on this host; set `UPLOADS_PATH=/uploads`
+  to bind-mount a host directory instead.
+
+## Operations
 
 ```bash
-npm run docker:down
-# or
-docker compose -f docker/docker-compose.yml down
+npm run docker:logs                                        # all logs
+docker compose -f docker/docker-compose.yml ps             # health
+docker compose -f docker/docker-compose.yml exec db pg_dump -U postgres -Fc projectverse > backup.dump
+npm run docker:down                                        # stop (volumes kept)
 ```
 
-### Reset Database Volume (Clean Slate)
-
-```bash
-docker compose -f docker/docker-compose.yml down -v
-```
-
----
-
-## 🔑 Default Seed Credentials
-
-- **Admin**: `admin@projectverse.com` / `password123`
-- **Students**: Seeded from student roster / `password123`
+Live monitoring (requests, latency, errors, load, AI token usage) is in the app at
+`/verse/developer/system-health` and `/verse/developer/ai-observability` (developer account only).

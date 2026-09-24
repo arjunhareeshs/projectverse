@@ -75,6 +75,31 @@ export interface CapstoneAdminStats {
   avgScore: number;
 }
 
+export interface StudentPerformanceProject {
+  selectionId: string;
+  projectName: string;
+  problemTitle: string | null;
+  status: string;
+  mcqScore: number | null;
+  totalQuestions: number;
+  selectedAt: string;
+  completedAt: string | null;
+}
+
+export interface StudentPerformance {
+  student: {
+    id: string;
+    email: string;
+    regNo: string | null;
+    fullName: string;
+    team: { id: string; name: string } | null;
+  };
+  projects: StudentPerformanceProject[];
+  totalProjects: number;
+  testsCompleted: number;
+  averageScore: number;
+}
+
 export interface CreateCapstoneProblemDto {
   title: string;
   problemText: string;
@@ -138,6 +163,13 @@ export const capstoneService = {
 
   getAdminStats: async () => {
     const { data } = await api.get<CapstoneAdminStats>('/capstone/admin/stats');
+    return data;
+  },
+
+  getStudentPerformance: async (query: string) => {
+    const { data } = await api.get<StudentPerformance>(
+      `/capstone/admin/performance?q=${encodeURIComponent(query)}`
+    );
     return data;
   },
 

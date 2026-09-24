@@ -157,6 +157,29 @@ export class AdminService {
     return prisma.user.update({ where: { id: userId }, data: { role } });
   }
 
+  // Backfills a register number onto a student who was self-created via Google
+  // login (which never sets regNo — that only arrives via Excel bulk upload).
+  // Bulk re-upload can't fix this after the fact because bulkUploadStudents
+  // skips any row matching an existing email, so this is the only path today.
+  static async updateStudentRegNo(userId: string, regNo: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
+
+    const clash = await prisma.user.findFirst({ where: { regNo, NOT: { id: userId } } });
+    if (clash) throw new Error('This register number is already assigned to another user');
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { regNo },
+      select: { id: true, email: true, regNo: true, fullName: true },
+    });
+
+    // Keep the denormalized regNo on the student's marks table in sync.
+    await prisma.studentProjectScore.updateMany({ where: { userId }, data: { regNo } });
+
+    return updated;
+  }
+
   static async getStudents(page = 1, limit = 50) {
     const skip = (page - 1) * limit;
     const [students, total, studentRankings] = await Promise.all([
@@ -188,6 +211,35 @@ export class AdminService {
     });
 
     return { students: enrichedStudents, total, page, limit };
+  }
+
+  // ── Student marks (per-project test scores) ────────────────────────────────
+
+  static async getStudentProjectScores(page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const [rows, total] = await Promise.all([
+      prisma.studentProjectScore.findMany({
+        skip,
+        take: limit,
+        orderBy: { takenAt: 'desc' },
+      }),
+      prisma.studentProjectScore.count(),
+    ]);
+
+    return {
+      scores: rows.map((r) => ({
+        email: r.email,
+        regNo: r.regNo,
+        project: r.projectName,
+        score: r.score,
+        totalQuestions: r.totalQuestions,
+        projectCount: r.projectCount,
+        takenAt: r.takenAt,
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   // ── Proposals (AI evaluation audit trail) ──────────────────────────────────

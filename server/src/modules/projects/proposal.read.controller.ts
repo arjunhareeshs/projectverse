@@ -150,4 +150,175 @@ export const proposalReadController = {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
     }
   },
+
+  async claimSelfProposal(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Unauthorized' });
+      }
+
+      const id = req.params.id as string;
+      const proposal = await prisma.problemStatementProposal.findUnique({
+        where: { id },
+      });
+
+      if (!proposal) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Proposal not found' });
+      }
+
+      if (proposal.verdict !== 'ACCEPTED' || !proposal.publishedProjectId) {
+        return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Proposal is not in an accepted claimable state' });
+      }
+
+      const template = await prisma.project.findUnique({
+        where: { id: proposal.publishedProjectId },
+        include: {
+          deliverablesList: true,
+          features: true,
+        },
+      });
+
+      if (!template) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'Published project template not found' });
+      }
+
+      const currentUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        include: {
+          team: {
+            include: {
+              members: true,
+            },
+          },
+        },
+      });
+
+      if (!currentUser) {
+        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User not found' });
+      }
+
+      const isSubmitter = proposal.submitterId === user.id;
+      const submitter = await prisma.user.findUnique({
+        where: { id: proposal.submitterId },
+        select: { teamId: true },
+      });
+      const isSameTeam = currentUser.teamId && submitter?.teamId === currentUser.teamId;
+      const isAdmin = user.role === 'ADMIN';
+
+      if (!isSubmitter && !isSameTeam && !isAdmin) {
+        return res.status(StatusCodes.FORBIDDEN).json({
+          message: 'Only the proposal creator or their team can claim this project',
+        });
+      }
+
+      if (!currentUser.teamId) {
+        return res.status(StatusCodes.BAD_REQUEST).json({
+          message: 'You must belong to a team before claiming a project. Please create or join a team first.',
+        });
+      }
+
+      const teamId = currentUser.teamId;
+
+      // Check if already claimed
+      const existingClaim = await prisma.project.findFirst({
+        where: {
+          parentProjectId: template.id,
+        },
+      });
+
+      if (existingClaim) {
+        if (existingClaim.teamId === teamId) {
+          return res.status(StatusCodes.OK).json({
+            success: true,
+            projectId: existingClaim.id,
+            message: 'Project already claimed by your team',
+          });
+        }
+        return res.status(StatusCodes.CONFLICT).json({ message: 'This proposed project has already been claimed' });
+      }
+
+      const teamMemberIds = (currentUser.team?.members || []).map((m) => m.id);
+
+      const newProject = await prisma.$transaction(async (tx) => {
+        const created = await tx.project.create({
+          data: {
+            organizationId: template.organizationId,
+            teamId,
+            parentProjectId: template.id,
+            name: template.name,
+            shortName: template.shortName,
+            soul: template.soul,
+            description: template.description,
+            domain: template.domain,
+            sector: template.sector,
+            difficultyLevel: template.difficultyLevel,
+            type: template.type,
+            problemStatement: template.problemStatement,
+            backgroundContext: template.backgroundContext,
+            targetUsers: template.targetUsers,
+            expectedOutcome: template.expectedOutcome,
+            technologies: template.technologies,
+            requirements: template.requirements,
+            deliverables: template.deliverables ?? undefined,
+            differentiationApproach: proposal.rawText,
+            differentiationKeywords: (template.name || '').toLowerCase().split(/\s+/).slice(0, 8),
+            category: 'MINI',
+            status: 'in_progress',
+          },
+        });
+
+        const projectMembers = [
+          { projectId: created.id, userId: user.id, role: 'ADMIN' as const },
+          ...teamMemberIds
+            .filter((memberId) => memberId !== user.id)
+            .slice(0, 3)
+            .map((memberId) => ({
+              projectId: created.id,
+              userId: memberId,
+              role: 'STUDENT' as const,
+            })),
+        ];
+        await tx.projectMember.createMany({ data: projectMembers });
+
+        if (template.deliverablesList && template.deliverablesList.length > 0) {
+          await tx.projectDeliverable.createMany({
+            data: template.deliverablesList.map((d: any) => ({
+              projectId: created.id,
+              text: d.text,
+              order: d.order,
+            })),
+          });
+        }
+
+        if (template.features && template.features.length > 0) {
+          await tx.projectFeature.createMany({
+            data: template.features.map((f: any) => ({
+              projectId: created.id,
+              name: f.name,
+              description: f.description,
+              importance: f.importance,
+              implementationMethod: f.implementationMethod,
+              points: f.points,
+              aiRationale: f.aiRationale,
+              addedBy: 'AI',
+            })),
+          });
+        }
+
+        return created;
+      });
+
+      res.status(StatusCodes.CREATED).json({
+        success: true,
+        projectId: newProject.id,
+        message: 'Self-proposed project claimed successfully',
+      });
+    } catch (error: any) {
+      console.error('Error claiming self proposal:', error);
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+        message: error?.message || 'Failed to claim self proposal',
+      });
+    }
+  },
 };

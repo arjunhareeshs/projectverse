@@ -4,6 +4,8 @@ import { providerConfigService } from './providerConfig.service';
 import { ProviderFactory } from './providers/provider.factory';
 import { isFallbackEligible, ChatMessage } from './providers/provider.interface';
 import { AIProvider } from '@prisma/client';
+import { logger } from '../../shared/logger';
+import { env } from '../../config/env';
 
 export type { ChatMessage };
 
@@ -61,8 +63,8 @@ export async function chat(
     groqKey = await providerConfigService.getDecryptedKeyForUser(userId, AIProvider.GROQ);
   }
   // Server-level dev fallback key if user key is unset
-  if (!groqKey && process.env.GROQ_API_KEY?.trim()) {
-    groqKey = process.env.GROQ_API_KEY.trim();
+  if (!groqKey && env.GROQ_API_KEY) {
+    groqKey = env.GROQ_API_KEY;
   }
 
   if (groqKey) {
@@ -86,9 +88,9 @@ export async function chat(
 
       return result.content || fallback;
     } catch (groqErr: any) {
-      console.warn(
-        `[LLM Router] Groq (Primary) failed${options?.feature ? ` [${options.feature}]` : ''}:`,
-        sanitizeErrorMessage(groqErr),
+      logger.warn(
+        `Groq (Primary) failed${options?.feature ? ` [${options.feature}]` : ''}: ${sanitizeErrorMessage(groqErr)}`,
+        { source: 'ai.llm.chat.groq', userId, feature: options?.feature },
       );
 
       if (userId) {
@@ -116,8 +118,8 @@ export async function chat(
   if (userId) {
     nvidiaKey = await providerConfigService.getDecryptedKeyForUser(userId, AIProvider.NVIDIA);
   }
-  if (!nvidiaKey && process.env.NVIDIA_API_KEY?.trim()) {
-    nvidiaKey = process.env.NVIDIA_API_KEY.trim();
+  if (!nvidiaKey && env.NVIDIA_API_KEY) {
+    nvidiaKey = env.NVIDIA_API_KEY;
   }
 
   if (nvidiaKey) {
@@ -141,9 +143,9 @@ export async function chat(
 
       return result.content || fallback;
     } catch (nvidiaErr: any) {
-      console.warn(
-        `[LLM Router] NVIDIA NIM (Fallback) failed${options?.feature ? ` [${options.feature}]` : ''}:`,
-        sanitizeErrorMessage(nvidiaErr),
+      logger.warn(
+        `NVIDIA NIM (Fallback) failed${options?.feature ? ` [${options.feature}]` : ''}: ${sanitizeErrorMessage(nvidiaErr)}`,
+        { source: 'ai.llm.chat.nvidia', userId, feature: options?.feature },
       );
 
       if (userId) {
@@ -191,8 +193,8 @@ export async function chatJSONWithMeta<T>(
   if (userId) {
     groqKey = await providerConfigService.getDecryptedKeyForUser(userId, AIProvider.GROQ);
   }
-  if (!groqKey && process.env.GROQ_API_KEY?.trim()) {
-    groqKey = process.env.GROQ_API_KEY.trim();
+  if (!groqKey && env.GROQ_API_KEY) {
+    groqKey = env.GROQ_API_KEY;
   }
 
   if (groqKey) {
@@ -218,9 +220,9 @@ export async function chatJSONWithMeta<T>(
         return { data: result.parsed, degraded: false, providerUsed: 'GROQ' };
       }
     } catch (groqErr: any) {
-      console.warn(
-        `[LLM Router] Groq (Primary) chatJSON failed${options?.feature ? ` [${options.feature}]` : ''}:`,
-        sanitizeErrorMessage(groqErr),
+      logger.warn(
+        `Groq (Primary) chatJSON failed${options?.feature ? ` [${options.feature}]` : ''}: ${sanitizeErrorMessage(groqErr)}`,
+        { source: 'ai.llm.chatJSON.groq', userId, feature: options?.feature },
       );
 
       if (userId) {
@@ -247,8 +249,8 @@ export async function chatJSONWithMeta<T>(
   if (userId) {
     nvidiaKey = await providerConfigService.getDecryptedKeyForUser(userId, AIProvider.NVIDIA);
   }
-  if (!nvidiaKey && process.env.NVIDIA_API_KEY?.trim()) {
-    nvidiaKey = process.env.NVIDIA_API_KEY.trim();
+  if (!nvidiaKey && env.NVIDIA_API_KEY) {
+    nvidiaKey = env.NVIDIA_API_KEY;
   }
 
   if (nvidiaKey) {
@@ -274,9 +276,9 @@ export async function chatJSONWithMeta<T>(
         return { data: result.parsed, degraded: false, providerUsed: 'NVIDIA' };
       }
     } catch (nvidiaErr: any) {
-      console.warn(
-        `[LLM Router] NVIDIA NIM (Fallback) chatJSON failed${options?.feature ? ` [${options.feature}]` : ''}:`,
-        sanitizeErrorMessage(nvidiaErr),
+      logger.warn(
+        `NVIDIA NIM (Fallback) chatJSON failed${options?.feature ? ` [${options.feature}]` : ''}: ${sanitizeErrorMessage(nvidiaErr)}`,
+        { source: 'ai.llm.chatJSON.nvidia', userId, feature: options?.feature },
       );
 
       if (userId) {
@@ -303,5 +305,5 @@ export async function chatJSONWithMeta<T>(
  */
 export function isLlmConfigured(): boolean {
   const userId = getCurrentUserId();
-  return Boolean(userId || process.env.GROQ_API_KEY || process.env.NVIDIA_API_KEY);
+  return Boolean(userId || env.GROQ_API_KEY || env.NVIDIA_API_KEY);
 }

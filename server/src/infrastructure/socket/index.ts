@@ -1,16 +1,17 @@
 import type { Server as HttpServer } from 'node:http';
 import { Server } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { createClient } from 'redis';
 import { verifyAccessToken } from '../../config/jwt';
 import { buildAllowedOrigins } from '../../config/network';
 import { logger } from '../../shared/logger';
+import { getRedis } from '../../shared/redis';
+import { env } from '../../config/env';
 
 let ioInstance: Server | null = null;
 
 export async function bootstrapSocket(httpServer: HttpServer) {
   // Auto-detect LAN IPv4 addresses and include CLIENT_ORIGIN
-  const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:7333';
+  const clientOrigin = env.CLIENT_ORIGIN;
   const allowedOrigins = buildAllowedOrigins([clientOrigin]);
 
   const io = new Server(httpServer, {
@@ -20,7 +21,7 @@ export async function bootstrapSocket(httpServer: HttpServer) {
         // In production, allow configured CLIENT_ORIGIN
         if (clientOrigin && origin === clientOrigin) return callback(null, true);
         // Fallback for dev: allow any origin whose hostname is in the detected list
-        if (process.env.NODE_ENV === 'development') {
+        if (env.NODE_ENV === 'development') {
           try {
             const { hostname } = new URL(origin);
             const detected = allowedOrigins.some((o) => {
@@ -35,18 +36,18 @@ export async function bootstrapSocket(httpServer: HttpServer) {
     },
   });
 
-  if (process.env.REDIS_URL) {
+  const pubClient = getRedis();
+  if (pubClient) {
     try {
-      const pubClient = createClient({ url: process.env.REDIS_URL });
       const subClient = pubClient.duplicate();
-      await Promise.all([pubClient.connect(), subClient.connect()]);
+      await subClient.connect();
       io.adapter(createAdapter(pubClient, subClient));
       logger.info('Socket.IO Redis adapter connected and enabled.');
     } catch (err) {
       logger.error('Failed to connect Socket.IO Redis adapter:', err);
     }
   } else {
-    logger.info('REDIS_URL not set — Socket.IO running with default in-memory adapter.');
+    logger.info('Redis not available — Socket.IO running with default in-memory adapter.');
   }
 
   ioInstance = io;

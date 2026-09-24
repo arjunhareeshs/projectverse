@@ -1,3 +1,4 @@
+import { env } from '../../../config/env';
 import axios from 'axios';
 import {
   ChatMessage,
@@ -12,7 +13,7 @@ export class NvidiaProvider implements LLMProvider {
   readonly providerName = 'NVIDIA' as const;
 
   private getModel(): string {
-    return process.env.NVIDIA_MODEL || 'meta/llama-3.3-70b-instruct';
+    return env.NVIDIA_MODEL;
   }
 
   async chat(

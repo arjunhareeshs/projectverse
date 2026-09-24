@@ -179,4 +179,18 @@ export const capstoneController = {
       });
     }
   },
+
+  async getStudentPerformance(req: Request, res: Response) {
+    try {
+      const q = (req.query.q as string) || '';
+      const result = await capstoneService.adminSearchStudentPerformance(q);
+      if (!result) {
+        return res.status(StatusCodes.NOT_FOUND).json({ message: 'No student found for that email or register number' });
+      }
+      res.status(StatusCodes.OK).json(result);
+    } catch (error: any) {
+      const status = error instanceof CapstoneServiceError ? error.statusCode : StatusCodes.INTERNAL_SERVER_ERROR;
+      res.status(status).json({ message: error.message || 'Failed to retrieve student performance' });
+    }
+  },
 };

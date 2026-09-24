@@ -18,8 +18,14 @@ router.get('/stats', adminController.getStats);
 // User role management (promotes a user to FACULTY so they can review phase submissions)
 router.patch('/users/:userId/role', adminController.updateUserRole);
 
+// Backfill a register number for students who self-registered via Google (no Excel row)
+router.patch('/students/:userId/regno', adminController.updateStudentRegNo);
+
 // Proposals — AI evaluation audit trail (reasoning behind every accept/reject/points decision)
 router.get('/proposals', adminController.getProposals);
+
+// Student marks — per-project MCQ test scores table
+router.get('/student-scores', adminController.getStudentProjectScores);
 
 // Students Data Management & Ingest
 router.get('/students', adminController.getStudents);

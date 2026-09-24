@@ -36,6 +36,8 @@ export const ProposeProblem: React.FC = () => {
      only reflects server state, polled until analysis finishes. */
   const [proposalId, setProposalId] = useState<string | null>(null);
   const [proposal, setProposal] = useState<PersistedProposal | null>(null);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
 
   const criteriaList = [
@@ -155,9 +157,25 @@ export const ProposeProblem: React.FC = () => {
     }
   };
 
-  const handleClaim = () => {
-    if (!proposal?.publishedProjectId) return;
-    navigate(`/projects/catalog?project=${proposal.publishedProjectId}`);
+  const handleClaim = async () => {
+    if (!proposal?.id) return;
+    try {
+      setClaiming(true);
+      setClaimError(null);
+      const res = await proposalService.claimProposal(proposal.id);
+      if (res.projectId) {
+        navigate(`/projects/${res.projectId}`);
+      } else {
+        navigate('/projects');
+      }
+    } catch (err: any) {
+      console.error('Failed to claim self proposal:', err);
+      setClaimError(
+        err.response?.data?.message || 'Failed to claim project. Please ensure you are part of a team.'
+      );
+    } finally {
+      setClaiming(false);
+    }
   };
 
   const status = proposal?.status ?? (proposalId ? 'PENDING' : null);
@@ -331,14 +349,32 @@ export const ProposeProblem: React.FC = () => {
                     </ul>
                   )}
 
+                  {claimError && (
+                    <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2 font-semibold">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                      <span>{claimError}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-end">
                     <button
                       onClick={handleClaim}
-                      disabled={!proposal?.canClaim}
+                      disabled={!proposal?.canClaim || claiming}
                       className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm shadow-emerald-500/20"
                     >
-                      {proposal?.claimed ? 'Already Claimed' : 'Claim Project'}
-                      <ArrowRight className="h-4 w-4" />
+                      {claiming ? (
+                        <>
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                          <span>Claiming Project...</span>
+                        </>
+                      ) : proposal?.claimed ? (
+                        'Already Claimed'
+                      ) : (
+                        <>
+                          <span>Claim Project</span>
+                          <ArrowRight className="h-4 w-4" />
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>

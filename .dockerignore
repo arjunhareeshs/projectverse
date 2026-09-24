@@ -3,11 +3,20 @@ node_modules
 client/dist
 server/dist
 .git
-.env
-.env.*
+last_deploy
+
+# Env files at any depth — client/.env holds localhost API URLs that Vite would bake into the bundle.
+**/.env
+**/.env.*
+
+# Database dumps (root and data/); migrations live under server/database and are not matched here.
+*.sql
+*.dump
 data/*.dump
+
 docs/
 graft/
 *.md
 .husky
+.claude
 server/uploads

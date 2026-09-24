@@ -1,6 +1,7 @@
 import type { ProjectDocument } from './corpus';
 import { type TfIdfModel, cosineSimilarity } from './tfidf';
 import { tokenizeText } from './tokenize';
+import { env } from '../../../config/env';
 
 export interface CandidatePair {
   p1: ProjectDocument;
@@ -24,8 +25,8 @@ export function jaccardSimilarity(setA: Set<string>, setB: Set<string>): number 
 export function generateCandidatePairs(
   docs: ProjectDocument[],
   tfidfModel: TfIdfModel,
-  overlapThreshold: number = process.env.OVERLAP_THRESHOLD ? Number(process.env.OVERLAP_THRESHOLD) : 0.62,
-  maxPairs: number = process.env.INSIGHTS_MAX_PAIRS ? Number(process.env.INSIGHTS_MAX_PAIRS) : 5000
+  overlapThreshold: number = env.OVERLAP_THRESHOLD,
+  maxPairs: number = env.INSIGHTS_MAX_PAIRS
 ): CandidatePair[] {
   const docMap = new Map(docs.map((d) => [d.projectId, d]));
   const pairKeys = new Set<string>();

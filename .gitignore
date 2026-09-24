@@ -19,5 +19,16 @@ ai-service/.venv/
 ai-service/venv/
 ai-service/data/
 
+# Database dumps
+*.dump
+*.sql
+!server/database/prisma/migrations/**/*.sql
+
+# Deployment & temporary folders
+last_deploy/
+
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 graft/
+
+# Database backups written by deploy.sh
+backups/

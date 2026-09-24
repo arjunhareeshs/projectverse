@@ -2,9 +2,10 @@ import path from 'path';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import { createRateLimiter } from './shared/rateLimit';
 import helmet from 'helmet';
 import { corsOptions } from './config/cors';
+import { env } from './config/env';
 import { authRoutes } from './modules/auth/auth.routes';
 import { projectRoutes } from './modules/projects/project.routes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
@@ -20,22 +21,22 @@ import { lifecycleRoutes } from './modules/lifecycle/lifecycle.routes';
 import { proposalRoutes } from './modules/projects/proposals.routes';
 import { aiProviderRoutes } from './modules/ai/aiProvider.routes';
 import { capstoneRoutes } from './modules/capstone/capstone.routes';
+import { aiObservabilityRoutes } from './modules/aiObservability/aiObservability.routes';
+import { observabilityRoutes } from './modules/observability/observability.routes';
+import { clientErrorRoutes } from './modules/observability/clientError.routes';
+import { requestLogger } from './middleware/requestLogger';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp() {
   const app = express();
 
-  app.set('trust proxy', 1);
+  app.set('trust proxy', env.TRUST_PROXY);
 
   app.use(helmet({
     crossOriginResourcePolicy: false, // Allow loading files in frontend via static server
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   }));
-  app.use(
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit: 500,
-    }),
-  );
+  app.use(createRateLimiter('global', { windowMs: 15 * 60 * 1000, limit: 500 }));
   app.use(cors(corsOptions));
   app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
@@ -47,6 +48,8 @@ export function createApp() {
     if (req.body === undefined) req.body = {};
     next();
   });
+
+  app.use(requestLogger);
 
   // Serve uploaded files statically
   app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -66,6 +69,9 @@ export function createApp() {
   app.use('/api/lifecycle', lifecycleRoutes);
   app.use('/api/ai/providers', aiProviderRoutes);
   app.use('/api/capstone', capstoneRoutes);
+  app.use('/api/developer/ai-observability', aiObservabilityRoutes);
+  app.use('/api/developer/observability', observabilityRoutes);
+  app.use('/api/observability/client-errors', clientErrorRoutes);
 
   // This is a JSON API with no root page of its own — the actual app lives
   // on the frontend dev server (http://localhost:7333). Anyone landing here

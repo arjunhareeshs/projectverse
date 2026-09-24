@@ -17,7 +17,10 @@ export class AuthController {
           .json({ message: 'Invalid request', issues: error.issues });
       } else if (error.message?.includes('already exists')) {
         res.status(StatusCodes.CONFLICT).json({ message: error.message });
+      } else if (error.message?.includes('bitsathy.ac.in')) {
+        res.status(StatusCodes.FORBIDDEN).json({ message: error.message });
       } else {
+        console.error('Registration error:', error);
         res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Registration failed' });
       }
     }

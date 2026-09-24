@@ -4,10 +4,12 @@ import { useDispatch } from 'react-redux';
 import { AuthLayout } from './layout/AuthLayout';
 import { MainLayout } from './layout/MainLayout';
 import { AdminLayout } from './layout/AdminLayout';
+import { DeveloperLayout } from './layout/DeveloperLayout';
 import { ProtectedRoute } from './layout/ProtectedRoute';
 import { useAppSelector } from './app/hooks';
 import { authService } from './services/auth.service';
 import { getAuthToken } from './services/api';
+import { BASE_PATH } from './config/basePath';
 import { setUser, logout, setVerifyingSession } from './features/auth/authSlice';
 
 const TeamRedirect = () => {
@@ -48,6 +50,11 @@ import { AdminTopStudents } from './pages/Admin/AdminTopStudents';
 import { AdminOverlaps } from './pages/Admin/AdminOverlaps';
 import { AdminStandouts } from './pages/Admin/AdminStandouts';
 import { AdminCapstoneProblems } from './pages/Admin/AdminCapstoneProblems';
+import { AdminCapstonePerformance } from './pages/Admin/AdminCapstonePerformance';
+
+// Developer Portal (AI observability & monitoring — DEVELOPER role only)
+import { AiObservabilityDashboard } from './pages/Developer/AiObservabilityDashboard';
+import { SystemHealthDashboard } from './pages/Developer/SystemHealthDashboard';
 
 // Capstone Assessment
 import { CapstoneMcqPage } from './pages/CapstoneMcqPage';
@@ -83,6 +90,7 @@ function App() {
 
   return (
     <BrowserRouter
+      basename={BASE_PATH || '/'}
       future={{
         v7_startTransition: true,
         v7_relativeSplatPath: true,
@@ -135,6 +143,7 @@ function App() {
               <Route path="/admin/overlaps" element={<AdminOverlaps />} />
               <Route path="/admin/standouts" element={<AdminStandouts />} />
               <Route path="/admin/capstone-problems" element={<AdminCapstoneProblems />} />
+              <Route path="/admin/capstone-performance" element={<AdminCapstonePerformance />} />
               <Route path="/admin/upload" element={<AdminUpload />} />
               {/* Legacy redirects */}
               <Route path="/admin/directory" element={<Navigate to="/admin/top-teams" replace />} />
@@ -147,6 +156,13 @@ function App() {
               <Route path="/admin/analytics" element={<Navigate to="/admin/top-teams" replace />} />
               <Route path="/admin/team-trends" element={<Navigate to="/admin/top-teams" replace />} />
               <Route path="/admin/student-trends" element={<Navigate to="/admin/top-students" replace />} />
+            </Route>
+
+            {/* Developer Portal — AI observability & monitoring, restricted to DEVELOPER role */}
+            <Route element={<DeveloperLayout />}>
+              <Route path="/developer" element={<Navigate to="/developer/ai-observability" replace />} />
+              <Route path="/developer/ai-observability" element={<AiObservabilityDashboard />} />
+              <Route path="/developer/system-health" element={<SystemHealthDashboard />} />
             </Route>
           </Route>
 

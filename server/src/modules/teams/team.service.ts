@@ -5,8 +5,9 @@ import { logger } from '../../shared/logger';
 import { getIoInstance } from '../../infrastructure/socket';
 import { notificationService } from '../notifications/notification.service';
 import { projectProgressService } from '../projects/projectProgress.service';
+import { env } from '../../config/env';
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+const AI_SERVICE_URL = env.AI_SERVICE_URL;
 
 async function notifyTeamUpdate(teamId: string, type: string) {
   try {

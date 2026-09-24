@@ -21,6 +21,19 @@ export const ProtectedRoute: React.FC = () => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // DEVELOPER accounts only ever see the AI observability portal — never the student/admin app
+  if (user?.role === 'DEVELOPER') {
+    if (!location.pathname.startsWith('/developer')) {
+      return <Navigate to="/developer/ai-observability" replace />;
+    }
+    return <Outlet />;
+  }
+
+  // Non-developers can never reach the developer observability portal
+  if (location.pathname.startsWith('/developer')) {
+    return <Navigate to={user?.role === 'ADMIN' ? '/admin/top-teams' : '/dashboard'} replace />;
+  }
+
   // If user is ADMIN and attempting to access non-admin paths, redirect to top teams portal
   if (user?.role === 'ADMIN' && !location.pathname.startsWith('/admin')) {
     return <Navigate to="/admin/top-teams" replace />;

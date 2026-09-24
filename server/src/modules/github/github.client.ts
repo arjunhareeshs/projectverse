@@ -1,6 +1,7 @@
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import { logger } from '../../shared/logger';
+import { env } from '../../config/env';
 
 const CORE_BASE_URL = 'https://api.github.com';
 
@@ -11,7 +12,7 @@ const coreClient = axios.create({
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'ProjectVerse-Github-Analytics',
-    ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
+    ...(env.GITHUB_TOKEN ? { Authorization: `Bearer ${env.GITHUB_TOKEN}` } : {}),
   },
   validateStatus: (status) => status < 500,
 });

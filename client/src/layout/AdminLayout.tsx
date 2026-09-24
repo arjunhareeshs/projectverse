@@ -10,6 +10,7 @@ import {
   LogOut,
   RefreshCw,
   Sparkles,
+  ClipboardCheck,
 } from 'lucide-react';
 import { cn } from '../utils/cn';
 import { useAppDispatch, useAppSelector } from '../app/hooks';
@@ -22,6 +23,7 @@ const adminNav = [
   { icon: GitCompareArrows, label: 'Overlaps', to: '/admin/overlaps', showBadge: true },
   { icon: Rocket, label: 'Standouts', to: '/admin/standouts' },
   { icon: Sparkles, label: 'Capstone Problems', to: '/admin/capstone-problems' },
+  { icon: ClipboardCheck, label: 'Capstone Performance', to: '/admin/capstone-performance' },
   { icon: Upload, label: 'Data Upload', to: '/admin/upload' },
 ];
 

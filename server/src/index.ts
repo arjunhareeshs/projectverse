@@ -8,8 +8,16 @@ import { startInsightsScheduler } from './modules/insights/insights.scheduler';
 import { startMetricsScheduler } from './modules/metrics/metrics.scheduler';
 import { recoverStalePendingProposals } from './modules/projects/proposal.worker';
 import { getLocalNetworkIPs } from './config/network';
+import { registerCrashHandlers } from './modules/observability/crashHandlers';
+import { startMetricsCollector } from './modules/observability/metrics.collector';
+import { connectRedis } from './shared/redis';
+import { startRetentionScheduler } from './modules/observability/retention.scheduler';
 
 async function start() {
+  registerCrashHandlers();
+  await connectRedis();
+  startMetricsCollector();
+
   const app = createApp();
   const httpServer = createServer(app);
 
@@ -20,6 +28,7 @@ async function start() {
     startEvaluationScheduler();
     startInsightsScheduler();
     startMetricsScheduler();
+    startRetentionScheduler();
     // Proposal analysis runs in-process, so a restart mid-analysis would otherwise
     // leave the submitter's proposal PENDING forever.
     void recoverStalePendingProposals();

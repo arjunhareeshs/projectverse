@@ -32,6 +32,21 @@ export const adminController = {
     }
   },
 
+  updateStudentRegNo: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.params.userId as string;
+      const { regNo } = req.body as { regNo?: string };
+      if (!regNo || !regNo.trim()) {
+        res.status(StatusCodes.BAD_REQUEST).json({ message: 'regNo is required' });
+        return;
+      }
+      const user = await AdminService.updateStudentRegNo(userId, regNo.trim());
+      res.json(user);
+    } catch (err: any) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+    }
+  },
+
   // ── Proposals ────────────────────────────────────────────────────────────
 
   getProposals: async (req: AuthenticatedRequest, res: Response) => {
@@ -44,6 +59,21 @@ export const adminController = {
       };
       const result = await AdminService.getProposals(
         { verdict, studentId },
+        page ? parseInt(page, 10) : 1,
+        limit ? parseInt(limit, 10) : 50,
+      );
+      res.json(result);
+    } catch (err: any) {
+      res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: err.message });
+    }
+  },
+
+  // ── Student marks (per-project test scores) ─────────────────────────────────
+
+  getStudentProjectScores: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const { page, limit } = req.query as { page?: string; limit?: string };
+      const result = await AdminService.getStudentProjectScores(
         page ? parseInt(page, 10) : 1,
         limit ? parseInt(limit, 10) : 50,
       );

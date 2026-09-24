@@ -1,2 +1,0 @@
--- AlterEnum
-ALTER TYPE "RoleType" ADD VALUE IF NOT EXISTS 'STUDENT';

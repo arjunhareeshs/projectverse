@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAppSelector } from '../app/hooks';
 import { notificationService } from '../services/notification.service';
 import { getSocketUrl } from '../services/api';
+import { BASE_PATH } from '../config/basePath';
 
 export interface NotificationItem {
   id: string;
@@ -70,6 +71,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const socketUrl = getSocketUrl();
 
     const newSocket = io(socketUrl, {
+      path: `${BASE_PATH}/socket.io`,
+      // WebSocket-only: HTTP long-polling needs sticky sessions once several server replicas sit behind the proxy.
+      transports: ['websocket'],
       auth: { token },
       withCredentials: true,
     });

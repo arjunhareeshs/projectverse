@@ -1,3 +1,4 @@
+import { withLock } from '../../shared/redis';
 import cron from 'node-cron';
 import { prisma } from '../../shared/database';
 import { logger } from '../../shared/logger';
@@ -134,24 +135,24 @@ export async function runCohortSnapshotPipeline(): Promise<{ organizationsProces
 export function startMetricsScheduler(): void {
   // Nightly at 03:00 AM — after the 01:00 evaluation cron and 02:30 insights
   // cron, so risk scoring can see the freshest evaluation/insight data.
-  cron.schedule('0 3 * * *', async () => {
+  cron.schedule('0 3 * * *', () => withLock('cron:risk-scoring', 60 * 60_000, async () => {
     try {
       const result = await runRiskScoringPipeline();
       logger.info('[MetricsScheduler] Nightly risk scoring complete:', result);
     } catch (err: any) {
       logger.error('[MetricsScheduler] Nightly risk scoring failed:', { message: err.message });
     }
-  });
+  }));
 
   // Weekly, Sunday at 04:00 AM.
-  cron.schedule('0 4 * * 0', async () => {
+  cron.schedule('0 4 * * 0', () => withLock('cron:cohort-snapshot', 60 * 60_000, async () => {
     try {
       const result = await runCohortSnapshotPipeline();
       logger.info('[MetricsScheduler] Weekly cohort snapshot complete:', result);
     } catch (err: any) {
       logger.error('[MetricsScheduler] Weekly cohort snapshot failed:', { message: err.message });
     }
-  });
+  }));
 
   logger.info('[MetricsScheduler] Scheduled nightly risk scoring (03:00) and weekly cohort snapshots (Sun 04:00)');
 }

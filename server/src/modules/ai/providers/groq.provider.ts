@@ -1,3 +1,4 @@
+import { env } from '../../../config/env';
 import axios from 'axios';
 import {
   ChatMessage,
@@ -12,7 +13,7 @@ export class GroqProvider implements LLMProvider {
   readonly providerName = 'GROQ' as const;
 
   private getModel(): string {
-    return process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    return env.GROQ_MODEL;
   }
 
   async chat(

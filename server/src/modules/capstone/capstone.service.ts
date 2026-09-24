@@ -596,6 +596,10 @@ export const capstoneService = {
   ) {
     const selection = await prisma.capstoneSelection.findUnique({
       where: { id: selectionId },
+      include: {
+        user: { select: { email: true, regNo: true } },
+        project: { select: { name: true } },
+      },
     });
 
     if (!selection) {
@@ -676,6 +680,29 @@ export const capstoneService = {
         where: { id: selection.projectId },
         data: { status: 'completed' },
       });
+
+      // 5. Upsert the student's marks-table row for this project, then
+      // recompute projectCount across all of this student's scored projects.
+      await tx.studentProjectScore.upsert({
+        where: { userId_projectId: { userId, projectId: selection.projectId } },
+        create: {
+          userId,
+          email: selection.user.email,
+          regNo: selection.user.regNo,
+          projectId: selection.projectId,
+          projectName: selection.project.name,
+          score,
+          totalQuestions: storedQuestions.length,
+        },
+        update: {
+          score,
+          totalQuestions: storedQuestions.length,
+          takenAt: new Date(),
+        },
+      });
+
+      const projectCount = await tx.studentProjectScore.count({ where: { userId } });
+      await tx.studentProjectScore.updateMany({ where: { userId }, data: { projectCount } });
     });
 
     return {
@@ -718,6 +745,70 @@ export const capstoneService = {
       totalSelections,
       completedCount,
       avgScore,
+    };
+  },
+
+  /**
+   * Admin lookup: given an email or register number, returns the student's
+   * full capstone picture — every project they've claimed (in progress or
+   * completed) with its MCQ score where available.
+   */
+  async adminSearchStudentPerformance(query: string) {
+    const q = query.trim();
+    if (!q) {
+      throw new CapstoneServiceError('Search query is required', StatusCodes.BAD_REQUEST);
+    }
+
+    const student = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: { equals: q, mode: 'insensitive' } },
+          { regNo: { equals: q, mode: 'insensitive' } },
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        regNo: true,
+        fullName: true,
+        team: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!student) {
+      return null;
+    }
+
+    const selections = await prisma.capstoneSelection.findMany({
+      where: { userId: student.id },
+      include: {
+        project: { select: { name: true } },
+        problem: { select: { title: true } },
+      },
+      orderBy: { selectedAt: 'desc' },
+    });
+
+    const completed = selections.filter((s) => s.status === 'COMPLETED' && s.mcqScore !== null);
+    const averageScore =
+      completed.length > 0
+        ? Number((completed.reduce((acc, s) => acc + (s.mcqScore || 0), 0) / completed.length).toFixed(1))
+        : 0;
+
+    return {
+      student,
+      projects: selections.map((s) => ({
+        selectionId: s.id,
+        projectName: s.project.name,
+        problemTitle: s.problem?.title ?? null,
+        status: s.status,
+        mcqScore: s.mcqScore,
+        totalQuestions: s.totalQuestions,
+        selectedAt: s.selectedAt,
+        completedAt: s.completedAt,
+      })),
+      totalProjects: selections.length,
+      testsCompleted: completed.length,
+      averageScore,
     };
   },
 };

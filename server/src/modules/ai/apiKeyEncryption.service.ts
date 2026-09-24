@@ -1,20 +1,18 @@
 import crypto from 'crypto';
+import { env } from '../../config/env';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96 bits recommended for GCM
 const TAG_LENGTH = 16; // 128 bits
 
 function getMasterKey(): Buffer {
-  const envKey = process.env.AI_API_KEY_ENCRYPTION_KEY;
-  if (envKey && envKey.trim().length >= 32) {
-    return crypto.createHash('sha256').update(envKey.trim()).digest();
+  const envKey = env.AI_API_KEY_ENCRYPTION_KEY;
+  if (envKey && envKey.length >= 32) {
+    return crypto.createHash('sha256').update(envKey).digest();
   }
 
-  // Fallback for development / test environment
-  const fallbackSecret =
-    process.env.JWT_ACCESS_SECRET ||
-    process.env.JWT_REFRESH_SECRET ||
-    'projectverse-dev-encryption-master-secret-fallback-key-2026';
+  // Development/test only — env.ts refuses to start in production without a dedicated key.
+  const fallbackSecret = env.JWT_ACCESS_SECRET;
 
   return crypto.createHash('sha256').update(fallbackSecret).digest();
 }

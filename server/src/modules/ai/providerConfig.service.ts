@@ -7,6 +7,7 @@ import {
   maskApiKey,
 } from './apiKeyEncryption.service';
 import { ProviderFactory } from './providers/provider.factory';
+import { logger } from '../../shared/logger';
 
 export interface UserProviderStatusDTO {
   provider: 'GROQ' | 'NVIDIA';
@@ -176,7 +177,10 @@ export class ProviderConfigService {
     try {
       return decryptApiKey(record.encryptedApiKey);
     } catch (err: any) {
-      console.error(`[ProviderConfigService] Decryption failed for user ${userId}, provider ${provider}:`, err.message);
+      logger.error(`Decryption failed for provider ${provider}: ${err.message}`, {
+        source: 'ai.providerConfig.decrypt',
+        userId,
+      });
       return null;
     }
   }

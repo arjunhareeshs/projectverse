@@ -136,4 +136,9 @@ export const proposalService = {
     const res = await api.post(`/projects/catalog/${projectId}/select`, { differentiationApproach });
     return res.data;
   },
+
+  async claimProposal(proposalId: string): Promise<{ success: boolean; projectId: string; message: string }> {
+    const res = await api.post<{ success: boolean; projectId: string; message: string }>(`/proposals/${proposalId}/claim`);
+    return res.data;
+  },
 };
