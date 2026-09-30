@@ -5,16 +5,16 @@ import { prisma } from '../shared/database';
 import { signAccessToken } from '../config/jwt';
 
 async function runComprehensiveTest() {
-  console.log('===============================================================');
-  console.log('      STARTING COMPREHENSIVE CAPSTONE SYSTEM AUDIT TEST        ');
-  console.log('===============================================================\n');
+  console.info('===============================================================');
+  console.info('      STARTING COMPREHENSIVE CAPSTONE SYSTEM AUDIT TEST        ');
+  console.info('===============================================================\n');
 
   let passedChecks = 0;
   let failedChecks = 0;
 
   function assert(condition: boolean, message: string) {
     if (condition) {
-      console.log(`  [PASS] ${message}`);
+      console.info(`  [PASS] ${message}`);
       passedChecks++;
     } else {
       console.error(`  [FAIL] ${message}`);
@@ -29,7 +29,7 @@ async function runComprehensiveTest() {
 
   await new Promise<void>((resolve) => {
     server.listen(TEST_PORT, () => {
-      console.log(`✓ Test HTTP server started on http://127.0.0.1:${TEST_PORT}`);
+      console.info(`✓ Test HTTP server started on http://127.0.0.1:${TEST_PORT}`);
       resolve();
     });
   });
@@ -41,7 +41,7 @@ async function runComprehensiveTest() {
 
   try {
     // 2. Fetch or prepare test users
-    console.log('\n--- 1. Setting Up Test Accounts & JWT Tokens ---');
+    console.info('\n--- 1. Setting Up Test Accounts & JWT Tokens ---');
     const adminUser = await prisma.user.findFirst({
       where: { role: 'ADMIN' },
     });
@@ -68,11 +68,11 @@ async function runComprehensiveTest() {
     const adminAuth = { Authorization: `Bearer ${adminToken}` };
     const studentAuth = { Authorization: `Bearer ${studentToken}` };
 
-    console.log(`  Admin user: ${adminUser.email} (Role: ${adminUser.role})`);
-    console.log(`  Student user: ${studentUser.email} (Role: ${studentUser.role})`);
+    console.info(`  Admin user: ${adminUser.email} (Role: ${adminUser.role})`);
+    console.info(`  Student user: ${studentUser.email} (Role: ${studentUser.role})`);
 
     // 3. Security & Role Guards
-    console.log('\n--- 2. Testing Security Guards & Role Authorization ---');
+    console.info('\n--- 2. Testing Security Guards & Role Authorization ---');
     // 3.1 Unauthorized request
     const unauthRes = await api.get('/capstone/problems');
     assert(unauthRes.status === 401, 'Unauthenticated request rejected with 401');
@@ -86,7 +86,7 @@ async function runComprehensiveTest() {
     assert(studentForbiddenRes.status === 403, 'Student creating problem rejected with 403 Forbidden');
 
     // 4. Admin Problem CRUD
-    console.log('\n--- 3. Testing Admin Problem CRUD ---');
+    console.info('\n--- 3. Testing Admin Problem CRUD ---');
     const newProblemPayload = {
       title: 'Real-Time Edge Telemetry & Anomaly Detector',
       problemText:
@@ -117,7 +117,7 @@ async function runComprehensiveTest() {
     assert(typeof statsRes.data.totalProblems === 'number', `Total problems count: ${statsRes.data.totalProblems}`);
 
     // 5. Student Problem Listing
-    console.log('\n--- 4. Testing Student Catalog & Problem Listing ---');
+    console.info('\n--- 4. Testing Student Catalog & Problem Listing ---');
     const listRes = await api.get('/capstone/problems', { headers: studentAuth });
     assert(listRes.status === 200, 'Student retrieves active problem statements');
     assert(Array.isArray(listRes.data) && listRes.data.length > 0, `Active problems returned: ${listRes.data.length}`);
@@ -128,7 +128,7 @@ async function runComprehensiveTest() {
     });
 
     // 6. Student Project Claim Flow
-    console.log('\n--- 5. Testing Student Claim Flow & 7-Day Due Date ---');
+    console.info('\n--- 5. Testing Student Claim Flow & 7-Day Due Date ---');
     // Short approach text rejection (< 15 chars)
     const shortClaimRes = await api.post(
       `/capstone/${createdProblemId}/claim`,
@@ -164,7 +164,7 @@ async function runComprehensiveTest() {
     assert(dupClaimRes.status === 400, 'Duplicate claim rejected with 400 (Rule 1)');
 
     // 7. Student Viewing My Selections
-    console.log('\n--- 6. Testing Student "My Selections" API ---');
+    console.info('\n--- 6. Testing Student "My Selections" API ---');
     const mySelectionsRes = await api.get('/capstone/my', { headers: studentAuth });
     assert(mySelectionsRes.status === 200, 'Student retrieves my selections');
     const foundSelection = mySelectionsRes.data.find((s: any) => s.id === selection.id);
@@ -172,7 +172,7 @@ async function runComprehensiveTest() {
     assert(foundSelection?.status === 'CLAIMED', `Initial selection status is CLAIMED (${foundSelection?.status})`);
 
     // 8. 7-Day Gate Enforcement for GitHub Submission
-    console.log('\n--- 7. Testing 7-Day Gate for Repository Submission ---');
+    console.info('\n--- 7. Testing 7-Day Gate for Repository Submission ---');
     const prematureSubmitRes = await api.post(
       `/capstone/${selection.id}/submit-github`,
       { githubUrl: 'https://github.com/expressjs/express', bypassTimeCheck: false },
@@ -189,8 +189,8 @@ async function runComprehensiveTest() {
     assert(invalidUrlRes.status === 400, 'Invalid GitHub URL rejected with 400');
 
     // 9. Real GitHub Submission & Deep Analysis
-    console.log('\n--- 8. Testing GitHub Submission & Deep Analysis ---');
-    console.log('  Submitting public repository: https://github.com/expressjs/express');
+    console.info('\n--- 8. Testing GitHub Submission & Deep Analysis ---');
+    console.info('  Submitting public repository: https://github.com/expressjs/express');
     const submitRes = await api.post(
       `/capstone/${selection.id}/submit-github`,
       { githubUrl: 'https://github.com/expressjs/express', bypassTimeCheck: true },
@@ -201,7 +201,7 @@ async function runComprehensiveTest() {
     assert(submitRes.data.questionsCount === 15, `Generated exactly 15 questions (${submitRes.data.questionsCount})`);
 
     // 10. Fetching MCQs (Security Check: No Answers Exposed)
-    console.log('\n--- 9. Testing MCQ Retrieval & Answer Security ---');
+    console.info('\n--- 9. Testing MCQ Retrieval & Answer Security ---');
     const mcqRes = await api.get(`/capstone/${selection.id}/mcq`, { headers: studentAuth });
     assert(mcqRes.status === 200, `Student fetches generated MCQs (status: ${mcqRes.status})`);
     const questions = mcqRes.data.questions;
@@ -223,7 +223,7 @@ async function runComprehensiveTest() {
     assert(allHave6Options, 'Every single question has exactly 6 options (Rule 2 of prompt)');
 
     // 11. Testing Submitting Answers & Server-Side Scoring
-    console.log('\n--- 10. Testing MCQ Answer Submission & Server Scoring ---');
+    console.info('\n--- 10. Testing MCQ Answer Submission & Server Scoring ---');
     // Incomplete answers rejection
     const incompleteRes = await api.post(
       `/capstone/${selection.id}/mcq/submit`,
@@ -269,7 +269,7 @@ async function runComprehensiveTest() {
     assert(doubleSubmitRes.status === 400, 'Double MCQ submission rejected with 400 (Rule 4)');
 
     // 12. Testing My Projects API Integration
-    console.log('\n--- 11. Testing My Projects API Integration (/api/projects/my) ---');
+    console.info('\n--- 11. Testing My Projects API Integration (/api/projects/my) ---');
     const myProjectsRes = await api.get('/projects/my', { headers: studentAuth });
     assert(myProjectsRes.status === 200, 'Student calls /api/projects/my');
     const projectInList = myProjectsRes.data.projects.find((p: any) => p.id === project.id);
@@ -280,21 +280,21 @@ async function runComprehensiveTest() {
     assert(projectInList?.capstone?.mcqScore === dbSelection?.mcqScore, `MCQ score matches in My Projects item (${projectInList?.capstone?.mcqScore}/15)`);
 
     // 13. Normal Project Catalog Verification
-    console.log('\n--- 12. Verifying Normal Projects Catalog Integrity ---');
+    console.info('\n--- 12. Verifying Normal Projects Catalog Integrity ---');
     const normalCatalogRes = await api.get('/projects/catalog', { headers: studentAuth });
     assert(normalCatalogRes.status === 200, 'Normal catalog (/api/projects/catalog) returns 200');
     assert(Array.isArray(normalCatalogRes.data), 'Normal catalog returns valid projects list');
 
     // 14. Admin Cleanup & Soft Delete
-    console.log('\n--- 13. Testing Admin Problem Deactivation & Deletion ---');
+    console.info('\n--- 13. Testing Admin Problem Deactivation & Deletion ---');
     const deleteRes = await api.delete(`/capstone/problems/${createdProblemId}`, { headers: adminAuth });
     assert(deleteRes.status === 200, 'Admin deactivates problem statement with existing selections');
     const problemAfterDelete = await prisma.capstoneProblemStatement.findUnique({ where: { id: createdProblemId } });
     assert(problemAfterDelete?.isActive === false, 'Problem marked as isActive: false to preserve relational integrity');
 
-    console.log('\n===============================================================');
-    console.log(` AUDIT SUMMARY: ${passedChecks} CHECKS PASSED, ${failedChecks} CHECKS FAILED`);
-    console.log('===============================================================\n');
+    console.info('\n===============================================================');
+    console.info(` AUDIT SUMMARY: ${passedChecks} CHECKS PASSED, ${failedChecks} CHECKS FAILED`);
+    console.info('===============================================================\n');
 
     if (failedChecks > 0) {
       throw new Error(`${failedChecks} checks failed during comprehensive audit.`);
@@ -307,7 +307,7 @@ async function runComprehensiveTest() {
 
 runComprehensiveTest()
   .then(() => {
-    console.log('COMPREHENSIVE AUDIT FINISHED WITH 100% PASS RATE.');
+    console.info('COMPREHENSIVE AUDIT FINISHED WITH 100% PASS RATE.');
     process.exit(0);
   })
   .catch((err) => {

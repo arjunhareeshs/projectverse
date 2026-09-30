@@ -5,7 +5,7 @@ async function main() {
     where: { isTemplate: true, status: 'CATALOG' },
     select: { id: true, name: true, problemStatement: true, description: true, soul: true, domain: true },
   });
-  console.log(JSON.stringify(r, null, 2));
+  console.info(JSON.stringify(r, null, 2));
   await p.$disconnect();
 }
 main();

@@ -8,21 +8,21 @@ async function main() {
       AND (table_name ILIKE '%capstone%' OR table_name = 'Project')
     ORDER BY table_name;
   `;
-  console.log('Database tables:', tables);
+  console.info('Database tables:', tables);
 
   const projectCols: any[] = await prisma.$queryRaw`
     SELECT column_name, data_type 
     FROM information_schema.columns 
     WHERE table_name = 'Project' AND column_name IN ('mode', 'differentiationApproach');
   `;
-  console.log('Project columns:', projectCols);
+  console.info('Project columns:', projectCols);
 
   const problemCols: any[] = await prisma.$queryRaw`
     SELECT column_name, data_type, column_default
     FROM information_schema.columns 
     WHERE table_name = 'CapstoneProblemStatement';
   `;
-  console.log('CapstoneProblemStatement columns:', problemCols);
+  console.info('CapstoneProblemStatement columns:', problemCols);
 
   const enums: any[] = await prisma.$queryRaw`
     SELECT t.typname, e.enumlabel
@@ -31,12 +31,12 @@ async function main() {
     WHERE t.typname IN ('ProjectMode', 'CapstoneStatus')
     ORDER BY t.typname, e.enumsortorder;
   `;
-  console.log('Enums in DB:', enums);
+  console.info('Enums in DB:', enums);
 
   const migrations: any[] = await prisma.$queryRawUnsafe(
     'SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY started_at;'
   );
-  console.log('Applied migrations:', migrations);
+  console.info('Applied migrations:', migrations);
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());

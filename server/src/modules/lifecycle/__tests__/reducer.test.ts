@@ -31,7 +31,7 @@ function createSeedState(): ProjectLogState {
   };
 }
 
-console.log('[ReducerTest] Running reducer tests...');
+console.info('[ReducerTest] Running reducer tests...');
 
 // Test 1: MEMBERS_SET
 let state = createSeedState();
@@ -107,4 +107,4 @@ assert.throws(() => {
   applyEvent(state, { type: 'INVALID_EVENT_TYPE' as any, actorUserId: 'AI', data: {} });
 }, /Unknown ProjectLogEventType/);
 
-console.log('[ReducerTest] ALL REDUCER TESTS PASSED SUCCESSFULLY! ✅');
+console.info('[ReducerTest] ALL REDUCER TESTS PASSED SUCCESSFULLY! ✅');

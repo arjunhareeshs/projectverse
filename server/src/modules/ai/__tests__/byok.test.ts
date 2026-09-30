@@ -11,10 +11,10 @@ import { GroqProvider } from '../providers/groq.provider';
 import { NvidiaProvider } from '../providers/nvidia.provider';
 
 export async function runByokTests() {
-  console.log('--- Running ProjectVerse BYOK AI System Test Suite ---');
+  console.info('--- Running ProjectVerse BYOK AI System Test Suite ---');
 
   // 1. Encryption & Decryption Tests
-  console.log('1. Testing AES-256-GCM Encryption / Decryption...');
+  console.info('1. Testing AES-256-GCM Encryption / Decryption...');
   const testKey = 'gsk_test_api_key_1234567890abcdefABCDEF';
   const encrypted = encryptApiKey(testKey);
 
@@ -35,7 +35,7 @@ export async function runByokTests() {
   );
 
   // 2. Fingerprinting & Masking Tests
-  console.log('2. Testing Key Fingerprinting & Masking...');
+  console.info('2. Testing Key Fingerprinting & Masking...');
   const fp1 = fingerprintApiKey(testKey);
   const fp2 = fingerprintApiKey(testKey);
   const fp3 = fingerprintApiKey('different-key-12345');
@@ -52,7 +52,7 @@ export async function runByokTests() {
   assert.strictEqual(maskedNvidia, '••••••••8F3A', 'Masked key must correctly capture last 4 digits');
 
   // 3. Fallback Eligibility Tests
-  console.log('3. Testing Error Classification & Fallback Eligibility...');
+  console.info('3. Testing Error Classification & Fallback Eligibility...');
   assert.strictEqual(isFallbackEligible({ response: { status: 401 } }), true, '401 Unauthorized must be fallback-eligible');
   assert.strictEqual(isFallbackEligible({ response: { status: 429 } }), true, '429 Rate Limit must be fallback-eligible');
   assert.strictEqual(isFallbackEligible({ response: { status: 502 } }), true, '502 Bad Gateway must be fallback-eligible');
@@ -65,7 +65,7 @@ export async function runByokTests() {
   assert.strictEqual(isFallbackEligible({ response: { status: 400 } }), false, '400 Bad Request must NOT be fallback-eligible');
 
   // 4. Provider Factory Tests
-  console.log('4. Testing Provider Factory Resolution...');
+  console.info('4. Testing Provider Factory Resolution...');
   const groqProvider = ProviderFactory.getProvider('GROQ');
   assert.strictEqual(groqProvider instanceof GroqProvider, true, 'Factory must return GroqProvider for GROQ');
   assert.strictEqual(groqProvider.providerName, 'GROQ');
@@ -75,14 +75,14 @@ export async function runByokTests() {
   assert.strictEqual(nvidiaProvider.providerName, 'NVIDIA');
 
   // 5. Validation Mock Tests
-  console.log('5. Testing Key Validation Format Checks...');
+  console.info('5. Testing Key Validation Format Checks...');
   const emptyVal = await groqProvider.validateKey('');
   assert.strictEqual(emptyVal.valid, false, 'Empty key must fail validation');
 
   const shortVal = await nvidiaProvider.validateKey('short');
   assert.strictEqual(shortVal.valid, false, 'Too short key must fail validation');
 
-  console.log('All BYOK AI Provider System unit & security tests passed successfully!');
+  console.info('All BYOK AI Provider System unit & security tests passed successfully!');
 }
 
 if (process.argv[1]?.endsWith('byok.test.ts') || process.argv[1]?.endsWith('byok.test.js')) {

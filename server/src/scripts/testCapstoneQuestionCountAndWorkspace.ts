@@ -2,20 +2,20 @@ import { prisma } from '../shared/database';
 import { capstoneService } from '../modules/capstone/capstone.service';
 
 async function main() {
-  console.log('=== TEST: CAPSTONE QUESTION COUNT & WORKSPACE FLOW ===\n');
+  console.info('=== TEST: CAPSTONE QUESTION COUNT & WORKSPACE FLOW ===\n');
 
   // 1. Verify DB Column
-  console.log('--- Step 1: Verify questionCount column in DB ---');
+  console.info('--- Step 1: Verify questionCount column in DB ---');
   const colInfo: any[] = await prisma.$queryRaw`
     SELECT column_name, data_type, column_default
     FROM information_schema.columns 
     WHERE table_name = 'CapstoneProblemStatement' AND column_name = 'questionCount';
   `;
-  console.log('DB column info:', colInfo);
+  console.info('DB column info:', colInfo);
   if (colInfo.length === 0) {
     throw new Error('FAIL: questionCount column missing from CapstoneProblemStatement');
   }
-  console.log('✓ Verified: questionCount column exists in DB.\n');
+  console.info('✓ Verified: questionCount column exists in DB.\n');
 
   // Find or create test organization and admin user
   const org = await prisma.organization.findFirst();
@@ -30,7 +30,7 @@ async function main() {
   }
 
   // 2. Admin creates a problem statement with custom questionCount
-  console.log('--- Step 2: Admin creates problem with questionCount = 10 ---');
+  console.info('--- Step 2: Admin creates problem with questionCount = 10 ---');
   const createdProblem = await capstoneService.createProblem(
     {
       title: 'Real-Time Edge Analytics & Event Streaming Engine',
@@ -45,50 +45,50 @@ async function main() {
     org.id
   );
 
-  console.log(`✓ Created problem: "${createdProblem.title}" (ID: ${createdProblem.id})`);
-  console.log(`  Stored questionCount: ${createdProblem.questionCount}`);
+  console.info(`✓ Created problem: "${createdProblem.title}" (ID: ${createdProblem.id})`);
+  console.info(`  Stored questionCount: ${createdProblem.questionCount}`);
   if (createdProblem.questionCount !== 10) {
     throw new Error(`FAIL: Expected questionCount 10, got ${createdProblem.questionCount}`);
   }
 
   // 3. Admin updates questionCount to 12
-  console.log('\n--- Step 3: Admin updates problem questionCount to 12 ---');
+  console.info('\n--- Step 3: Admin updates problem questionCount to 12 ---');
   const updatedProblem = await capstoneService.updateProblem(createdProblem.id, {
     questionCount: 12,
   });
-  console.log(`✓ Updated questionCount: ${updatedProblem.questionCount}`);
+  console.info(`✓ Updated questionCount: ${updatedProblem.questionCount}`);
   if (updatedProblem.questionCount !== 12) {
     throw new Error(`FAIL: Expected questionCount 12, got ${updatedProblem.questionCount}`);
   }
 
   // 4. Student claims the Capstone Project
-  console.log('\n--- Step 4: Student claims the Capstone Project ---');
+  console.info('\n--- Step 4: Student claims the Capstone Project ---');
   const claimRes = await capstoneService.claimProblem(
     student.id,
     updatedProblem.id,
     'High throughput pipeline utilizing backpressure and worker threads.'
   );
 
-  console.log(`✓ Claimed project: ${claimRes.project.name} (Project ID: ${claimRes.project.id})`);
-  console.log(`  Selection totalQuestions: ${claimRes.selection.totalQuestions}`);
+  console.info(`✓ Claimed project: ${claimRes.project.name} (Project ID: ${claimRes.project.id})`);
+  console.info(`  Selection totalQuestions: ${claimRes.selection.totalQuestions}`);
   if (claimRes.selection.totalQuestions !== 12) {
     throw new Error(`FAIL: Expected selection totalQuestions to be 12, got ${claimRes.selection.totalQuestions}`);
   }
 
   // 5. Test getCapstoneByProjectId (Workspace endpoint)
-  console.log('\n--- Step 5: Test getCapstoneByProjectId (Workspace view data) ---');
+  console.info('\n--- Step 5: Test getCapstoneByProjectId (Workspace view data) ---');
   const workspaceData = await capstoneService.getCapstoneByProjectId(claimRes.project.id, student.id, true);
   if (!workspaceData) {
     throw new Error('FAIL: getCapstoneByProjectId returned null');
   }
 
-  console.log('✓ Workspace data retrieved successfully:');
-  console.log(`  isCapstone: ${workspaceData.isCapstone}`);
-  console.log(`  Project Name: ${workspaceData.project.name}`);
-  console.log(`  Problem Text: ${(workspaceData.problem.problemText || '').slice(0, 50)}...`);
-  console.log(`  Days Balance: ${workspaceData.metrics.daysBalance} days`);
-  console.log(`  Selection Status: ${workspaceData.selection.status}`);
-  console.log(`  Selection Total Questions: ${workspaceData.selection.totalQuestions}`);
+  console.info('✓ Workspace data retrieved successfully:');
+  console.info(`  isCapstone: ${workspaceData.isCapstone}`);
+  console.info(`  Project Name: ${workspaceData.project.name}`);
+  console.info(`  Problem Text: ${(workspaceData.problem.problemText || '').slice(0, 50)}...`);
+  console.info(`  Days Balance: ${workspaceData.metrics.daysBalance} days`);
+  console.info(`  Selection Status: ${workspaceData.selection.status}`);
+  console.info(`  Selection Total Questions: ${workspaceData.selection.totalQuestions}`);
 
   if (workspaceData.metrics.daysBalance !== 7) {
     throw new Error(`FAIL: Expected daysBalance 7, got ${workspaceData.metrics.daysBalance}`);
@@ -98,7 +98,7 @@ async function main() {
   }
 
   // 6. Test submitGithub with dynamic question generation
-  console.log('\n--- Step 6: Test submitGithub generates configured 12 questions ---');
+  console.info('\n--- Step 6: Test submitGithub generates configured 12 questions ---');
   const submitRes = await capstoneService.submitGithub(
     claimRes.selection.id,
     student.id,
@@ -106,7 +106,7 @@ async function main() {
     true // bypassTimeCheck
   );
 
-  console.log(`✓ submitGithub result: questionsCount = ${submitRes.questionsCount}, status = ${submitRes.status}`);
+  console.info(`✓ submitGithub result: questionsCount = ${submitRes.questionsCount}, status = ${submitRes.status}`);
   if (submitRes.questionsCount !== 12) {
     throw new Error(`FAIL: Expected exactly 12 generated questions, got ${submitRes.questionsCount}`);
   }
@@ -115,7 +115,7 @@ async function main() {
   const questionsInDb = await prisma.capstoneMcqQuestion.findMany({
     where: { selectionId: claimRes.selection.id },
   });
-  console.log(`✓ Questions saved in DB: ${questionsInDb.length}`);
+  console.info(`✓ Questions saved in DB: ${questionsInDb.length}`);
   if (questionsInDb.length !== 12) {
     throw new Error(`FAIL: Expected 12 questions in DB, got ${questionsInDb.length}`);
   }
@@ -127,25 +127,25 @@ async function main() {
       throw new Error(`FAIL: Question "${q.question}" does not have 6 options (has ${opts.length})`);
     }
   }
-  console.log('✓ All 12 questions have exactly 6 options.');
+  console.info('✓ All 12 questions have exactly 6 options.');
 
   // Verify workspace data reflects MCQ_READY
   const workspaceDataAfterSubmit = await capstoneService.getCapstoneByProjectId(claimRes.project.id, student.id, true);
-  console.log(`✓ Workspace status after submission: ${workspaceDataAfterSubmit?.selection.status}`);
+  console.info(`✓ Workspace status after submission: ${workspaceDataAfterSubmit?.selection.status}`);
   if (workspaceDataAfterSubmit?.selection.status !== 'MCQ_READY') {
     throw new Error('FAIL: Expected status to be MCQ_READY');
   }
 
   // 7. Cleanup
-  console.log('\n--- Step 7: Cleaning up test records ---');
+  console.info('\n--- Step 7: Cleaning up test records ---');
   await prisma.capstoneMcqQuestion.deleteMany({ where: { selectionId: claimRes.selection.id } });
   await prisma.capstoneSelection.deleteMany({ where: { id: claimRes.selection.id } });
   await prisma.projectMember.deleteMany({ where: { projectId: claimRes.project.id } });
   await prisma.project.deleteMany({ where: { id: claimRes.project.id } });
   await prisma.capstoneProblemStatement.deleteMany({ where: { id: createdProblem.id } });
-  console.log('✓ Cleanup complete.');
+  console.info('✓ Cleanup complete.');
 
-  console.log('\n=== ALL CAPSTONE QUESTION COUNT & WORKSPACE TESTS PASSED! ===\n');
+  console.info('\n=== ALL CAPSTONE QUESTION COUNT & WORKSPACE TESTS PASSED! ===\n');
 }
 
 main()

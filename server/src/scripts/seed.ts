@@ -41,13 +41,13 @@ function yesNo(v: any): boolean {
 
 async function runSeed() {
   const start = Date.now();
-  console.log('📖 Reading Excel file:', EXCEL_PATH);
+  console.info('📖 Reading Excel file:', EXCEL_PATH);
   const workbook = XLSX.readFile(EXCEL_PATH);
 
-  console.log('📄 Sheets found:', workbook.SheetNames.join(', '));
+  console.info('📄 Sheets found:', workbook.SheetNames.join(', '));
 
   // ── 1. Clean Database ──────────────────────────────────────
-  console.log('\n🧹 Cleaning database...');
+  console.info('\n🧹 Cleaning database...');
   try {
     const tablenames = await prisma.$queryRaw<Array<{ tablename: string }>>`
       SELECT tablename FROM pg_tables WHERE schemaname='public'
@@ -99,13 +99,13 @@ async function runSeed() {
   const org = await prisma.organization.create({
     data: { name: 'BITSathy PBL Program' },
   });
-  console.log('  ✅ Organization created:', org.id);
+  console.info('  ✅ Organization created:', org.id);
 
   // Hash the default password once
   const passwordHash = await bcrypt.hash(DEFAULT_PASSWORD, 10);
 
   // ── 2. Create Admin user ────────────────────────────────────────
-  console.log('\n👤 Creating Admin user...');
+  console.info('\n👤 Creating Admin user...');
   const adminPasswordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
   const adminUser = await prisma.user.create({
     data: {
@@ -117,7 +117,7 @@ async function runSeed() {
       regNo: 'ADMIN001',
     },
   });
-  console.log('  ✅ Admin created:', adminUser.email);
+  console.info('  ✅ Admin created:', adminUser.email);
 
   // Developer account — the only role that can open the AI/system observability portal.
   const developerUser = await prisma.user.create({
@@ -128,10 +128,10 @@ async function runSeed() {
       role: RoleType.DEVELOPER,
     },
   });
-  console.log('  ✅ Developer created:', developerUser.email);
+  console.info('  ✅ Developer created:', developerUser.email);
 
   // ── 3. Parse student data sheet ────────────
-  console.log('\n📊 Parsing student data sheet...');
+  console.info('\n📊 Parsing student data sheet...');
   const studentSheetName = workbook.SheetNames.find(
     (n) => n.toLowerCase().includes('i year') && n.toLowerCase().includes('ii year')
   );
@@ -140,7 +140,7 @@ async function runSeed() {
   }
   const studentSheet = workbook.Sheets[studentSheetName];
   const studentRows: any[] = XLSX.utils.sheet_to_json(studentSheet, { defval: '' });
-  console.log('  Total student rows:', studentRows.length);
+  console.info('  Total student rows:', studentRows.length);
 
   // Collect unique group names from students
   const groupNames = new Set<string>();
@@ -150,7 +150,7 @@ async function runSeed() {
   }
 
   // ── 4. Parse "Group Summary" sheet ──────────────────────────────
-  console.log('\n📊 Parsing Group Summary...');
+  console.info('\n📊 Parsing Group Summary...');
   const groupSummarySheetName = workbook.SheetNames.find(
     (n) => n.toLowerCase() === 'group summary'
   );
@@ -176,7 +176,7 @@ async function runSeed() {
   }
 
   // ── 5. Create Teams ─────────────────────────────────────────────
-  console.log('\n🏗️ Creating teams...');
+  console.info('\n🏗️ Creating teams...');
   const emailToUserId = new Map<string, string>();
   const regNoToUserId = new Map<string, string>();
   const groupNameToTeamId = new Map<string, string>();
@@ -200,10 +200,10 @@ async function runSeed() {
     groupNameToTeamId.set(groupName, team.id);
     teamIdx++;
   }
-  console.log(`  ✅ ${groupNameToTeamId.size} teams created`);
+  console.info(`  ✅ ${groupNameToTeamId.size} teams created`);
 
   // ── 6. Create Students in Batch ──────────────────────────────────
-  console.log('\n👥 Preparing student records for batch insert...');
+  console.info('\n👥 Preparing student records for batch insert...');
   const usersToCreate: any[] = [];
   const processedEmails = new Set<string>();
   processedEmails.add('admin@projectverse.com');
@@ -248,7 +248,7 @@ async function runSeed() {
     });
   }
 
-  console.log(`  Inserting ${usersToCreate.length} student users...`);
+  console.info(`  Inserting ${usersToCreate.length} student users...`);
   const userChunkSize = 1000;
   for (let i = 0; i < usersToCreate.length; i += userChunkSize) {
     const chunk = usersToCreate.slice(i, i + userChunkSize);
@@ -259,7 +259,7 @@ async function runSeed() {
   }
 
   // Populate maps for quick lookups
-  console.log('  Mapping user emails to IDs in memory...');
+  console.info('  Mapping user emails to IDs in memory...');
   const dbUsers = await prisma.user.findMany({
     select: { id: true, email: true, regNo: true },
   });
@@ -267,10 +267,10 @@ async function runSeed() {
     emailToUserId.set(u.email.toLowerCase(), u.id);
     if (u.regNo) regNoToUserId.set(u.regNo.toLowerCase(), u.id);
   }
-  console.log(`  Mapped ${dbUsers.length} users`);
+  console.info(`  Mapped ${dbUsers.length} users`);
 
   // ── 7. Read "User Skill wise rank" to build a point map ────────
-  console.log('\n📊 Parsing User Skill wise rank point data...');
+  console.info('\n📊 Parsing User Skill wise rank point data...');
   const rankMap = new Map<string, { totalPoints: number; skillRank: number | null; totalRanks: number | null }>();
   const skillRankSheetName = workbook.SheetNames.find(
     (n) => n.toLowerCase().includes('user skill wise rank')
@@ -278,7 +278,7 @@ async function runSeed() {
   if (skillRankSheetName) {
     const srSheet = workbook.Sheets[skillRankSheetName];
     const srRows: any[] = XLSX.utils.sheet_to_json(srSheet, { defval: '' });
-    console.log(`  Found ${srRows.length} skill rank rows`);
+    console.info(`  Found ${srRows.length} skill rank rows`);
     for (const row of srRows) {
       const email = cleanString(row['Email ID']);
       const skillName = cleanString(row['Skill Name']);
@@ -296,7 +296,7 @@ async function runSeed() {
   }
 
   // ── 8. Prepare and Create UserSkills in Batch ───────────────────
-  console.log('\n🎯 Preparing user skills in batch...');
+  console.info('\n🎯 Preparing user skills in batch...');
   const skillsToCreate: any[] = [];
   for (const row of studentRows) {
     const email = cleanString(row['Email Id']);
@@ -355,7 +355,7 @@ async function runSeed() {
     uniqueSkills.push(s);
   }
 
-  console.log(`  Inserting ${uniqueSkills.length} user skills...`);
+  console.info(`  Inserting ${uniqueSkills.length} user skills...`);
   const skillChunkSize = 2000;
   for (let i = 0; i < uniqueSkills.length; i += skillChunkSize) {
     const chunk = uniqueSkills.slice(i, i + skillChunkSize);
@@ -364,10 +364,10 @@ async function runSeed() {
       skipDuplicates: true,
     });
   }
-  console.log(`  ✅ User skills inserted`);
+  console.info(`  ✅ User skills inserted`);
 
   // ── 9. Create TeamMember records in Batch ───────────────────────
-  console.log('\n🔗 Creating team memberships...');
+  console.info('\n🔗 Creating team memberships...');
   const groupRegSheetName = workbook.SheetNames.find(
     (n) => n.toLowerCase() === 'group registration'
   );
@@ -376,7 +376,7 @@ async function runSeed() {
   if (groupRegSheetName) {
     const grSheet = workbook.Sheets[groupRegSheetName];
     const grRows: any[] = XLSX.utils.sheet_to_json(grSheet, { defval: '' });
-    console.log('  Group registration rows:', grRows.length);
+    console.info('  Group registration rows:', grRows.length);
 
     for (const row of grRows) {
       const email = cleanString(row['Email']);
@@ -423,7 +423,7 @@ async function runSeed() {
     uniqueTeamMembers.push(tm);
   }
 
-  console.log(`  Inserting ${uniqueTeamMembers.length} team memberships...`);
+  console.info(`  Inserting ${uniqueTeamMembers.length} team memberships...`);
   const memberChunkSize = 2000;
   for (let i = 0; i < uniqueTeamMembers.length; i += memberChunkSize) {
     const chunk = uniqueTeamMembers.slice(i, i + memberChunkSize);
@@ -432,10 +432,10 @@ async function runSeed() {
       skipDuplicates: true,
     });
   }
-  console.log('  ✅ Team memberships created');
+  console.info('  ✅ Team memberships created');
 
   // ── 10. Set team leads (captains) via Transaction ───────────────
-  console.log('\n👑 Setting team captains...');
+  console.info('\n👑 Setting team captains...');
   const teamUpdates = [];
   for (const [groupName, summary] of groupSummaryMap) {
     const teamId = groupNameToTeamId.get(groupName);
@@ -451,16 +451,16 @@ async function runSeed() {
     );
   }
   
-  console.log(`  Executing ${teamUpdates.length} team captain updates...`);
+  console.info(`  Executing ${teamUpdates.length} team captain updates...`);
   const updateChunkSize = 100;
   for (let i = 0; i < teamUpdates.length; i += updateChunkSize) {
     const chunk = teamUpdates.slice(i, i + updateChunkSize);
     await prisma.$transaction(chunk);
   }
-  console.log(`  ✅ Team captains set`);
+  console.info(`  ✅ Team captains set`);
 
   // ── 11. Parse Group Ranking in Batch ────────────────────────────
-  console.log('\n🏆 Parsing Group Ranking...');
+  console.info('\n🏆 Parsing Group Ranking...');
   const rankingSheetName = workbook.SheetNames.find(
     (n) => n.toLowerCase() === 'group ranking'
   );
@@ -485,16 +485,16 @@ async function runSeed() {
       });
     }
 
-    console.log(`  Inserting ${rankingsToCreate.length} group rankings...`);
+    console.info(`  Inserting ${rankingsToCreate.length} group rankings...`);
     await prisma.groupRanking.createMany({
       data: rankingsToCreate,
       skipDuplicates: true,
     });
-    console.log(`  ✅ Group rankings created`);
+    console.info(`  ✅ Group rankings created`);
   }
 
   // ── 12. Parse SSG sheet for domain mapping in Transaction ───────
-  console.log('\n🔧 Parsing SSG domain data...');
+  console.info('\n🔧 Parsing SSG domain data...');
   const ssgSheetName = workbook.SheetNames.find(
     (n) => n.toLowerCase() === 'ssg'
   );
@@ -519,16 +519,16 @@ async function runSeed() {
       );
     }
 
-    console.log(`  Executing ${ssgUpdates.length} SSG domain updates...`);
+    console.info(`  Executing ${ssgUpdates.length} SSG domain updates...`);
     for (let i = 0; i < ssgUpdates.length; i += updateChunkSize) {
       const chunk = ssgUpdates.slice(i, i + updateChunkSize);
       await prisma.$transaction(chunk);
     }
-    console.log(`  ✅ SSG domains updated`);
+    console.info(`  ✅ SSG domains updated`);
   }
 
   // ── 13. Create a demo project for each team in Batch ────────────
-  console.log('\n📁 Creating default workspace projects for teams...');
+  console.info('\n📁 Creating default workspace projects for teams...');
   const projectsToCreate = [];
   for (const [groupName, teamId] of groupNameToTeamId) {
     projectsToCreate.push({
@@ -540,15 +540,15 @@ async function runSeed() {
     });
   }
   
-  console.log(`  Inserting ${projectsToCreate.length} default projects...`);
+  console.info(`  Inserting ${projectsToCreate.length} default projects...`);
   await prisma.project.createMany({
     data: projectsToCreate,
     skipDuplicates: true,
   });
-  console.log(`  ✅ Workspace projects created`);
+  console.info(`  ✅ Workspace projects created`);
 
   // ── 14. Query newly created projects to seed tasks/sprints/boards/etc. ──────
-  console.log('\n🌱 Populating safe temporary workspace data...');
+  console.info('\n🌱 Populating safe temporary workspace data...');
   const createdProjects = await prisma.project.findMany();
   
   // Group memberships by teamId for seeding
@@ -712,11 +712,11 @@ async function runSeed() {
   // Batch Insert Seeding
   const chunkSize = 2000;
   if (boardsToCreate.length > 0) {
-    console.log(`🎬 Creating ${boardsToCreate.length} Boards...`);
+    console.info(`🎬 Creating ${boardsToCreate.length} Boards...`);
     await prisma.board.createMany({ data: boardsToCreate, skipDuplicates: true });
   }
   if (boardColumnsToCreate.length > 0) {
-    console.log(`📋 Creating ${boardColumnsToCreate.length} BoardColumns...`);
+    console.info(`📋 Creating ${boardColumnsToCreate.length} BoardColumns...`);
     for (let i = 0; i < boardColumnsToCreate.length; i += chunkSize) {
       await prisma.boardColumn.createMany({
         data: boardColumnsToCreate.slice(i, i + chunkSize),
@@ -725,11 +725,11 @@ async function runSeed() {
     }
   }
   if (sprintsToCreate.length > 0) {
-    console.log(`🏃 Creating ${sprintsToCreate.length} Sprints...`);
+    console.info(`🏃 Creating ${sprintsToCreate.length} Sprints...`);
     await prisma.sprint.createMany({ data: sprintsToCreate, skipDuplicates: true });
   }
   if (tasksToCreate.length > 0) {
-    console.log(`✅ Creating ${tasksToCreate.length} Tasks...`);
+    console.info(`✅ Creating ${tasksToCreate.length} Tasks...`);
     for (let i = 0; i < tasksToCreate.length; i += chunkSize) {
       await prisma.task.createMany({
         data: tasksToCreate.slice(i, i + chunkSize),
@@ -738,7 +738,7 @@ async function runSeed() {
     }
   }
   if (teamMessagesToCreate.length > 0) {
-    console.log(`💬 Creating ${teamMessagesToCreate.length} TeamMessages...`);
+    console.info(`💬 Creating ${teamMessagesToCreate.length} TeamMessages...`);
     for (let i = 0; i < teamMessagesToCreate.length; i += chunkSize) {
       await prisma.teamMessage.createMany({
         data: teamMessagesToCreate.slice(i, i + chunkSize),
@@ -747,7 +747,7 @@ async function runSeed() {
     }
   }
   if (activityLogsToCreate.length > 0) {
-    console.log(`📝 Creating ${activityLogsToCreate.length} ActivityLogs...`);
+    console.info(`📝 Creating ${activityLogsToCreate.length} ActivityLogs...`);
     for (let i = 0; i < activityLogsToCreate.length; i += chunkSize) {
       await prisma.activityLog.createMany({
         data: activityLogsToCreate.slice(i, i + chunkSize),
@@ -756,12 +756,12 @@ async function runSeed() {
     }
   }
   if (meetingsToCreate.length > 0) {
-    console.log(`📅 Creating ${meetingsToCreate.length} Meetings...`);
+    console.info(`📅 Creating ${meetingsToCreate.length} Meetings...`);
     await prisma.meeting.createMany({ data: meetingsToCreate, skipDuplicates: true });
   }
 
   // ── Seeding Hackathons, LeetCode Contests, and User Streaks ─────
-  console.log('\n🔥 Seeding Hackathons, LeetCode Contests, and User Streaks...');
+  console.info('\n🔥 Seeding Hackathons, LeetCode Contests, and User Streaks...');
   await prisma.hackathon.deleteMany().catch(() => null);
   await prisma.leetCodeContest.deleteMany().catch(() => null);
   await prisma.userStreak.deleteMany().catch(() => null);
@@ -848,7 +848,7 @@ async function runSeed() {
     };
   });
 
-  console.log(`  Inserting ${userStreaksToCreate.length} user streaks...`);
+  console.info(`  Inserting ${userStreaksToCreate.length} user streaks...`);
   for (let i = 0; i < userStreaksToCreate.length; i += chunkSize) {
     await prisma.userStreak.createMany({
       data: userStreaksToCreate.slice(i, i + chunkSize),
@@ -862,7 +862,7 @@ async function runSeed() {
   // a fresh seed. This does not call the live GitHub API (keeps seeding fast
   // and independent of the unauthenticated rate limit) — real projects get
   // their live data lazily on first read via githubService.getForProject.
-  console.log('\n🐙 Seeding GitHub analysis demo data...');
+  console.info('\n🐙 Seeding GitHub analysis demo data...');
   const demoRepos = [
     { owner: 'facebook', repository: 'react', description: 'The library for web and native user interfaces.', language: 'JavaScript', stars: 228000, forks: 47000, watchers: 6800, subscribers: 6800, openIssues: 850, closedIssues: 14200, commitCount: 19500, contributorCount: 1650, branchCount: 120, releaseCount: 1400, tagCount: 1400 },
     { owner: 'vercel', repository: 'next.js', description: 'The React Framework for the Web.', language: 'JavaScript', stars: 126000, forks: 26500, watchers: 1500, subscribers: 1500, openIssues: 2600, closedIssues: 18400, commitCount: 30500, contributorCount: 3200, branchCount: 90, releaseCount: 800, tagCount: 800 },
@@ -934,7 +934,7 @@ async function runSeed() {
       },
     });
   }
-  console.log(`  ✅ Linked ${demoProjects.length} demo project(s) to real public repos with sample analytics`);
+  console.info(`  ✅ Linked ${demoProjects.length} demo project(s) to real public repos with sample analytics`);
 
   // ── Summary ─────────────────────────────────────────────────────
   const end = Date.now();
@@ -950,24 +950,24 @@ async function runSeed() {
     messages: await prisma.teamMessage.count(),
   };
 
-  console.log('\n' + '═'.repeat(50));
-  console.log('✅ SEED & IMPORT COMPLETE in ' + ((end - start) / 1000).toFixed(1) + ' seconds');
-  console.log('═'.repeat(50));
-  console.log(`  Users:          ${finalCounts.users}`);
-  console.log(`  Teams:          ${finalCounts.teams}`);
-  console.log(`  Team Members:   ${finalCounts.teamMembers}`);
-  console.log(`  User Skills:    ${finalCounts.userSkills}`);
-  console.log(`  Group Rankings: ${finalCounts.groupRankings}`);
-  console.log(`  Projects:       ${finalCounts.projects}`);
-  console.log(`  Tasks:          ${finalCounts.tasks}`);
-  console.log(`  Sprints:        ${finalCounts.sprints}`);
-  console.log(`  Team Messages:  ${finalCounts.messages}`);
-  console.log('');
-  console.log('  Login accounts:');
-  console.log('    Admin  → admin@projectverse.com / adminverse123');
-  console.log('    Dev    → developer@projectverse.com / developerverse123');
-  console.log('    Any student email from Excel / password123');
-  console.log('═'.repeat(50));
+  console.info('\n' + '═'.repeat(50));
+  console.info('✅ SEED & IMPORT COMPLETE in ' + ((end - start) / 1000).toFixed(1) + ' seconds');
+  console.info('═'.repeat(50));
+  console.info(`  Users:          ${finalCounts.users}`);
+  console.info(`  Teams:          ${finalCounts.teams}`);
+  console.info(`  Team Members:   ${finalCounts.teamMembers}`);
+  console.info(`  User Skills:    ${finalCounts.userSkills}`);
+  console.info(`  Group Rankings: ${finalCounts.groupRankings}`);
+  console.info(`  Projects:       ${finalCounts.projects}`);
+  console.info(`  Tasks:          ${finalCounts.tasks}`);
+  console.info(`  Sprints:        ${finalCounts.sprints}`);
+  console.info(`  Team Messages:  ${finalCounts.messages}`);
+  console.info('');
+  console.info('  Login accounts:');
+  console.info('    Admin  → admin@projectverse.com / adminverse123');
+  console.info('    Dev    → developer@projectverse.com / developerverse123');
+  console.info('    Any student email from Excel / password123');
+  console.info('═'.repeat(50));
 }
 
 runSeed()

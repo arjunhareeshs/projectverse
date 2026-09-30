@@ -24,5 +24,5 @@ export function runPersonalizationTests() {
 
 if (require.main === module) {
   runPersonalizationTests();
-  console.log('Personalization and stringUtils tests passed successfully!');
+  console.info('Personalization and stringUtils tests passed successfully!');
 }

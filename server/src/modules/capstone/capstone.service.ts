@@ -7,7 +7,6 @@ import {
   MCQ_SYSTEM_PROMPT,
   buildMcqUserPrompt,
   generateFallbackMcqs,
-  McqPayloadSchema,
   GeneratedMcqQuestion,
 } from './capstone.mcqPrompt';
 

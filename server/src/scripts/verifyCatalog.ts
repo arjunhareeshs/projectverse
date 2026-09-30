@@ -16,7 +16,7 @@ async function verify() {
     failures++;
     console.error(`❌ ${msg}`);
   };
-  const pass = (msg: string) => console.log(`✅ ${msg}`);
+  const pass = (msg: string) => console.info(`✅ ${msg}`);
 
   const total = await prisma.project.count({ where: { isTemplate: true, status: 'CATALOG' } });
   if (total >= EXPECTED_TOTAL) {
@@ -80,7 +80,7 @@ async function verify() {
     fail('AgriTech sample row missing a real sector value');
   }
 
-  console.log(failures === 0 ? '\n🎉 All checks passed.' : `\n💥 ${failures} check(s) failed.`);
+  console.info(failures === 0 ? '\n🎉 All checks passed.' : `\n💥 ${failures} check(s) failed.`);
   process.exit(failures === 0 ? 0 : 1);
 }
 

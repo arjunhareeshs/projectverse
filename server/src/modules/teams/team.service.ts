@@ -649,7 +649,7 @@ export const teamService = {
    * Calls ai-service /team-coordination-insights, gets back a narrative,
    * and persists the exchange to AiChat.
    */
-  async getAIInsights(organizationId: string, teamId: string, requestingUserId: string) {
+  async getAIInsights(organizationId: string, teamId: string, _requestingUserId: string) {
     const metrics = await teamService.getCoordinationMetrics(organizationId, teamId);
 
     const aiPayload = {
@@ -695,7 +695,7 @@ export const teamService = {
         timeout: 30_000,
       });
       aiResult = res.data;
-    } catch (err: any) {
+    } catch {
       // AI service down — return metrics with a fallback message
       return {
         metrics,

@@ -63,7 +63,7 @@ export async function bootstrapSocket(httpServer: HttpServer) {
       const decoded = verifyAccessToken(token);
       (socket as any).userId = decoded.sub;
       next();
-    } catch (err) {
+    } catch {
       next(new Error('Authentication error'));
     }
   });

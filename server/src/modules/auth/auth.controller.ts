@@ -69,7 +69,7 @@ export class AuthController {
       }
       const result = await AuthService.me(userId);
       res.status(StatusCodes.OK).json(result);
-    } catch (error: any) {
+    } catch {
       res.status(StatusCodes.NOT_FOUND).json({ message: 'User not found' });
     }
   }

@@ -1,7 +1,7 @@
 import { prisma } from '../shared/database';
 
 async function main() {
-  console.log('Seeding Capstone Problem Statements...');
+  console.info('Seeding Capstone Problem Statements...');
 
   const org = await prisma.organization.findFirst();
   if (!org) {
@@ -65,13 +65,13 @@ async function main() {
           isActive: prob.isActive,
         },
       });
-      console.log(`+ Created capstone problem: ${prob.title}`);
+      console.info(`+ Created capstone problem: ${prob.title}`);
     } else {
-      console.log(`- Problem already exists: ${prob.title}`);
+      console.info(`- Problem already exists: ${prob.title}`);
     }
   }
 
-  console.log('Capstone seeding completed successfully.');
+  console.info('Capstone seeding completed successfully.');
 }
 
 main()

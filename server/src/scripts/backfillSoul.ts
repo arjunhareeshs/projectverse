@@ -1,7 +1,7 @@
 import { prisma } from '../shared/database';
 
 async function backfillSoul() {
-  console.log('Starting backfill for Project.soul...');
+  console.info('Starting backfill for Project.soul...');
   const templates = await prisma.project.findMany({
     where: {
       isTemplate: true,
@@ -16,7 +16,7 @@ async function backfillSoul() {
     },
   });
 
-  console.log(`Found ${templates.length} catalog templates missing soul.`);
+  console.info(`Found ${templates.length} catalog templates missing soul.`);
   let count = 0;
 
   for (const t of templates) {
@@ -39,7 +39,7 @@ async function backfillSoul() {
     }
   }
 
-  console.log(`Successfully updated ${count} project templates with soul.`);
+  console.info(`Successfully updated ${count} project templates with soul.`);
 }
 
 backfillSoul()

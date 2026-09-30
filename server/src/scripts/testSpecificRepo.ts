@@ -3,50 +3,47 @@ import axios from 'axios';
 import { createApp } from '../app';
 import { prisma } from '../shared/database';
 import { signAccessToken } from '../config/jwt';
-import {
-  analyzeCapstoneRepository,
-  parseGithubUrl,
-} from '../modules/capstone/capstone.githubAnalysis';
+import { analyzeCapstoneRepository } from '../modules/capstone/capstone.githubAnalysis';
 
 async function testGroundedIntentGuardPipeline() {
   const targetRepo = 'https://github.com/pratheep-bit/grounded-intent-guard';
 
-  console.log('================================================================');
-  console.log(`  TESTING GITHUB ANALYSIS & CAPSTONE PIPELINE FOR:`);
-  console.log(`  ${targetRepo}`);
-  console.log('================================================================\n');
+  console.info('================================================================');
+  console.info(`  TESTING GITHUB ANALYSIS & CAPSTONE PIPELINE FOR:`);
+  console.info(`  ${targetRepo}`);
+  console.info('================================================================\n');
 
   // STEP 1: Deep GitHub Repository Code Analysis
-  console.log('--- STEP 1: Deep GitHub Repository Code Analysis ---');
+  console.info('--- STEP 1: Deep GitHub Repository Code Analysis ---');
   let analysisResult: any;
   try {
     const startTime = Date.now();
     analysisResult = await analyzeCapstoneRepository(targetRepo);
     const duration = Date.now() - startTime;
 
-    console.log(`✓ Analysis completed in ${duration}ms\n`);
-    console.log(`[Repository Info]`);
-    console.log(`  Owner:          ${analysisResult.owner}`);
-    console.log(`  Repo:           ${analysisResult.repo}`);
-    console.log(`  Default Branch: ${analysisResult.defaultBranch}`);
-    console.log(`  Total Files:    ${analysisResult.totalFilesCount}`);
-    console.log(`  Completeness:   ${analysisResult.projectCompleteness}`);
-    console.log(`\n[Architecture & Tech Stack Detection]`);
-    console.log(`  Framework:      ${analysisResult.framework}`);
-    console.log(`  Architecture:   ${analysisResult.architecture}`);
-    console.log(`  Database:       ${analysisResult.databaseUsage}`);
-    console.log(`  Authentication: ${analysisResult.authUsage}`);
-    console.log(`  Testing:        ${analysisResult.testingPresence}`);
-    console.log(`  Languages:     `, analysisResult.languages);
-    console.log(`  Major Modules: `, analysisResult.majorModules);
-    console.log(`  API Routes:    `, analysisResult.apiRoutes);
-    console.log(`  Frontend UI:   `, analysisResult.frontendComponents);
-    console.log(`  Backend Serv:  `, analysisResult.backendServices);
-    console.log(`\n[Inspected Code Snippets] (Count: ${analysisResult.inspectedFiles?.length || 0})`);
+    console.info(`✓ Analysis completed in ${duration}ms\n`);
+    console.info(`[Repository Info]`);
+    console.info(`  Owner:          ${analysisResult.owner}`);
+    console.info(`  Repo:           ${analysisResult.repo}`);
+    console.info(`  Default Branch: ${analysisResult.defaultBranch}`);
+    console.info(`  Total Files:    ${analysisResult.totalFilesCount}`);
+    console.info(`  Completeness:   ${analysisResult.projectCompleteness}`);
+    console.info(`\n[Architecture & Tech Stack Detection]`);
+    console.info(`  Framework:      ${analysisResult.framework}`);
+    console.info(`  Architecture:   ${analysisResult.architecture}`);
+    console.info(`  Database:       ${analysisResult.databaseUsage}`);
+    console.info(`  Authentication: ${analysisResult.authUsage}`);
+    console.info(`  Testing:        ${analysisResult.testingPresence}`);
+    console.info(`  Languages:     `, analysisResult.languages);
+    console.info(`  Major Modules: `, analysisResult.majorModules);
+    console.info(`  API Routes:    `, analysisResult.apiRoutes);
+    console.info(`  Frontend UI:   `, analysisResult.frontendComponents);
+    console.info(`  Backend Serv:  `, analysisResult.backendServices);
+    console.info(`\n[Inspected Code Snippets] (Count: ${analysisResult.inspectedFiles?.length || 0})`);
     analysisResult.inspectedFiles?.forEach((file: any, i: number) => {
-      console.log(`  ${i + 1}. ${file.path} (${file.snippet?.length || 0} chars)`);
+      console.info(`  ${i + 1}. ${file.path} (${file.snippet?.length || 0} chars)`);
       const preview = file.snippet?.substring(0, 150)?.replace(/\n/g, ' ') || '';
-      console.log(`     Preview: "${preview}..."`);
+      console.info(`     Preview: "${preview}..."`);
     });
   } catch (err: any) {
     console.error('❌ Failed during GitHub code analysis:', err);
@@ -54,14 +51,14 @@ async function testGroundedIntentGuardPipeline() {
   }
 
   // STEP 2: Start In-Process Server & Test Fixtures
-  console.log('\n--- STEP 2: Setting up Test Server & Fixtures ---');
+  console.info('\n--- STEP 2: Setting up Test Server & Fixtures ---');
   const app = createApp();
   const server = http.createServer(app);
   const TEST_PORT = 4225;
 
   await new Promise<void>((resolve) => {
     server.listen(TEST_PORT, () => {
-      console.log(`✓ Test HTTP server listening on http://127.0.0.1:${TEST_PORT}`);
+      console.info(`✓ Test HTTP server listening on http://127.0.0.1:${TEST_PORT}`);
       resolve();
     });
   });
@@ -94,7 +91,7 @@ async function testGroundedIntentGuardPipeline() {
     orgId: org.id,
   });
 
-  console.log(`✓ Created test user: ${student.fullName} (${student.id})`);
+  console.info(`✓ Created test user: ${student.fullName} (${student.id})`);
 
   // Create or retrieve matching Capstone Problem Statement
   const problem = await prisma.capstoneProblemStatement.create({
@@ -111,10 +108,10 @@ async function testGroundedIntentGuardPipeline() {
     },
   });
 
-  console.log(`✓ Created capstone problem: "${problem.title}" (ID: ${problem.id})`);
+  console.info(`✓ Created capstone problem: "${problem.title}" (ID: ${problem.id})`);
 
   // STEP 3: Student Claims the Capstone Problem
-  console.log('\n--- STEP 3: Claiming Capstone Project (No Approach Text Required) ---');
+  console.info('\n--- STEP 3: Claiming Capstone Project (No Approach Text Required) ---');
   const claimRes = await api.post(
     `/capstone/${problem.id}/claim`,
     {},
@@ -129,11 +126,11 @@ async function testGroundedIntentGuardPipeline() {
 
   const selectionId = claimRes.data?.data?.selection?.id || claimRes.data?.selection?.id;
   const projectId = claimRes.data?.data?.project?.id || claimRes.data?.project?.id;
-  console.log(`✓ Successfully claimed problem. Selection ID: ${selectionId}, Project ID: ${projectId}`);
+  console.info(`✓ Successfully claimed problem. Selection ID: ${selectionId}, Project ID: ${projectId}`);
 
   // STEP 4: Submit GitHub Repo and Trigger Deep Analysis & MCQ Generation
-  console.log('\n--- STEP 4: Submitting GitHub Repo & Triggering AI MCQ Generation ---');
-  console.log(`Submitting URL: ${targetRepo}`);
+  console.info('\n--- STEP 4: Submitting GitHub Repo & Triggering AI MCQ Generation ---');
+  console.info(`Submitting URL: ${targetRepo}`);
   const submitStart = Date.now();
   const submitRes = await api.post(
     `/capstone/${selectionId}/submit-github`,
@@ -145,8 +142,8 @@ async function testGroundedIntentGuardPipeline() {
   );
 
   const submitDuration = Date.now() - submitStart;
-  console.log(`✓ Submission API call returned HTTP ${submitRes.status} in ${submitDuration}ms`);
-  console.log('Submission Response Payload:', JSON.stringify(submitRes.data, null, 2));
+  console.info(`✓ Submission API call returned HTTP ${submitRes.status} in ${submitDuration}ms`);
+  console.info('Submission Response Payload:', JSON.stringify(submitRes.data, null, 2));
 
   if (submitRes.status !== 200) {
     console.error('❌ Submission failed:', submitRes.data);
@@ -155,14 +152,14 @@ async function testGroundedIntentGuardPipeline() {
   }
 
   // STEP 5: Retrieve MCQs Served to Student
-  console.log('\n--- STEP 5: Retrieving Generated MCQs for Student ---');
+  console.info('\n--- STEP 5: Retrieving Generated MCQs for Student ---');
   const mcqRes = await api.get(`/capstone/${selectionId}/mcq`, {
     headers: { Authorization: `Bearer ${studentToken}` },
   });
 
   const mcqData = mcqRes.data?.data || mcqRes.data;
   const questions = mcqData?.questions || [];
-  console.log(`✓ Retrieved ${questions.length} questions from API.`);
+  console.info(`✓ Retrieved ${questions.length} questions from API.`);
 
   // Verify Security: Zero answer or explanation leaks
   let answerLeaked = false;
@@ -175,23 +172,23 @@ async function testGroundedIntentGuardPipeline() {
   if (answerLeaked) {
     console.error('❌ SECURITY VIOLATION: correctOption or explanation found in client response!');
   } else {
-    console.log('✓ Security Check: correctOption and explanation are completely scrubbed from client payload.');
+    console.info('✓ Security Check: correctOption and explanation are completely scrubbed from client payload.');
   }
 
   // Print all 15 Generated Questions & 6 Options
-  console.log('\n================================================================');
-  console.log('  GENERATED 15 CAPSTONE MCQs (6 OPTIONS EACH):');
-  console.log('================================================================\n');
+  console.info('\n================================================================');
+  console.info('  GENERATED 15 CAPSTONE MCQs (6 OPTIONS EACH):');
+  console.info('================================================================\n');
 
   questions.forEach((q: any, index: number) => {
-    console.log(`Question ${index + 1} [Topic: ${q.topic || 'General'} | Difficulty: ${q.difficulty || 'Medium'}]:`);
-    console.log(`  ${q.question}`);
-    console.log('  Options:');
+    console.info(`Question ${index + 1} [Topic: ${q.topic || 'General'} | Difficulty: ${q.difficulty || 'Medium'}]:`);
+    console.info(`  ${q.question}`);
+    console.info('  Options:');
     (q.options || []).forEach((opt: string, optIdx: number) => {
       const letter = String.fromCharCode(65 + optIdx);
-      console.log(`    [${letter}] ${opt}`);
+      console.info(`    [${letter}] ${opt}`);
     });
-    console.log('');
+    console.info('');
   });
 
   // Verify backend DB representation has valid answer keys
@@ -199,10 +196,10 @@ async function testGroundedIntentGuardPipeline() {
     where: { selectionId },
     orderBy: { createdAt: 'asc' },
   });
-  console.log(`✓ Verified ${dbQuestions.length} questions stored in DB before answering.`);
+  console.info(`✓ Verified ${dbQuestions.length} questions stored in DB before answering.`);
 
   // STEP 6: Answer Submission & Scoring
-  console.log('\n--- STEP 6: Submitting Student Answers & Server-Side Scoring ---');
+  console.info('\n--- STEP 6: Submitting Student Answers & Server-Side Scoring ---');
   // Answering 13 correctly and 2 wrong
   const answersPayload = dbQuestions.map((q, idx) => {
     if (idx < 13) {
@@ -219,27 +216,27 @@ async function testGroundedIntentGuardPipeline() {
   );
 
   const scoreData = scoreRes.data?.data || scoreRes.data;
-  console.log(`✓ Submit answers returned HTTP ${scoreRes.status}:`);
-  console.log(`  Score:      ${scoreData?.score} / ${scoreData?.totalQuestions}`);
-  console.log(`  Percentage: ${scoreData?.percentage}%`);
-  console.log(`  Completed:  ${scoreData?.completedAt}`);
+  console.info(`✓ Submit answers returned HTTP ${scoreRes.status}:`);
+  console.info(`  Score:      ${scoreData?.score} / ${scoreData?.totalQuestions}`);
+  console.info(`  Percentage: ${scoreData?.percentage}%`);
+  console.info(`  Completed:  ${scoreData?.completedAt}`);
 
   // STEP 7: Database State & Cleanup Verification
-  console.log('\n--- STEP 7: Database Cleanup & Persistence Check ---');
+  console.info('\n--- STEP 7: Database Cleanup & Persistence Check ---');
   const remainingQuestions = await prisma.capstoneMcqQuestion.count({
     where: { selectionId },
   });
-  console.log(`✓ Rule 7: Remaining CapstoneMcqQuestion rows: ${remainingQuestions} (must be 0)`);
+  console.info(`✓ Rule 7: Remaining CapstoneMcqQuestion rows: ${remainingQuestions} (must be 0)`);
 
   const updatedSelection = await prisma.capstoneSelection.findUnique({
     where: { id: selectionId },
   });
-  console.log(`✓ Rule 8: Selection status="${updatedSelection?.status}", mcqScore=${updatedSelection?.mcqScore}`);
+  console.info(`✓ Rule 8: Selection status="${updatedSelection?.status}", mcqScore=${updatedSelection?.mcqScore}`);
 
   const auditAnswersCount = await prisma.capstoneMcqAnswer.count({
     where: { selectionId },
   });
-  console.log(`✓ Audit trails: Saved ${auditAnswersCount} answer records in CapstoneMcqAnswer.`);
+  console.info(`✓ Audit trails: Saved ${auditAnswersCount} answer records in CapstoneMcqAnswer.`);
 
   // Cleanup test fixtures
   try {
@@ -255,9 +252,9 @@ async function testGroundedIntentGuardPipeline() {
 
   server.close();
 
-  console.log('\n================================================================');
-  console.log('  PIPELINE AUDIT COMPLETE FOR grounded-intent-guard: 100% SUCCESS!');
-  console.log('================================================================');
+  console.info('\n================================================================');
+  console.info('  PIPELINE AUDIT COMPLETE FOR grounded-intent-guard: 100% SUCCESS!');
+  console.info('================================================================');
 }
 
 testGroundedIntentGuardPipeline().catch((err) => {

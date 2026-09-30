@@ -134,7 +134,7 @@ export class DocGeneratorEngine {
       return this.getFallbackDocument({ duration: { months }, title: 'Project' }, null);
     }
 
-    let sum = doc.workBreakdown.reduce((acc, wp) => acc + (Number(wp.percentage) || 0), 0);
+    const sum = doc.workBreakdown.reduce((acc, wp) => acc + (Number(wp.percentage) || 0), 0);
     if (sum !== 100 && Math.abs(sum - 100) <= 5) {
       // Normalize
       const factor = 100 / sum;

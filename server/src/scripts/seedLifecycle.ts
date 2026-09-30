@@ -39,13 +39,13 @@ function isoDaysAgo(days: number): string {
 }
 
 async function main() {
-  console.log('[SeedLifecycle] Starting…');
+  console.info('[SeedLifecycle] Starting…');
 
   // 1. Organization (reuse first, else create)
   let org = await prisma.organization.findFirst();
   if (!org) {
     org = await prisma.organization.create({ data: { name: 'ProjectVerse Institute' } });
-    console.log(`[SeedLifecycle] Created organization ${org.name}`);
+    console.info(`[SeedLifecycle] Created organization ${org.name}`);
   }
 
   // 2. Users (upsert by unique email) + their skills
@@ -73,7 +73,7 @@ async function main() {
     users.push({ ...user, roleLabel: m.roleLabel });
   }
   const captain = users[0];
-  console.log(`[SeedLifecycle] Upserted ${users.length} users with skills`);
+  console.info(`[SeedLifecycle] Upserted ${users.length} users with skills`);
 
   // 3. Team (find by name, else create) + TeamMember rows + User.team link
   let team = await prisma.team.findFirst({ where: { name: DEMO.teamName, organizationId: org.id } });
@@ -87,7 +87,7 @@ async function main() {
         domain: 'Agriculture',
       },
     });
-    console.log(`[SeedLifecycle] Created team ${team.name}`);
+    console.info(`[SeedLifecycle] Created team ${team.name}`);
   }
   for (const u of users) {
     await prisma.teamMember.upsert({
@@ -116,7 +116,7 @@ async function main() {
         status: 'pending_approval',
       },
     });
-    console.log(`[SeedLifecycle] Created project ${project.name}`);
+    console.info(`[SeedLifecycle] Created project ${project.name}`);
   }
   // Project members (idempotent via unique [projectId, userId])
   for (const u of users) {
@@ -159,9 +159,9 @@ async function main() {
       actorUserId: captain.id,
       data: { technologies: project.technologies },
     });
-    console.log('[SeedLifecycle] Seeded Project Log intake events');
+    console.info('[SeedLifecycle] Seeded Project Log intake events');
   } else {
-    console.log('[SeedLifecycle] Project Log already existed — skipped intake events');
+    console.info('[SeedLifecycle] Project Log already existed — skipped intake events');
   }
 
   // 6. Daily work logs — Alice & Bob active across ~10 days, Carol mostly
@@ -187,14 +187,14 @@ async function main() {
       create: { projectId: project.id, userId: l.user.id, date, workDone: l.workDone, hoursSpent: l.hours, blockers: l.blockers },
     });
   }
-  console.log(`[SeedLifecycle] Upserted ${dailyLogs.length} daily work logs (Alice=5, Bob=3, Carol=1)`);
+  console.info(`[SeedLifecycle] Upserted ${dailyLogs.length} daily work logs (Alice=5, Bob=3, Carol=1)`);
 
   const state = await projectLogService.getState(project.id);
-  console.log('[SeedLifecycle] ✅ Done.');
-  console.log(`  Project:   ${project.name}`);
-  console.log(`  Project ID: ${project.id}`);
-  console.log(`  Log version: ${state?.version}  |  members: ${state?.team.members.length}  |  technologies: ${state?.technologies.join(', ')}`);
-  console.log('  Login: alice.lifecycle@projectverse.com / password123');
+  console.info('[SeedLifecycle] ✅ Done.');
+  console.info(`  Project:   ${project.name}`);
+  console.info(`  Project ID: ${project.id}`);
+  console.info(`  Log version: ${state?.version}  |  members: ${state?.team.members.length}  |  technologies: ${state?.technologies.join(', ')}`);
+  console.info('  Login: alice.lifecycle@projectverse.com / password123');
 }
 
 main()

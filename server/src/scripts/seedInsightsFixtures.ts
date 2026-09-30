@@ -1,7 +1,7 @@
 import { prisma } from '../shared/database';
 
 export async function seedInsightsFixtures() {
-  console.log('[Seed] Seeding insights test fixtures...');
+  console.info('[Seed] Seeding insights test fixtures...');
 
   let org = await prisma.organization.findFirst();
   if (!org) {
@@ -78,7 +78,7 @@ export async function seedInsightsFixtures() {
   });
 
   // 2. Create Projects
-  const projAlpha = await prisma.project.upsert({
+  await prisma.project.upsert({
     where: { problemId: 'H-TEST-01' },
     update: {
       problemStatement: 'Automate student classroom attendance using OpenCV face detection, deep learning embeddings, and automated notification logs.',
@@ -104,7 +104,7 @@ export async function seedInsightsFixtures() {
     },
   });
 
-  const projBeta = await prisma.project.upsert({
+  await prisma.project.upsert({
     where: { problemId: 'H-TEST-02' },
     update: {
       problemStatement: 'Automate student classroom attendance using OpenCV face detection, deep learning embeddings, and automated notification logs.',
@@ -130,7 +130,7 @@ export async function seedInsightsFixtures() {
     },
   });
 
-  const projGamma = await prisma.project.upsert({
+  await prisma.project.upsert({
     where: { problemId: 'H-TEST-03' },
     update: {
       problemStatement: 'Automate student classroom attendance using OpenCV face detection, deep learning embeddings, and automated notification logs.',
@@ -156,7 +156,7 @@ export async function seedInsightsFixtures() {
     },
   });
 
-  const projControl = await prisma.project.upsert({
+  await prisma.project.upsert({
     where: { problemId: 'H-TEST-04' },
     update: {},
     create: {
@@ -297,7 +297,7 @@ export async function seedInsightsFixtures() {
     },
   });
 
-  console.log('[Seed] Insights test fixtures successfully seeded!');
+  console.info('[Seed] Insights test fixtures successfully seeded!');
 }
 
 if (require.main === module) {

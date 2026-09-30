@@ -151,7 +151,7 @@ export const catalogController = {
         return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid or missing category' });
       }
       res.json({ success: true, category, sessionId: `session_${Date.now()}` });
-    } catch (error) {
+    } catch {
       res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Internal server error' });
     }
   },
@@ -604,7 +604,6 @@ export const catalogController = {
         user.teamId = teamId;
       }
 
-      const { id } = req.params;
       const { differentiationApproach, repoLink, category, teamMembers = [] } = req.body as {
         differentiationApproach?: string;
         repoLink?: string;

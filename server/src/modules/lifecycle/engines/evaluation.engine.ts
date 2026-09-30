@@ -168,7 +168,7 @@ export class EvaluationEngine {
 
     // Query Previous Cycle's Exact 10 Numerical Marks (Clean Baseline — Zero Raw Text Appended)
     let previousCycleMarks: any = null;
-    let prevStudentsMap = new Map<string, any>();
+    const prevStudentsMap = new Map<string, any>();
     let prevTeamRecord: any = null;
     let prevProjectRecord: any = null;
 

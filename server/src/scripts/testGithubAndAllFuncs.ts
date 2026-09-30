@@ -21,21 +21,21 @@ const results: CheckResult[] = [];
 function record(step: string, passed: boolean, details: string, error?: any) {
   results.push({ step, passed, details, error });
   const statusStr = passed ? '✅ PASS' : '❌ FAIL';
-  console.log(`[${statusStr}] ${step} - ${details}`);
+  console.info(`[${statusStr}] ${step} - ${details}`);
   if (error) {
     console.error('   Error details:', error);
   }
 }
 
 async function runComprehensiveAudit() {
-  console.log('================================================================');
-  console.log('  STARTING DEEP GITHUB & CAPSTONE FUNCTIONALITY AUDIT');
-  console.log('================================================================\n');
+  console.info('================================================================');
+  console.info('  STARTING DEEP GITHUB & CAPSTONE FUNCTIONALITY AUDIT');
+  console.info('================================================================\n');
 
   // -------------------------------------------------------------
   // PART 1: Direct GitHub Analysis Unit Tests
   // -------------------------------------------------------------
-  console.log('--- PART 1: Testing GitHub Analysis Engine ---');
+  console.info('--- PART 1: Testing GitHub Analysis Engine ---');
 
   // 1.1 Invalid URL parsing
   try {
@@ -86,7 +86,7 @@ async function runComprehensiveAudit() {
   }
 
   // 1.5 Real GitHub Repo Analysis: expressjs/express (A real public GitHub repo)
-  console.log('\n--- Analyzing real GitHub repository: expressjs/express ---');
+  console.info('\n--- Analyzing real GitHub repository: expressjs/express ---');
   try {
     const analysis = await analyzeCapstoneRepository('https://github.com/expressjs/express');
     const hasRequiredFields =
@@ -106,7 +106,7 @@ async function runComprehensiveAudit() {
   }
 
   // 1.6 Non-existent GitHub Repo: Should cleanly catch 404
-  console.log('\n--- Analyzing non-existent repository: should return NOT_FOUND ---');
+  console.info('\n--- Analyzing non-existent repository: should return NOT_FOUND ---');
   try {
     await analyzeCapstoneRepository('https://github.com/nonexistentuser000000000001/nonexistentrepo999999999999');
     record('1.6 Non-existent GitHub Repo', false, 'Should have thrown NOT_FOUND error');
@@ -121,7 +121,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 2: Database Setup & Test HTTP Server
   // -------------------------------------------------------------
-  console.log('\n--- PART 2: Database & Test Server Setup ---');
+  console.info('\n--- PART 2: Database & Test Server Setup ---');
 
   const app = createApp();
   const server = http.createServer(app);
@@ -129,7 +129,7 @@ async function runComprehensiveAudit() {
 
   await new Promise<void>((resolve) => {
     server.listen(TEST_PORT, () => {
-      console.log(`✓ Test HTTP server listening on http://127.0.0.1:${TEST_PORT}`);
+      console.info(`✓ Test HTTP server listening on http://127.0.0.1:${TEST_PORT}`);
       resolve();
     });
   });
@@ -204,7 +204,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 3: Catalog & Dual-Mode Isolation Verification
   // -------------------------------------------------------------
-  console.log('\n--- PART 3: Catalog & Dual-Mode Isolation ---');
+  console.info('\n--- PART 3: Catalog & Dual-Mode Isolation ---');
 
   // Normal project catalog must not crash and continue returning standard projects
   const normalRes = await api.get('/projects/catalog', {
@@ -233,7 +233,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 4: Claiming Capstone & Duplicate Protection
   // -------------------------------------------------------------
-  console.log('\n--- PART 4: Claiming Capstone Project ---');
+  console.info('\n--- PART 4: Claiming Capstone Project ---');
 
   // 4.1 Direct Claim Execution without mandatory approach text
   const claimRes = await api.post(
@@ -291,7 +291,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 5: 7-Day Gate & Sequence Security Verification
   // -------------------------------------------------------------
-  console.log('\n--- PART 5: 7-Day Timeline & Sequence Constraints ---');
+  console.info('\n--- PART 5: 7-Day Timeline & Sequence Constraints ---');
 
   // 5.1 Rule 3: Cannot attend MCQ before GitHub submission
   const prematureMcqRes = await api.get(`/capstone/${selectionId}/mcq`, {
@@ -323,7 +323,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 6: GitHub Submission & MCQ Generation with Real Analysis
   // -------------------------------------------------------------
-  console.log('\n--- PART 6: GitHub Submission & AI MCQ Generation ---');
+  console.info('\n--- PART 6: GitHub Submission & AI MCQ Generation ---');
 
   // Now submit with bypassTimeCheck: true (simulating completion of the 7-day timeline)
   // using real repo: https://github.com/expressjs/express
@@ -346,7 +346,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 7: MCQ Security - Zero Answer Leaks & 15 Questions / 6 Options
   // -------------------------------------------------------------
-  console.log('\n--- PART 7: MCQ Security & Structure Audit ---');
+  console.info('\n--- PART 7: MCQ Security & Structure Audit ---');
 
   const mcqFetchRes = await api.get(`/capstone/${selectionId}/mcq`, {
     headers: { Authorization: `Bearer ${studentToken}` },
@@ -388,7 +388,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 8: MCQ Answering, Scoring, Cleanup & Persistence
   // -------------------------------------------------------------
-  console.log('\n--- PART 8: Answering, Scoring & Database Cleanup ---');
+  console.info('\n--- PART 8: Answering, Scoring & Database Cleanup ---');
 
   // Incomplete submission test (e.g. only 10 answers)
   const incompleteAnswers = dbQuestions.slice(0, 10).map((q) => ({
@@ -510,7 +510,7 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // PART 9: Admin Operations & Analytics
   // -------------------------------------------------------------
-  console.log('\n--- PART 9: Admin Management & Analytics ---');
+  console.info('\n--- PART 9: Admin Management & Analytics ---');
 
   // 9.1 Admin list problems (must include claimCount and avgScore)
   const adminProblemsRes = await api.get('/capstone/problems', {
@@ -624,26 +624,26 @@ async function runComprehensiveAudit() {
   // -------------------------------------------------------------
   // Summary
   // -------------------------------------------------------------
-  console.log('\n================================================================');
-  console.log('  AUDIT SUMMARY');
-  console.log('================================================================');
+  console.info('\n================================================================');
+  console.info('  AUDIT SUMMARY');
+  console.info('================================================================');
   const total = results.length;
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed).length;
 
-  console.log(`TOTAL CHECKS: ${total}`);
-  console.log(`PASSED:       ${passed}`);
-  console.log(`FAILED:       ${failed}`);
-  console.log(`SUCCESS RATE: ${Math.round((passed / total) * 100)}%`);
+  console.info(`TOTAL CHECKS: ${total}`);
+  console.info(`PASSED:       ${passed}`);
+  console.info(`FAILED:       ${failed}`);
+  console.info(`SUCCESS RATE: ${Math.round((passed / total) * 100)}%`);
 
   if (failed > 0) {
-    console.log('\nFAILED CHECKS:');
+    console.info('\nFAILED CHECKS:');
     results.filter((r) => !r.passed).forEach((r) => {
-      console.log(`  - [${r.step}]: ${r.details}`);
+      console.info(`  - [${r.step}]: ${r.details}`);
     });
     process.exit(1);
   } else {
-    console.log('\n🎉 ALL GITHUB & CAPSTONE CHECKS COMPLETED WITH 100% SUCCESS!');
+    console.info('\n🎉 ALL GITHUB & CAPSTONE CHECKS COMPLETED WITH 100% SUCCESS!');
     process.exit(0);
   }
 }

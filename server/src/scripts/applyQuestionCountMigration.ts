@@ -1,7 +1,7 @@
 import { prisma } from '../shared/database';
 
 async function main() {
-  console.log('Adding questionCount column to CapstoneProblemStatement...');
+  console.info('Adding questionCount column to CapstoneProblemStatement...');
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "CapstoneProblemStatement" 
     ADD COLUMN IF NOT EXISTS "questionCount" INTEGER NOT NULL DEFAULT 15;
@@ -13,7 +13,7 @@ async function main() {
     WHERE table_name = 'CapstoneProblemStatement' AND column_name = 'questionCount';
   `;
 
-  console.log('Verified column in DB:', cols);
+  console.info('Verified column in DB:', cols);
 }
 
 main()

@@ -337,7 +337,7 @@ export class LifecycleController {
             },
           });
         }
-      } catch (escErr) {
+      } catch {
         // Blocker escalation check is best-effort
       }
 
@@ -475,7 +475,7 @@ export class LifecycleController {
       }
       const answer = await mentorEngine.askMentor(projectId, parsed.data.question);
       res.status(StatusCodes.OK).json({ answer });
-    } catch (err: any) {
+    } catch {
       res.status(StatusCodes.OK).json({ answer: 'AI mentor is not configured or encountered an error.' });
     }
   }
@@ -906,7 +906,7 @@ export class LifecycleController {
             ),
           );
         }
-      } catch (notifyErr) {
+      } catch {
         // Notification is best-effort
       }
 

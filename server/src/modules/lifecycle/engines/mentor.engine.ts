@@ -299,7 +299,7 @@ export class MentorEngine {
     return chat(prompt, fallback, { feature: 'mentorAsk' });
   }
 
-  async checkDurationAdvisory(months: number, category?: string, title?: string) {
+  async checkDurationAdvisory(months: number, category?: string, _title?: string) {
     const cat = category || 'FINAL_YEAR';
     const bounds: Record<string, { min: number; max: number; standard: string }> = {
       MINI: { min: 1, max: 3, standard: '1–3 months' },

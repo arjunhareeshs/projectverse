@@ -33,7 +33,7 @@ export async function authGuard(req: AuthenticatedRequest, res: Response, next: 
     runWithUserContext(user.id, () => {
       next();
     });
-  } catch (error) {
+  } catch {
     res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Invalid access token' });
   }
 }

@@ -62,7 +62,7 @@ async function purgeRogueTemplates(organizationId: string) {
     });
   }
 
-  console.log(
+  console.info(
     `🧹 Purge: removed ${deletable.length} rogue catalog template(s) with no team selections.`,
   );
   if (retained.length > 0) {
@@ -79,7 +79,7 @@ async function purgeRogueTemplates(organizationId: string) {
 }
 
 async function runSeed() {
-  console.log('📖 Reading Excel file:', EXCEL_PATH);
+  console.info('📖 Reading Excel file:', EXCEL_PATH);
   const workbook = XLSX.readFile(EXCEL_PATH);
 
   if (!workbook.SheetNames.includes(SHEET_NAME)) {
@@ -88,7 +88,7 @@ async function runSeed() {
 
   const sheet = workbook.Sheets[SHEET_NAME];
   const rows: ExcelRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-  console.log(`📄 Found ${rows.length} problem statements`);
+  console.info(`📄 Found ${rows.length} problem statements`);
 
   const org = await prisma.organization.findFirst();
   if (!org) {
@@ -135,7 +135,7 @@ async function runSeed() {
     }
   }
 
-  console.log(`✅ Done. Created: ${created}, Updated: ${updated}, Skipped (bad row): ${skipped}`);
+  console.info(`✅ Done. Created: ${created}, Updated: ${updated}, Skipped (bad row): ${skipped}`);
 }
 
 runSeed()

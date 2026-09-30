@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const DEFAULT_PASSWORD = 'password123';
 
 async function main() {
-  console.log('🌱 Seeding exact AI Core teams from screenshot...');
+  console.info('🌱 Seeding exact AI Core teams from screenshot...');
 
   // Ensure organization exists
   let org = await prisma.organization.findFirst();
@@ -42,7 +42,7 @@ async function main() {
   };
 
   // 1. Team Pulse 2
-  console.log('- Seeding Team Pulse 2...');
+  console.info('- Seeding Team Pulse 2...');
   const mia = await ensureUser('mia.k@projectverse.com', 'Mia K.', 'PV2404', 'AI Core');
   const ana = await ensureUser('ana.y@projectverse.com', 'Ana Y.', 'PV2405', 'AI Core');
   const riya = await ensureUser('riya.p@projectverse.com', 'Riya P.', 'PV2406', 'AI Core');
@@ -120,7 +120,7 @@ async function main() {
   });
 
   // 2. Team Alpha 2
-  console.log('- Seeding Team Alpha 2...');
+  console.info('- Seeding Team Alpha 2...');
   const john = await ensureUser('john.d@projectverse.com', 'John D.', 'PV2407', 'AI Core');
   const lisa = await ensureUser('lisa.m@projectverse.com', 'Lisa M.', 'PV2408', 'AI Core');
   const kev = await ensureUser('kev.s@projectverse.com', 'Kev S.', 'PV2409', 'AI Core');
@@ -176,7 +176,7 @@ async function main() {
   });
 
   // 3. Team Pulse 1
-  console.log('- Seeding Team Pulse 1...');
+  console.info('- Seeding Team Pulse 1...');
   const sarah = await ensureUser('sarah.j@projectverse.com', 'Sarah J.', 'PV2410', 'AI Core');
   const mike = await ensureUser('mike.t@projectverse.com', 'Mike T.', 'PV2411', 'AI Core');
   const ben = await ensureUser('ben.c@projectverse.com', 'Ben C.', 'PV2412', 'AI Core');
@@ -232,7 +232,7 @@ async function main() {
   });
 
   // 4. Team Alpha 1
-  console.log('- Seeding Team Alpha 1...');
+  console.info('- Seeding Team Alpha 1...');
   const amy = await ensureUser('amy.w@projectverse.com', 'Amy W.', 'PV2413', 'AI Core');
   const tom = await ensureUser('tom.h@projectverse.com', 'Tom H.', 'PV2414', 'AI Core');
   const zoe = await ensureUser('zoe.l@projectverse.com', 'Zoe L.', 'PV2415', 'AI Core');
@@ -287,7 +287,7 @@ async function main() {
     },
   });
 
-  console.log('✅ Seeding exact AI Core teams completed successfully!');
+  console.info('✅ Seeding exact AI Core teams completed successfully!');
 }
 
 main()

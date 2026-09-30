@@ -5,7 +5,7 @@ const PASSWORD_HASH = '$2b$10$P9sKqAydXjsvSvRQFdLIRuBUQ46UcYMcZnjCIqgxyAjc/kD7yv
 const prisma = new PrismaClient();
 
 async function seedTeamDemo() {
-  console.log('Seeding Syed Saffridin Demo Team...');
+  console.info('Seeding Syed Saffridin Demo Team...');
   
   // Ensure we have an organization
   let org = await prisma.organization.findFirst();
@@ -71,8 +71,8 @@ async function seedTeamDemo() {
     ]
   });
 
-  console.log('✅ Demo team seeded successfully!');
-  console.log('  Captain: syed.saffridin@projectverse.com / password123');
+  console.info('✅ Demo team seeded successfully!');
+  console.info('  Captain: syed.saffridin@projectverse.com / password123');
 }
 
 seedTeamDemo()

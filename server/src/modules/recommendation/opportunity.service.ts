@@ -164,7 +164,7 @@ export class OpportunityService {
       const gateResult = evaluateOpportunityGate(gateInput);
 
       if (!gateResult.baseGatePassed || !gateResult.hasSearchableContext) {
-        console.log(
+        console.info(
           `[Recommendation] Project ${p.id} skipped: ${gateResult.skipReasons.slice(0, 2).join('; ')}`,
         );
         continue;
@@ -294,7 +294,7 @@ export class OpportunityService {
       }
     }
 
-    console.log('[Recommendation] Opportunity matching complete:', stats);
+    console.info('[Recommendation] Opportunity matching complete:', stats);
     return stats;
   }
 

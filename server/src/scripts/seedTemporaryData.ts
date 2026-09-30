@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const start = Date.now();
-  console.log('🌱 Starting safe temporary data seeding...');
+  console.info('🌱 Starting safe temporary data seeding...');
 
   // 1. Fetch all teams, projects, and memberships
   const teams = await prisma.team.findMany();
@@ -13,7 +13,7 @@ async function main() {
     include: { user: true },
   });
 
-  console.log(`  Found ${teams.length} teams, ${projects.length} projects, and ${memberships.length} memberships in database.`);
+  console.info(`  Found ${teams.length} teams, ${projects.length} projects, and ${memberships.length} memberships in database.`);
 
   // Group memberships by teamId
   const teamMembersMap = new Map<string, any[]>();
@@ -73,7 +73,7 @@ async function main() {
   const activityLogsToCreate: any[] = [];
   const meetingsToCreate: any[] = [];
 
-  console.log('\n⚡ Preparing records to seed...');
+  console.info('\n⚡ Preparing records to seed...');
 
   const genId = (prefix: string, idx: number, projId: string) => {
     return `${prefix}_${idx}_${projId.slice(-10)}`.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -198,11 +198,11 @@ async function main() {
   const chunkSize = 2000;
 
   if (boardsToCreate.length > 0) {
-    console.log(`🎬 Creating ${boardsToCreate.length} Boards...`);
+    console.info(`🎬 Creating ${boardsToCreate.length} Boards...`);
     await prisma.board.createMany({ data: boardsToCreate, skipDuplicates: true });
   }
   if (boardColumnsToCreate.length > 0) {
-    console.log(`📋 Creating ${boardColumnsToCreate.length} BoardColumns...`);
+    console.info(`📋 Creating ${boardColumnsToCreate.length} BoardColumns...`);
     for (let i = 0; i < boardColumnsToCreate.length; i += chunkSize) {
       await prisma.boardColumn.createMany({
         data: boardColumnsToCreate.slice(i, i + chunkSize),
@@ -211,11 +211,11 @@ async function main() {
     }
   }
   if (sprintsToCreate.length > 0) {
-    console.log(`🏃 Creating ${sprintsToCreate.length} Sprints...`);
+    console.info(`🏃 Creating ${sprintsToCreate.length} Sprints...`);
     await prisma.sprint.createMany({ data: sprintsToCreate, skipDuplicates: true });
   }
   if (tasksToCreate.length > 0) {
-    console.log(`✅ Creating ${tasksToCreate.length} Tasks...`);
+    console.info(`✅ Creating ${tasksToCreate.length} Tasks...`);
     for (let i = 0; i < tasksToCreate.length; i += chunkSize) {
       await prisma.task.createMany({
         data: tasksToCreate.slice(i, i + chunkSize),
@@ -224,7 +224,7 @@ async function main() {
     }
   }
   if (teamMessagesToCreate.length > 0) {
-    console.log(`💬 Creating ${teamMessagesToCreate.length} TeamMessages...`);
+    console.info(`💬 Creating ${teamMessagesToCreate.length} TeamMessages...`);
     for (let i = 0; i < teamMessagesToCreate.length; i += chunkSize) {
       await prisma.teamMessage.createMany({
         data: teamMessagesToCreate.slice(i, i + chunkSize),
@@ -233,7 +233,7 @@ async function main() {
     }
   }
   if (activityLogsToCreate.length > 0) {
-    console.log(`📝 Creating ${activityLogsToCreate.length} ActivityLogs...`);
+    console.info(`📝 Creating ${activityLogsToCreate.length} ActivityLogs...`);
     for (let i = 0; i < activityLogsToCreate.length; i += chunkSize) {
       await prisma.activityLog.createMany({
         data: activityLogsToCreate.slice(i, i + chunkSize),
@@ -242,12 +242,12 @@ async function main() {
     }
   }
   if (meetingsToCreate.length > 0) {
-    console.log(`📅 Creating ${meetingsToCreate.length} Meetings...`);
+    console.info(`📅 Creating ${meetingsToCreate.length} Meetings...`);
     await prisma.meeting.createMany({ data: meetingsToCreate, skipDuplicates: true });
   }
 
   const end = Date.now();
-  console.log(`\n🎉 SAFE SEED COMPLETE in ${((end - start) / 1000).toFixed(1)} seconds!`);
+  console.info(`\n🎉 SAFE SEED COMPLETE in ${((end - start) / 1000).toFixed(1)} seconds!`);
 }
 
 main()

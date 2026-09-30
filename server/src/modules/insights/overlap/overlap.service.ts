@@ -4,7 +4,7 @@ import { chatJSONWithMeta, isLlmConfigured } from '../../ai/llm.service';
 import { buildProjectCorpus, type ProjectDocument } from './corpus';
 import { tokenizeText } from './tokenize';
 import { buildTfIdfModel } from './tfidf';
-import { generateCandidatePairs, type CandidatePair } from './candidates';
+import { generateCandidatePairs } from './candidates';
 import { buildOverlapPrompt, overlapAnalysisSchema, type OverlapAnalysisResult } from './overlap.prompt';
 
 class UnionFind {

@@ -2,7 +2,7 @@ import { prisma } from '../shared/database';
 import { projectLogService } from '../modules/lifecycle/projectLog.service';
 
 async function main() {
-  console.log('[Backfill] Backfilling ProjectLog records for active projects...');
+  console.info('[Backfill] Backfilling ProjectLog records for active projects...');
   const projects = await prisma.project.findMany({
     where: {
       projectLog: null,
@@ -12,10 +12,10 @@ async function main() {
     },
   });
 
-  console.log(`[Backfill] Found ${projects.length} projects without a ProjectLog.`);
+  console.info(`[Backfill] Found ${projects.length} projects without a ProjectLog.`);
 
   for (const project of projects) {
-    console.log(`[Backfill] Initializing ProjectLog for project: ${project.name} (${project.id})`);
+    console.info(`[Backfill] Initializing ProjectLog for project: ${project.name} (${project.id})`);
     await projectLogService.initLog(project.id, {
       title: project.name,
       category: (project.category as any) || 'FINAL_YEAR',
@@ -30,7 +30,7 @@ async function main() {
     });
   }
 
-  console.log('[Backfill] Backfill completed successfully.');
+  console.info('[Backfill] Backfill completed successfully.');
 }
 
 main()

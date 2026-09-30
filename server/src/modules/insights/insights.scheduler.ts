@@ -19,25 +19,25 @@ export async function runInsightsPipeline(scope: 'overlap' | 'standout' | 'recom
 
   isRunning = true;
   try {
-    console.log(`[Insights] Starting insights computation pipeline (scope: ${scope})...`);
+    console.info(`[Insights] Starting insights computation pipeline (scope: ${scope})...`);
     let overlapStats = null;
     let standoutStats = null;
     let recommendationStats = null;
 
     if (scope === 'overlap' || scope === 'all') {
       overlapStats = await OverlapService.runOverlapDetection();
-      console.log('[Insights] Overlap detection complete:', overlapStats);
+      console.info('[Insights] Overlap detection complete:', overlapStats);
     }
 
     if (scope === 'standout' || scope === 'all') {
       standoutStats = await StandoutService.runStandoutDetection();
-      console.log('[Insights] Standout detection complete:', standoutStats);
+      console.info('[Insights] Standout detection complete:', standoutStats);
     }
 
     if (scope === 'recommendation' || scope === 'all') {
       // Runs after standout detection so EvaluationReport data is fresh
       recommendationStats = await OpportunityService.runOpportunityMatching();
-      console.log('[Insights] Opportunity matching complete:', recommendationStats);
+      console.info('[Insights] Opportunity matching complete:', recommendationStats);
     }
 
     lastRunAt = new Date();
@@ -60,7 +60,7 @@ export function startInsightsScheduler(): void {
       console.error('[InsightsScheduler] Daily cron execution failed:', err);
     }
   }));
-  console.log('[InsightsScheduler] Scheduled daily insights pipeline cron (02:30 AM)');
+  console.info('[InsightsScheduler] Scheduled daily insights pipeline cron (02:30 AM)');
 }
 
 export function getInsightsStatus() {
