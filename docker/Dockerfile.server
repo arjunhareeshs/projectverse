@@ -46,8 +46,9 @@ COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/server/database ./server/database
 COPY data ./data
 
-# Create uploads directory and set permissions for non-root user
-RUN mkdir -p /app/server/uploads/assets && chown -R node:node /app
+# Only uploads needs to be writable. A recursive chown of /app would duplicate
+# node_modules into a ~180MB layer that is slow to build and push.
+RUN mkdir -p /app/server/uploads/assets && chown -R node:node /app/server/uploads
 
 USER node
 WORKDIR /app/server
