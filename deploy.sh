@@ -2,7 +2,7 @@
 # Deploy (or update) ProjectVerse on the server from pushed images.
 #
 #   ./deploy.sh               # pull IMG_TAG from docker/.env, back up DB, migrate, start, health-check
-#   ./deploy.sh --tag v1.1.2  # deploy a specific tag (also used for rollback)
+#   ./deploy.sh --tag v1.1.3  # deploy a specific tag (also used for rollback)
 #   ./deploy.sh --seed        # FIRST deploy only: seeds a fresh database (refuses if users exist)
 #   ./deploy.sh --build       # build images from this checkout instead of pulling
 #   ./deploy.sh --no-pull     # use images already on this machine (e.g. after ./push.sh --no-push)
@@ -44,7 +44,7 @@ if [ "${#AI_KEY}" -lt 32 ]; then
 fi
 
 export IMG_TAG="${TAG_OVERRIDE:-$(env_value IMG_TAG)}"
-[ -n "$IMG_TAG" ] || { echo "Error: IMG_TAG not set in $ENV_FILE (e.g. IMG_TAG=v1.1.2)."; exit 1; }
+[ -n "$IMG_TAG" ] || { echo "Error: IMG_TAG not set in $ENV_FILE (e.g. IMG_TAG=v1.1.3)."; exit 1; }
 
 COMPOSE=(docker compose -f docker/docker-compose.yml)
 PORT="$(env_value PORT)"; PORT="${PORT:-8080}"

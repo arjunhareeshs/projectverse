@@ -17,6 +17,20 @@ if (-not $Version) {
 
 $Version = "v" + $Version.TrimStart("v")
 $env:VERSION = $Version
+
+# Client build config comes from the env file (docker/.env.production, else root .env).
+function Get-EnvValue([string]$Key) {
+    foreach ($f in @("docker/.env.production", ".env")) {
+        if (Test-Path $f) {
+            $line = Select-String -Path $f -Pattern "^$Key=" | Select-Object -First 1
+            if ($line) { return ($line.Line -replace "^$Key=", "" -replace "\s+#.*$", "").Trim().Trim('"') }
+        }
+    }
+    return ""
+}
+if (-not $GoogleClientId) { $GoogleClientId = Get-EnvValue "VITE_GOOGLE_CLIENT_ID" }
+if (-not $GoogleClientId) { throw "VITE_GOOGLE_CLIENT_ID not found in docker/.env.production or .env" }
+$BasePath = Get-EnvValue "PUBLIC_BASE_PATH"; if (-not $BasePath) { $BasePath = "/verse" }
 $env:DOCKERHUB_USER = $DockerHubUser
 
 function Push-WithRetry([string]$Image) {
@@ -30,9 +44,8 @@ function Push-WithRetry([string]$Image) {
 }
 
 docker build `
-    --build-arg VITE_GOOGLE_CLIENT_ID="559631489145-0se6ttjttb0qd3098d7ppha28gitqasu.apps.googleusercontent.com" `
-    --build-arg VITE_API_URL="https://pcdp.bitsathy.ac.in/verse/api" `
-    --build-arg VITE_BACKEND_URL="https://pcdp.bitsathy.ac.in/verse" `
+    --build-arg VITE_GOOGLE_CLIENT_ID="$GoogleClientId" `
+    --build-arg VITE_BASE_PATH="$BasePath" `
     -t projectverse-client:$env:VERSION `
     -f .\docker\Dockerfile.client .
 

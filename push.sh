@@ -34,12 +34,17 @@ build_and_push() {
     push_with_retry "$DOCKERHUB_USER/projectverse-$name:$VERSION"
 }
 
+# Client build config comes from the env file (docker/.env.production, else root .env).
+env_value() { { grep -hE "^$1=" docker/.env.production .env 2>/dev/null || true; } | head -1 | cut -d= -f2- | sed -E 's/[[:space:]]+#.*$//; s/^["'\'']//; s/["'\'']$//'; }
+GOOGLE_ID="${VITE_GOOGLE_CLIENT_ID:-$(env_value VITE_GOOGLE_CLIENT_ID)}"
+BASE_PATH="${PUBLIC_BASE_PATH:-$(env_value PUBLIC_BASE_PATH)}"
+[ -n "$GOOGLE_ID" ] || { echo "Error: VITE_GOOGLE_CLIENT_ID not found in docker/.env.production or .env" >&2; exit 1; }
+
 echo "Releasing $DOCKERHUB_USER/projectverse-{client,server,edge}:$VERSION"
 
 build_and_push client ./docker/Dockerfile.client \
-    --build-arg VITE_GOOGLE_CLIENT_ID="559631489145-0se6ttjttb0qd3098d7ppha28gitqasu.apps.googleusercontent.com" \
-    --build-arg VITE_API_URL="https://pcdp.bitsathy.ac.in/verse/api" \
-    --build-arg VITE_BACKEND_URL="https://pcdp.bitsathy.ac.in/verse"
+    --build-arg VITE_GOOGLE_CLIENT_ID="$GOOGLE_ID" \
+    --build-arg VITE_BASE_PATH="${BASE_PATH:-/verse}"
 build_and_push server ./docker/Dockerfile.server
 build_and_push edge ./docker/Dockerfile.edge
 

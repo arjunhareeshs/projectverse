@@ -1,0 +1,123 @@
+# ProjectVerse — SERVER compose (pull-only). Copy to the server as docker-compose.yml, next to .env:
+#   /srv/verse/docker-compose.yml   /srv/verse/.env   (from docker/.env.production)
+#
+#   docker compose up -d                 # pulls pcdpbit/projectverse-*:${IMG_TAG}, migrates, starts everything
+#   docker compose --profile seed run --rm seed   # ONLY on an empty DB you want to seed (wipes data)
+#
+# Stack: edge (nginx :${PORT}) -> client + N x server, worker, Postgres, Redis. Only the edge publishes a port.
+
+x-app-env: &app-env
+  env_file: .env
+  environment: &app-env-vars
+    NODE_ENV: production
+    SERVER_PORT: 4000
+    REDIS_URL: redis://redis:6379
+    DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}@db:5432/${POSTGRES_DB:-projectverse}?schema=public&connection_limit=${DB_POOL_SERVER:-15}
+
+x-server-image: &server-image
+  image: ${IMAGE_REPO:-pcdpbit}/projectverse-server:${IMG_TAG:-local}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-projectverse}
+    command: ["postgres", "-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-200}"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-projectverse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Only shared ephemeral state (socket fan-out, rate-limit counters, cron locks) — no persistence needed.
+    command: ["redis-server", "--appendonly", "no", "--save", "", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    <<: *server-image
+    command: ["npx", "prisma", "migrate", "deploy", "--schema", "./database/prisma/schema.prisma"]
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-projectverse}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
+  server:
+    <<: [*server-image, *app-env]
+    restart: unless-stopped
+    environment:
+      <<: *app-env-vars
+      RUN_SCHEDULER: "false"
+    deploy:
+      replicas: ${SERVER_REPLICAS:-3}
+    volumes:
+      - ${UPLOADS_PATH:-uploads_data}:/app/server/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Same image; runs the cron jobs (evaluation, insights, risk scoring, retention). Keep at 1 replica.
+  worker:
+    <<: [*server-image, *app-env]
+    restart: unless-stopped
+    environment:
+      <<: *app-env-vars
+      RUN_SCHEDULER: "true"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-projectverse}?schema=public&connection_limit=${DB_POOL_WORKER:-5}
+    volumes:
+      - ${UPLOADS_PATH:-uploads_data}:/app/server/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  client:
+    image: ${IMAGE_REPO:-pcdpbit}/projectverse-client:${IMG_TAG:-local}
+    restart: unless-stopped
+
+  edge:
+    image: ${IMAGE_REPO:-pcdpbit}/projectverse-edge:${IMG_TAG:-local}
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+      client:
+        condition: service_started
+
+  # One-shot: wipes and seeds a FRESH database (admin, developer, students, problem statements).
+  seed:
+    <<: [*server-image, *app-env]
+    command: ["sh", "-c", "node dist/scripts/seed.js && node dist/scripts/seedProblemStatements.js"]
+    restart: "no"
+    profiles: ["seed"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  uploads_data:

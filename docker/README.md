@@ -34,7 +34,7 @@ If another nginx on the host proxies to this stack, set `TRUST_PROXY=2` so clien
 
 ## Release (build machine)
 
-The release version lives in `/VERSION` (currently `1.1.2` → image tag `v1.1.2`).
+The release version lives in `/VERSION` (currently `1.1.3` → image tag `v1.1.3`).
 
 ```bash
 docker login                 # once, as the Docker Hub account (default user: pcdpbit)
@@ -53,7 +53,7 @@ else `docker/.env`, else the root `.env`.
 
 ## Deploy (server)
 
-Copy the repo to the server, create `docker/.env` (see *Configure*), set `IMG_TAG=v1.1.2`, then:
+Copy the repo to the server, create `docker/.env` (see *Configure*), set `IMG_TAG=v1.1.3`, then:
 
 ```bash
 ./deploy.sh --seed     # FIRST deploy on a fresh database

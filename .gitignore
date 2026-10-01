@@ -32,3 +32,6 @@ graft/
 
 # Database backups written by deploy.sh
 backups/
+
+# Runtime uploads (live in a Docker volume, never in git)
+server/uploads/
