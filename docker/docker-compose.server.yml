@@ -12,7 +12,7 @@ x-app-env: &app-env
     NODE_ENV: production
     SERVER_PORT: 4000
     REDIS_URL: redis://redis:6379
-    DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}@db:5432/${POSTGRES_DB:-projectverse}?schema=public&connection_limit=${DB_POOL_SERVER:-15}
+    DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-projectverse}?schema=public&connection_limit=${DB_POOL_SERVER:-15}
 
 x-server-image: &server-image
   image: ${IMAGE_REPO:-pcdpbit}/projectverse-server:${IMG_TAG:-local}
@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in docker/.env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-projectverse}
     command: ["postgres", "-c", "max_connections=${POSTGRES_MAX_CONNECTIONS:-200}"]
     volumes:
